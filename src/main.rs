@@ -1,5 +1,9 @@
 mod lexer;
+mod parser;
+mod ast;
+mod error;
 
+use std::fs::read_to_string;
 use std::path::PathBuf;
 use std::process;
 
@@ -41,4 +45,9 @@ fn main() {
     };
 
     // TODO: connecting assembling
+    let ctx = read_to_string( input).expect("Should have been able to read the file");
+    match parser::parse(&ctx) {
+        Ok(program) => println!("{:#?}", program),
+        Err(e)      => eprintln!("parse error: {}", e),
+    }
 }

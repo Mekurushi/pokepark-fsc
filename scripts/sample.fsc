@@ -1,4 +1,4 @@
-private fn add(a, b):
+private fn addition(a, b):
     grow_stack 0x1
     load_arg 0x0
     load_arg 0x1
