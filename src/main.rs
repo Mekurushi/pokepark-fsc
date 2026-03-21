@@ -2,10 +2,12 @@ mod lexer;
 mod parser;
 mod ast;
 mod error;
+mod codegen;
 
-use std::fs::read_to_string;
+use std::fs::{read_to_string, write};
 use std::path::PathBuf;
 use std::process;
+use crate::codegen::Codegen;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -38,7 +40,7 @@ fn main() {
         process::exit(1);
     }
 
-    let _output = if args.len() >= 3 {
+    let output = if args.len() >= 3 {
         PathBuf::from(&args[2])
     } else {
         input.with_extension("fsb")
@@ -46,8 +48,16 @@ fn main() {
 
     // TODO: connecting assembling
     let ctx = read_to_string( input).expect("Should have been able to read the file");
-    match parser::parse(&ctx) {
-        Ok(program) => println!("{:#?}", program),
-        Err(e)      => eprintln!("parse error: {}", e),
+    let program = match parser::parse(&ctx) {
+        Ok(p)  => p,
+        Err(e) => { eprintln!("parse error: {}", e); return; }
+    };
+    let mut cg = Codegen::new();
+    if let Err(e) = cg.emit_program(&program) {
+        eprintln!("codegen error: {}", e);
+        return;
     }
+
+    write(output, &cg.output).expect("failed to write out.fsb");
+
 }
