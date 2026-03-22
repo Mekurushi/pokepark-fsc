@@ -13,10 +13,12 @@ pub struct Function {
 
 #[derive(Debug, Clone)]
 pub enum Instruction {
-    GrowStack(i32),   // grow_stack 0x1
-    LoadArg(i32),     // load_arg 0x0
+    GrowStack(i16),   // grow_stack 0x1
+    LoadArg(i16),     // load_arg 0x0
     Add,              // add
     Sub,                // sub
-    Retv(i32),        // retv -0x2
-    Ret(i32),        // ret -0x2
+    Push(i16),               // push
+    Call(String),
+    Retv(i16),        // retv -0x2
+    Ret(i16),        // ret -0x2
 }

@@ -61,7 +61,7 @@ impl TokenStream {
         })
     }
 
-    fn expect_int(&mut self) -> ParseResult<i32> {
+    fn expect_int(&mut self) -> ParseResult<i16> {
         if let Some(Token::Int(_)) = self.peek() {
             if let Some(Token::Int(n)) = self.advance() { return Ok(*n); }
         }
@@ -122,6 +122,8 @@ fn parse_instruction(ts: &mut TokenStream) -> ParseResult<Instruction> {
         Some(Token::LoadArg)   => { ts.advance(); Ok(Instruction::LoadArg(ts.expect_int()?)) }
         Some(Token::Add)       => { ts.advance(); Ok(Instruction::Add) }
         Some(Token::Sub)       => { ts.advance(); Ok(Instruction::Sub) }
+        Some(Token::Push)       => { ts.advance(); Ok(Instruction::Push(ts.expect_int()?)) }
+        Some(Token::Call) => {ts.advance(); Ok(Instruction::Call(ts.expect_ident()?))}
         Some(Token::Retv)      => { ts.advance(); Ok(Instruction::Retv(ts.expect_int()?)) }
         Some(Token::Ret)      => { ts.advance(); Ok(Instruction::Ret(ts.expect_int()?)) }
         other => {

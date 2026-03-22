@@ -3,7 +3,7 @@ private fn addition(a, b):
     load_arg 0x0
     load_arg 0x1
     add
-    retv -0x2
+    retv -0x3
 
 private fn substraction(a, b):
     grow_stack 0x1
@@ -13,4 +13,7 @@ private fn substraction(a, b):
     retv -0x2
 
 fn entry():
+    push 0x1
+    push 0x1
+    call addition
     ret -0x0

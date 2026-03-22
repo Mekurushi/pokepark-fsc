@@ -1,5 +1,5 @@
 use crate::ast::{Function, Instruction, Program};
-use crate::error::{CodegenResult, ParseResult};
+use crate::error::{CodegenError, CodegenResult, ParseResult};
 use crate::formats::{FscriptHeader, StringTable, SymbolTable, HEADER_SIZE};
 use std::collections::{HashMap, HashSet};
 //TODO: improve build flow; define explictily when encoding, offset arithmetic ...
@@ -9,9 +9,11 @@ use std::collections::{HashMap, HashSet};
 // opcodes
 #[repr(u8)]
 pub enum Opcode {
+    Call = 0x3,
     Ret      = 0x06,
     GrowStack = 0x07,
     LoadArg   = 0x0b,
+    Push = 0x10,
     Alu       = 0x14,
 }
 #[repr(u16)]
@@ -31,12 +33,17 @@ pub struct Codegen {
     pub code: Vec<u8>,
     pub symbols: HashMap<String, u32>,
     pub exports: HashSet<String>,
+    pub fixups: Vec<Fixup>
 }
-
+pub struct Fixup {
+    offset: u32,
+    symbol: String,
+}
 
 impl Codegen {
     pub fn new() -> Self {
-        Self { code: Vec::new(), symbols: HashMap::new(), exports: HashSet::new() }
+        Self { code: Vec::new(), symbols: HashMap::new(), exports: HashSet::new(), fixups:
+        Vec::new() }
     }
 
     fn emit_insn(&mut self, operand: i16, subtype: u8, opcode: u8) {
@@ -46,7 +53,7 @@ impl Codegen {
         self.code.extend_from_slice(&word.to_be_bytes());
     }
 
-    pub fn emit_program(&mut self, program: &Program) -> ParseResult<()> {
+    pub fn emit_program(&mut self, program: &Program) -> CodegenResult<()> {
         for function in &program.functions {
             let offset = self.code.len() as u32;
             self.symbols.insert(function.name.clone(), offset);
@@ -58,21 +65,21 @@ impl Codegen {
         Ok(())
     }
 
-    fn emit_function(&mut self, function: &Function) -> ParseResult<()> {
+    fn emit_function(&mut self, function: &Function) -> CodegenResult<()> {
         for instruction in &function.body {
             self.emit_instruction(instruction)?;
         }
         Ok(())
     }
 
-    fn emit_instruction(&mut self, instruction: &Instruction) -> ParseResult<()> {
+    fn emit_instruction(&mut self, instruction: &Instruction) -> CodegenResult<()> {
         match instruction {
             Instruction::GrowStack(n) => {
-                self.emit_insn(*n as i16, 0, Opcode::GrowStack as u8);
+                self.emit_insn(*n, 0, Opcode::GrowStack as u8);
             }
 
             Instruction::LoadArg(n) => {
-                self.emit_insn( *n as i16, 0,Opcode::LoadArg as u8);
+                self.emit_insn( *n, 0,Opcode::LoadArg as u8);
             }
 
             Instruction::Add => {
@@ -81,12 +88,30 @@ impl Codegen {
             Instruction::Sub => {
                 self.emit_insn(AluOp::Sub as i16, 0, Opcode::Alu as u8);
             }
+            Instruction::Push(n) => {
+                self.emit_insn(*n, 0, Opcode::Push as u8);
+            }
+            Instruction::Call(symbol) => {
+                let current_offset = self.code.len() as u32;
+                let operand = match self.symbols.get(symbol) {
+                    Some(&target) => compute_call_operand(current_offset, target)?,
+                    None => {
+                        self.fixups.push(Fixup { offset: current_offset, symbol: symbol.clone() });
+                        0i16 // placeholder until fixup TODO: 2-pass
+                    }
+                };
+                self.emit_insn(operand, 0, Opcode::Call as u8);
+            }
 
             Instruction::Retv(n) => {
-                self.emit_insn(  *n as i16,RetOp::Retv as u8,Opcode::Ret as u8);
+                // Ghidra visualizes as neagtive but actual operand is positive TODO: define
+                // explicit
+                let operand = n.unsigned_abs();
+                self.emit_insn(operand as i16, RetOp::Retv as u8, Opcode::Ret as u8);
             }
             Instruction::Ret(n) => {
-                self.emit_insn( *n as i16,RetOp::Ret as u8,  Opcode::Ret as u8);
+                let operand = n.unsigned_abs();
+                self.emit_insn(operand as i16, RetOp::Ret as u8, Opcode::Ret as u8);
             }
         }
         Ok(())
@@ -126,6 +151,12 @@ impl Codegen {
         out.extend_from_slice(&string_bytes);
         Ok(out)
     }
+}
+
+fn compute_call_operand(current_offset: u32, target_offset: u32) -> CodegenResult<i16> {
+    let branch_offset = target_offset as i32 - (current_offset as i32 + 4);
+    i16::try_from(branch_offset / 4)
+        .map_err(|_| CodegenError::OperandOutOfRange(branch_offset))
 }
 
 #[cfg(test)]

@@ -25,6 +25,9 @@ pub type ParseResult<T> = Result<T, ParseError>;
 #[derive(Debug)]
 pub enum CodegenError {
     InvalidB40Char(char),
+    OperandOutOfRange(i32),
+    UndefinedSymbol(String),
+
 }
 
 pub type CodegenResult<T> = Result<T, CodegenError>;
@@ -34,6 +37,10 @@ impl std::fmt::Display for CodegenError {
         match self {
             CodegenError::InvalidB40Char(c) =>
                 write!(f, "invalid character '{c}' in script name, allowed: ' 0-9 A-Z _ - /`"),
+            CodegenError::OperandOutOfRange(n) =>
+                write!(f, "operand {n:#x} out of 16-bit signed range"),
+            CodegenError::UndefinedSymbol(name) =>
+                write!(f, "undefined symbol '{name}'"),
         }
     }
 }
