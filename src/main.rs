@@ -58,14 +58,9 @@ fn main() {
         return;
     }
 
-    let header = codegen::FsbHeader::new(
-        "EVAR05ZN01_NPC".to_string(),
-        0x00000000,
-        cg.code.len() as u32,
-    );
-    let fsb = match cg.finalize(&header) {
+    let fsb = match cg.finalize("sample".to_string()) {
         Ok(fsb) => fsb,
-        Err(e) =>{ eprintln!("parse error: {}", e); return; }
+        Err(e) =>{ eprintln!("codegen error: {}", e); return; }
     };
 
     write(output, fsb).expect("failed to write out.fsb");

@@ -1,5 +1,6 @@
 use crate::ast::{Function, Instruction, Program};
 use crate::error::{CodegenError, CodegenResult, ParseResult};
+//TODO: improve build flow; define explictily when encoding, offset arithmetic ...
 //TODO: all Instruction data
 //TODO: call support symbol table, 2-pass ...
 
@@ -15,12 +16,16 @@ pub const ALU_ADD: u16 = 0;
 pub const HEADER_SIZE:u32 = 0x20;
 const B40_ALPHABET: &[u8; 40] = b" 0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_-/";
 
-pub struct FsbHeader {
-    pub script_name: String,
+pub struct FscriptHeader {
+    // plain string, encoded to B40 string on serialization
+    pub script_name: B40String,
     pub instructions_ptr: u32,
     pub symbol_table_ptr: u32,
     pub string_table_ptr: u32,
 }
+
+pub type B40String = String;
+
 fn encode_b40_uint(s: &[u8]) -> CodegenResult<u32> {
     let mut result = 0u32;
 
@@ -62,13 +67,14 @@ pub fn decode_b40(bytes: &[u8; 8]) -> String {
     let b = u32::from_be_bytes(bytes[4..8].try_into().unwrap());
     (decode_b40_uint(a) + &decode_b40_uint(b)).trim_end().to_string()
 }
-impl FsbHeader {
-    pub fn new(script_name: String, base: u32, code_size: u32) -> Self {
+impl FscriptHeader {
+    pub fn new(script_name: String, instructions_ptr: u32, symbol_table_ptr: u32,
+               string_table_ptr: u32) -> Self {
         Self {
             script_name,
-            instructions_ptr: base + HEADER_SIZE,
-            symbol_table_ptr: base + HEADER_SIZE + code_size, // TODO: real symbol_table
-            string_table_ptr: base + HEADER_SIZE + code_size, // TODO: real string_table
+            instructions_ptr,
+            symbol_table_ptr,
+            string_table_ptr,
         }
     }
 
@@ -126,11 +132,66 @@ mod tests {
 // Codegen
 pub struct Codegen {
     pub code: Vec<u8>,
+    pub symbol_table: SymbolTable,
+    pub string_table: StringTable,
+}
+
+pub struct SymbolTable {
+    entries: Vec<SymbolEntry>,
+}
+pub struct StringTable {
+    entries: Vec<String>,
+}
+
+pub struct SymbolEntry {
+    pub name:    B40String,  // plain string, encoded to B40 string on serialization
+    pub offset:  u32, // file_offset; modified in serialization
+}
+impl SymbolEntry {
+    pub fn serialize(&self) -> CodegenResult<[u8; 12]> {
+        let mut buf = [0u8; 12];
+        buf[0x00..0x08].copy_from_slice(&encode_b40(&self.name)?);
+        buf[0x08..0x0c].copy_from_slice(&(self.offset / 4).to_be_bytes());
+
+        Ok(buf)
+    }
+}
+
+impl SymbolTable {
+    pub fn new() -> Self {
+        Self { entries: Vec::new() }
+    }
+
+    pub fn add(&mut self, name: B40String, offset: u32) {
+        self.entries.push(SymbolEntry { name, offset });
+    }
+
+    pub fn serialize(&self) -> CodegenResult<Vec<u8>> {
+        let mut buf = Vec::new();
+        for entry in &self.entries {
+            buf.extend_from_slice(&entry.serialize()?);
+        }
+        Ok(buf)
+    }
+}
+
+impl StringTable {
+    pub fn new() -> Self {
+        Self { entries: Vec::new() }
+    }
+
+    pub fn serialize(&self) -> CodegenResult<Vec<u8>> {
+        let mut buf = Vec::new();
+        //TODO: fill with real used strings
+        buf.extend_from_slice("dummy".as_bytes());
+        Ok(buf)
+    }
+
 }
 
 impl Codegen {
     pub fn new() -> Self {
-        Self { code: Vec::new() }
+        Self { code: Vec::new(), symbol_table: SymbolTable::new(), string_table: StringTable::new() }
     }
 
     fn emit_insn(&mut self, opcode: u8, subtype: u8, operand: i16) {
@@ -142,6 +203,12 @@ impl Codegen {
 
     pub fn emit_program(&mut self, program: &Program) -> ParseResult<()> {
         for function in &program.functions {
+            if !function.private{
+                let offset = self.code.len() as u32;
+                //TODO: explicitly handle offset handling for functions; because this is only
+                // offset for instruction section
+                self.symbol_table.add(function.name.clone(), offset + HEADER_SIZE );
+            }
             self.emit_function(function)?;
         }
         Ok(())
@@ -178,10 +245,27 @@ impl Codegen {
         Ok(())
     }
 
-    pub fn finalize(&self, header: &FsbHeader) -> CodegenResult<Vec<u8>> {
-        let mut out = Vec::with_capacity(32 + self.code.len());
+    pub fn finalize(&self, script_name: String) -> CodegenResult<Vec<u8>> {
+        let base = 0x00000000;
+        let code_bytes = &self.code;
+        let sym_bytes  = self.symbol_table.serialize()?;
+        let string_bytes = self.string_table.serialize()?;
+        let instructions_ptr = base + HEADER_SIZE;
+        let symbol_table_ptr = instructions_ptr + code_bytes.len() as u32;
+        let string_table_ptr = symbol_table_ptr + sym_bytes.len() as u32;
+
+        let header = FscriptHeader::new(
+            script_name,
+            instructions_ptr,
+            symbol_table_ptr,
+            string_table_ptr,
+        );
+
+        let mut out = Vec::with_capacity(string_table_ptr as usize);
         out.extend_from_slice(&header.serialize()?);
         out.extend_from_slice(&self.code);
+        out.extend_from_slice(&sym_bytes);
+        out.extend_from_slice(&string_bytes);
         Ok(out)
     }
 }
