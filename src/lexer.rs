@@ -26,6 +26,9 @@ pub enum Token {
     #[token("add")]
     Add,
 
+    #[token("sub")]
+    Sub,
+
     // --- Punctuation ---
     #[token("(")]
     LParen,

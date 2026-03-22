@@ -78,6 +78,9 @@ impl Codegen {
             Instruction::Add => {
                 self.emit_insn(AluOp::Add as i16, 0, Opcode::Alu as u8);
             }
+            Instruction::Sub => {
+                self.emit_insn(AluOp::Sub as i16, 0, Opcode::Alu as u8);
+            }
 
             Instruction::Retv(n) => {
                 self.emit_insn(  *n as i16,RetOp::Retv as u8,Opcode::Ret as u8);
@@ -149,6 +152,13 @@ mod tests {
         let mut cg = Codegen::new();
         cg.emit_instruction(&Instruction::Add).unwrap();
         assert_eq!(cg.code, &[0x00, 0x00, 0x00, 0x14]);
+    }
+
+    #[test]
+    fn test_emit_sub() {
+        let mut cg = Codegen::new();
+        cg.emit_instruction(&Instruction::Sub).unwrap();
+        assert_eq!(cg.code, &[0x00, 0x01, 0x00, 0x14]);
     }
 
     #[test]
