@@ -1,7 +1,7 @@
 use logos::Logos;
 use crate::ast::{Function, Instruction, Program};
 use crate::lexer::Token;
-use crate::error::{ParseError, Result};
+use crate::error::{ParseError, ParseResult};
 
 struct TokenStream {
     tokens: Vec<(Token, std::ops::Range<usize>)>,
@@ -9,7 +9,7 @@ struct TokenStream {
 }
 
 impl TokenStream {
-    fn new(src: &str) -> Result<Self> {
+    fn new(src: &str) -> ParseResult<Self> {
         let mut tokens = Vec::new();
         let mut lex = Token::lexer(src);
         while let Some(result) = lex.next() {
@@ -41,7 +41,7 @@ impl TokenStream {
         if self.peek() == Some(expected) { self.advance(); true } else { false }
     }
 
-    fn expect(&mut self, expected: &Token, label: &'static str) -> Result<()> {
+    fn expect(&mut self, expected: &Token, label: &'static str) -> ParseResult<()> {
         if self.eat(expected) { return Ok(()); }
         let got = self.peek().map(|t| format!("{t:?}")).unwrap_or("EOF".into());
         Err(ParseError::UnexpectedToken { got, expected: label, offset: self.offset() })
@@ -54,14 +54,14 @@ impl TokenStream {
         }
         None
     }
-    fn expect_ident(&mut self) -> Result<String> {
+    fn expect_ident(&mut self) -> ParseResult<String> {
         self.eat_ident().ok_or_else(|| {
             let got = self.peek().map(|t| format!("{t:?}")).unwrap_or("EOF".into());
             ParseError::UnexpectedToken { got, expected: "identifier", offset: self.offset() }
         })
     }
 
-    fn expect_int(&mut self) -> Result<i32> {
+    fn expect_int(&mut self) -> ParseResult<i32> {
         if let Some(Token::Int(_)) = self.peek() {
             if let Some(Token::Int(n)) = self.advance() { return Ok(*n); }
         }
@@ -71,7 +71,7 @@ impl TokenStream {
 }
 
 // Entrypoint
-pub fn parse(src: &str) -> Result<Program> {
+pub fn parse(src: &str) -> ParseResult<Program> {
     let mut ts = TokenStream::new(src)?;
     let mut functions = Vec::new();
     while !ts.is_at_end() {
@@ -81,7 +81,7 @@ pub fn parse(src: &str) -> Result<Program> {
 }
 
 // Grammar
-fn parse_function(ts: &mut TokenStream) -> Result<Function> {
+fn parse_function(ts: &mut TokenStream) -> ParseResult<Function> {
     let private = ts.eat(&Token::Private);
     ts.expect(&Token::Fn, "`fn`")?;
     let name = ts.expect_ident()?;
@@ -93,7 +93,7 @@ fn parse_function(ts: &mut TokenStream) -> Result<Function> {
     Ok(Function { name, params, private, body })
 }
 
-fn parse_param_list(ts: &mut TokenStream) -> Result<Vec<String>> {
+fn parse_param_list(ts: &mut TokenStream) -> ParseResult<Vec<String>> {
     let mut params = Vec::new();
     if let Some(first) = ts.eat_ident() {
         params.push(first);
@@ -104,7 +104,7 @@ fn parse_param_list(ts: &mut TokenStream) -> Result<Vec<String>> {
     Ok(params)
 }
 
-fn parse_body(ts: &mut TokenStream) -> Result<Vec<Instruction>> {
+fn parse_body(ts: &mut TokenStream) -> ParseResult<Vec<Instruction>> {
     let mut body = Vec::new();
     loop {
         match ts.peek() {
@@ -115,13 +115,14 @@ fn parse_body(ts: &mut TokenStream) -> Result<Vec<Instruction>> {
     Ok(body)
 }
 
-fn parse_instruction(ts: &mut TokenStream) -> Result<Instruction> {
+fn parse_instruction(ts: &mut TokenStream) -> ParseResult<Instruction> {
     let offset = ts.offset();
     match ts.peek() {
         Some(Token::GrowStack) => { ts.advance(); Ok(Instruction::GrowStack(ts.expect_int()?)) }
         Some(Token::LoadArg)   => { ts.advance(); Ok(Instruction::LoadArg(ts.expect_int()?)) }
         Some(Token::Add)       => { ts.advance(); Ok(Instruction::Add) }
         Some(Token::Retv)      => { ts.advance(); Ok(Instruction::Retv(ts.expect_int()?)) }
+        Some(Token::Ret)      => { ts.advance(); Ok(Instruction::Ret(ts.expect_int()?)) }
         other => {
             let got = other.map(|t| format!("{t:?}")).unwrap_or("EOF".into());
             Err(ParseError::UnexpectedToken { got, expected: "instruction", offset })

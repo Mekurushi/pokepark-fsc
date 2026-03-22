@@ -1,3 +1,4 @@
+// Parser Error
 #[derive(Debug)]
 pub enum ParseError {
     UnexpectedToken { got: String, expected: &'static str, offset: usize },
@@ -18,4 +19,21 @@ impl std::fmt::Display for ParseError {
     }
 }
 
-pub type Result<T> = std::result::Result<T, ParseError>;
+pub type ParseResult<T> = Result<T, ParseError>;
+
+// Codegen Error
+#[derive(Debug)]
+pub enum CodegenError {
+    InvalidB40Char(char),
+}
+
+pub type CodegenResult<T> = Result<T, CodegenError>;
+
+impl std::fmt::Display for CodegenError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CodegenError::InvalidB40Char(c) =>
+                write!(f, "invalid character '{c}' in script name, allowed: ' 0-9 A-Z _ - /`"),
+        }
+    }
+}

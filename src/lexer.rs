@@ -20,6 +20,9 @@ pub enum Token {
     #[token("retv")]
     Retv,
 
+    #[token("ret")]
+    Ret,
+
     #[token("add")]
     Add,
 

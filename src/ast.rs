@@ -17,4 +17,5 @@ pub enum Instruction {
     LoadArg(i32),     // load_arg 0x0
     Add,              // add
     Retv(i32),        // retv -0x2
+    Ret(i32),        // retv -0x2
 }

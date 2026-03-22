@@ -4,3 +4,6 @@ private fn addition(a, b):
     load_arg 0x1
     add
     retv -0x2
+
+fn entry():
+    ret -0x0
