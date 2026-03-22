@@ -40,7 +40,7 @@ fn encode_b40_uint(s: &[u8]) -> CodegenResult<u32> {
 fn encode_b40(name: &str) -> CodegenResult<[u8; 8]> {
     let bytes = name.as_bytes();
     let first  = encode_b40_uint(&bytes[..bytes.len().min(6)])?;
-    // just
+    // just silently truncate longer strings TODO: explicitly define behavior
     let second = encode_b40_uint(if bytes.len() > 6 { &bytes[6..12.min(bytes.len())] } else { &[]
     })?;
     let mut out = [0u8; 8];
@@ -87,7 +87,7 @@ impl FsbHeader {
 
 #[cfg(test)]
 mod tests {
-    use super::*;  // brings everything from codegen.rs into scope
+    use super::*;
 
     #[test]
     fn test_b40_encode() {
@@ -104,6 +104,13 @@ mod tests {
     #[test]
     fn test_b40_roundtrip() {
         let name = "ADD";
+        let encoded = encode_b40(name).unwrap();
+        let decoded = decode_b40(&encoded);
+        assert_eq!(decoded, name);
+    }
+    #[test]
+    fn test_b40_roundtrip_full_len() {
+        let name = "EVAR01ZN01_N";
         let encoded = encode_b40(name).unwrap();
         let decoded = decode_b40(&encoded);
         assert_eq!(decoded, name);
