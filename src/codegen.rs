@@ -7,12 +7,24 @@ use std::collections::{HashMap, HashSet};
 //TODO: call support symbol table, 2-pass ...
 
 // opcodes
-pub const OP_GROW_STACK:  u8 = 0x07;
-pub const OP_LOAD_ARG:    u8 = 0x0b;
-pub const OP_ALU:         u8 = 0x14;
-pub const OP_RETV:        u8 = 0x06;
+#[repr(u8)]
+pub enum Opcode {
+    Ret      = 0x06,
+    GrowStack = 0x07,
+    LoadArg   = 0x0b,
+    Alu       = 0x14,
+}
+#[repr(u16)]
+pub enum AluOp {
+    Add = 0,
+    Sub = 1,
+}
 
-pub const ALU_ADD: u16 = 0;
+#[repr(u8)]
+pub enum RetOp {
+    Ret  = 0,
+    Retv = 1,
+}
 
 // Codegen
 pub struct Codegen {
@@ -27,7 +39,7 @@ impl Codegen {
         Self { code: Vec::new(), symbols: HashMap::new(), exports: HashSet::new() }
     }
 
-    fn emit_insn(&mut self, opcode: u8, subtype: u8, operand: i16) {
+    fn emit_insn(&mut self, operand: i16, subtype: u8, opcode: u8) {
         let word: u32 = ((operand as u32) << 16)
             | ((subtype as u32)         <<  8)
             |  (opcode  as u32);
@@ -56,22 +68,22 @@ impl Codegen {
     fn emit_instruction(&mut self, instruction: &Instruction) -> ParseResult<()> {
         match instruction {
             Instruction::GrowStack(n) => {
-                self.emit_insn(OP_GROW_STACK, 0, *n as i16);
+                self.emit_insn(*n as i16, 0, Opcode::GrowStack as u8);
             }
 
             Instruction::LoadArg(n) => {
-                self.emit_insn(OP_LOAD_ARG, 0, *n as i16);
+                self.emit_insn( *n as i16, 0,Opcode::LoadArg as u8);
             }
 
             Instruction::Add => {
-                self.emit_insn(OP_ALU, 0, ALU_ADD as i16);
+                self.emit_insn(AluOp::Add as i16, 0, Opcode::Alu as u8);
             }
 
             Instruction::Retv(n) => {
-                self.emit_insn(OP_RETV, 1, *n as i16);
+                self.emit_insn(  *n as i16,RetOp::Retv as u8,Opcode::Ret as u8);
             }
             Instruction::Ret(n) => {
-                self.emit_insn(OP_RETV, 0, *n as i16);
+                self.emit_insn( *n as i16,RetOp::Ret as u8,  Opcode::Ret as u8);
             }
         }
         Ok(())
