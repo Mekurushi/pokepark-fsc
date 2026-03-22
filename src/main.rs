@@ -3,6 +3,8 @@ mod parser;
 mod ast;
 mod error;
 mod codegen;
+mod b40string;
+mod formats;
 
 use std::fs::{read_to_string, write};
 use std::path::PathBuf;
@@ -58,7 +60,7 @@ fn main() {
         return;
     }
 
-    let fsb = match cg.finalize("sample".to_string()) {
+    let fsb = match cg.assemble_fsb("sample".to_string()) {
         Ok(fsb) => fsb,
         Err(e) =>{ eprintln!("codegen error: {}", e); return; }
     };
