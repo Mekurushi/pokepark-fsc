@@ -90,7 +90,7 @@ fn parse_function(ts: &mut TokenStream) -> ParseResult<Function> {
     ts.expect(&Token::RParen, "`)`")?;
     ts.expect(&Token::Colon, "`:`")?;
     let body = parse_body(ts)?;
-    Ok(Function { name, params, private, body })
+    Ok(Function { name, _params: params, private, body })
 }
 
 fn parse_param_list(ts: &mut TokenStream) -> ParseResult<Vec<String>> {

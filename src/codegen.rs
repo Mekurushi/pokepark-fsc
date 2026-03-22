@@ -112,3 +112,43 @@ impl Codegen {
         Ok(out)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::Instruction;
+
+    #[test]
+    fn test_emit_grow_stack() {
+        let mut cg = Codegen::new();
+        cg.emit_instruction(&Instruction::GrowStack(1)).unwrap();
+        assert_eq!(cg.code, &[0x00, 0x01, 0x00, 0x07]);
+    }
+
+    #[test]
+    fn test_emit_load_arg() {
+        let mut cg = Codegen::new();
+        cg.emit_instruction(&Instruction::LoadArg(1)).unwrap();
+        assert_eq!(cg.code, &[0x00, 0x01, 0x00, 0x0b]);
+    }
+
+    #[test]
+    fn test_emit_add() {
+        let mut cg = Codegen::new();
+        cg.emit_instruction(&Instruction::Add).unwrap();
+        assert_eq!(cg.code, &[0x00, 0x00, 0x00, 0x14]);
+    }
+
+    #[test]
+    fn test_emit_retv() {
+        let mut cg = Codegen::new();
+        cg.emit_instruction(&Instruction::Retv(1)).unwrap();
+        assert_eq!(cg.code, &[0x00, 0x01, 0x01, 0x06]);
+    }
+    #[test]
+    fn test_emit_ret() {
+        let mut cg = Codegen::new();
+        cg.emit_instruction(&Instruction::Ret(1)).unwrap();
+        assert_eq!(cg.code, &[0x00, 0x01, 0x00, 0x06]);
+    }
+}
