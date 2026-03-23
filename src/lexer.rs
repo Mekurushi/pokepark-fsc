@@ -1,4 +1,5 @@
 use logos::Logos;
+use crate::error::{ParseError, ParseResult};
 
 #[derive(Logos, Debug, Clone, PartialEq)]
 #[logos(skip r"[ \t\n\f]+")] // Ignore this regex pattern between tokens
@@ -61,4 +62,17 @@ pub enum Token {
     #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*", |lex| lex.slice().to_string())]
     Ident(String)
 
+}
+
+pub fn tokenize(src: &str) -> ParseResult<Vec<(Token, std::ops::Range<usize>)>> {
+    let mut tokens = Vec::new();
+    let mut lex = Token::lexer(src);
+    while let Some(result) = lex.next() {
+        let span = lex.span();
+        match result {
+            Ok(tok) => tokens.push((tok, span)),
+            Err(_) => return Err(ParseError::LexError { offset: span.start }),
+        }
+    }
+    Ok(tokens)
 }

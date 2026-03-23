@@ -50,7 +50,12 @@ fn main() {
 
     // TODO: connecting assembling
     let ctx = read_to_string( input).expect("Should have been able to read the file");
-    let program = match parser::parse(&ctx) {
+    let tokens = match lexer::tokenize(&ctx){
+        Ok(tokens) => tokens,
+        Err(e) => { eprintln!("parse error: {}", e); return; }
+
+    };
+    let program = match parser::parse(tokens) {
         Ok(p)  => p,
         Err(e) => { eprintln!("parse error: {}", e); return; }
     };

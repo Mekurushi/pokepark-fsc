@@ -1,4 +1,3 @@
-use logos::Logos;
 use crate::ast::{Function, Instruction, Program};
 use crate::lexer::Token;
 use crate::error::{ParseError, ParseResult};
@@ -9,17 +8,8 @@ struct TokenStream {
 }
 
 impl TokenStream {
-    fn new(src: &str) -> ParseResult<Self> {
-        let mut tokens = Vec::new();
-        let mut lex = Token::lexer(src);
-        while let Some(result) = lex.next() {
-            let span = lex.span();
-            match result {
-                Ok(tok) => tokens.push((tok, span)),
-                Err(_) => return Err(ParseError::LexError { offset: span.start }),
-            }
-        }
-        Ok(Self { tokens, cursor: 0 })
+    fn new(tokens: Vec<(Token, std::ops::Range<usize>)>) -> Self {
+        Self { tokens, cursor: 0 }
     }
     fn is_at_end(&self) -> bool { self.cursor >= self.tokens.len() }
 
@@ -71,8 +61,8 @@ impl TokenStream {
 }
 
 // Entrypoint
-pub fn parse(src: &str) -> ParseResult<Program> {
-    let mut ts = TokenStream::new(src)?;
+pub fn parse(src: Vec<(Token, std::ops::Range<usize>)>) -> ParseResult<Program> {
+    let mut ts = TokenStream::new(src);
     let mut functions = Vec::new();
     while !ts.is_at_end() {
         functions.push(parse_function(&mut ts)?);
