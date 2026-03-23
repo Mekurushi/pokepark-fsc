@@ -17,3 +17,10 @@ fn entry():
     push 0x1
     call addition
     ret -0x0
+
+fn caller():
+    call call_forward
+    ret -0x0
+
+private fn call_forward():
+    ret -0x0

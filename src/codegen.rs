@@ -1,5 +1,5 @@
 use crate::ast::{Function, Instruction, Program};
-use crate::error::{CodegenError, CodegenResult, ParseResult};
+use crate::error::{CodegenError, CodegenResult};
 use crate::formats::{FscriptHeader, StringTable, SymbolTable, HEADER_SIZE};
 use std::collections::{HashMap, HashSet};
 //TODO: improve build flow; define explictily when encoding, offset arithmetic ...
@@ -32,20 +32,24 @@ pub enum RetOp {
 pub struct Codegen {
     pub code: Vec<u8>,
     pub symbols: HashMap<String, u32>,
-    pub exports: HashSet<String>,
-    pub fixups: Vec<Fixup>
+    pub exports: HashSet<String>
 }
-pub struct Fixup {
-    offset: u32,
-    symbol: String,
-}
+
 
 impl Codegen {
     pub fn new() -> Self {
-        Self { code: Vec::new(), symbols: HashMap::new(), exports: HashSet::new(), fixups:
-        Vec::new() }
+        Self { code: Vec::new(), symbols: HashMap::new(), exports: HashSet::new() }
     }
-
+    fn collect_symbols(&mut self, program: &Program) {
+        let mut offset: u32 = 0;
+        for function in &program.functions {
+            self.symbols.insert(function.name.clone(), offset);
+            if !function.private {
+                self.exports.insert(function.name.clone());
+            }
+            offset += (function.body.len() as u32) * 4;
+        }
+    }
     fn emit_insn(&mut self, operand: i16, subtype: u8, opcode: u8) {
         let word: u32 = ((operand as u32) << 16)
             | ((subtype as u32)         <<  8)
@@ -54,6 +58,10 @@ impl Codegen {
     }
 
     pub fn emit_program(&mut self, program: &Program) -> CodegenResult<()> {
+        // 1-pass symbol collection
+        self.collect_symbols(program);
+
+        // 2-pass code emission
         for function in &program.functions {
             let offset = self.code.len() as u32;
             self.symbols.insert(function.name.clone(), offset);
@@ -96,8 +104,7 @@ impl Codegen {
                 let operand = match self.symbols.get(symbol) {
                     Some(&target) => compute_call_operand(current_offset, target)?,
                     None => {
-                        self.fixups.push(Fixup { offset: current_offset, symbol: symbol.clone() });
-                        0i16 // placeholder until fixup TODO: 2-pass
+                        return Err(CodegenError::UndefinedSymbol(symbol.clone()));
                     }
                 };
                 self.emit_insn(operand, 0, Opcode::Call as u8);
@@ -203,5 +210,23 @@ mod tests {
         let mut cg = Codegen::new();
         cg.emit_instruction(&Instruction::Ret(1)).unwrap();
         assert_eq!(cg.code, &[0x00, 0x01, 0x00, 0x06]);
+    }
+
+    #[test]
+    fn test_emit_call_undefined_symbol() {
+        let mut cg = Codegen::new();
+        let _symbol = String::from("invalid");
+        let invalid_result =cg.emit_instruction(&Instruction::Call(_symbol));
+        assert!(matches!(invalid_result, Err(CodegenError::UndefinedSymbol(_symbol))));
+
+    }
+    #[test]
+    fn test_emit_call() {
+        let mut cg = Codegen::new();
+        let symbol = String::from("invalid");
+        cg.symbols.insert(symbol.clone(), 1);
+        cg.emit_instruction(&Instruction::Call(symbol)).unwrap();
+        assert_eq!(cg.code, &[0x00, 0x00, 0x00, 0x03]);
+
     }
 }
