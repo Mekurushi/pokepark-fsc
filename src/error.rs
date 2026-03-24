@@ -21,7 +21,7 @@ impl std::fmt::Display for ParseError {
 
 pub type ParseResult<T> = Result<T, ParseError>;
 
-// Codegen Error
+// Assembler Error
 #[derive(Debug)]
 pub enum AssemblerError {
     InvalidB40Char(char),

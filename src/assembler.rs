@@ -1,10 +1,10 @@
 use crate::ast::{Instruction, Program, Statement};
-use crate::binary::FscriptBinary;
 use crate::binary::string_table::BinaryStringTable;
 use crate::binary::symbol_table::BinarySymbolTable;
-use crate::encoding::{compute_call_operand, encode, instruction_length};
-use crate::error::{AssemblerError, AssemblerResult};
-use crate::symbol_table::{Scope, SymbolTable};
+use crate::binary::FscriptBinary;
+use crate::encoding::{calculate_call_operand, encode, instruction_length};
+use crate::error::AssemblerResult;
+use crate::symbol_table::{Scope, SymbolResolver, SymbolTable};
 
 // opcodes
 #[repr(u8)]
@@ -12,7 +12,8 @@ pub enum Opcode {
     Call = 0x3,
     Ret = 0x06,
     GrowStack = 0x07,
-    LoadArg = 0x0b,
+    Jmp = 0x8,
+LoadArg = 0x0b,
     Push = 0x10,
     Alu = 0x14,
 }
@@ -21,6 +22,13 @@ pub enum AluOp {
     Add = 0,
     Sub = 1,
 }
+
+#[repr(u8)]
+pub enum JmpOp {
+    Jmp = 0,
+    Jnz = 1,
+}
+
 
 #[repr(u8)]
 pub enum RetOp {
@@ -62,10 +70,11 @@ impl Assembler {
     fn emit(program: &Program, symbol_table: &SymbolTable) -> AssemblerResult<Vec<u8>> {
         let mut out = Vec::new();
         for function in &program.functions {
+            let resolver = SymbolResolver::new(symbol_table, &function.name);
             for stmt in &function.body {
                 if let Statement::Instruction(ins) = stmt {
                     let offset = out.len() as u32;
-                    let word = Self::emit_instruction(ins, offset, symbol_table)?;
+                    let word = Self::emit_instruction(ins, offset,&resolver)?;
                     out.extend_from_slice(&word.to_be_bytes());
                 }
             }
@@ -76,7 +85,7 @@ impl Assembler {
     fn emit_instruction(
         instruction: &Instruction,
         offset: u32,
-        symbol_table: &SymbolTable,
+        resolver: &SymbolResolver,
     ) -> AssemblerResult<u32> {
         let word = match instruction {
             Instruction::GrowStack(n) => encode(*n, 0, Opcode::GrowStack as u8),
@@ -87,13 +96,14 @@ impl Assembler {
             Instruction::Sub => encode(AluOp::Sub as i16, 0, Opcode::Alu as u8),
             Instruction::Push(n) => encode(*n, 0, Opcode::Push as u8),
             Instruction::Call(symbol) => {
-                let operand = match symbol_table.lookup(symbol) {
-                    Some(target) => compute_call_operand(offset, target.offset)?,
-                    None => {
-                        return Err(AssemblerError::UndefinedSymbol(symbol.clone()));
-                    }
-                };
+                let target = resolver.resolve_global(symbol)?;
+                let operand = calculate_call_operand(offset, target.offset)?;
                 encode(operand, 0, Opcode::Call as u8)
+            }
+            Instruction::Jmp(label) => {
+                let target = resolver.resolve_local(label)?;
+                let operand = calculate_call_operand(offset, target.offset)?;
+                encode(operand, JmpOp::Jmp as u8, Opcode::Jmp as u8)
             }
 
             Instruction::Retv(n) => {
@@ -117,7 +127,7 @@ pub struct Assembly {
 }
 
 impl Assembly {
-    pub fn into_binary(&self, script_name: String) -> AssemblerResult<FscriptBinary> {
+    pub fn into_binary(self, script_name: String) -> AssemblerResult<FscriptBinary> {
         let mut symbol_table = BinarySymbolTable::new();
         for symbol in self.symbol_table.exports() {
             symbol_table.add(symbol.name.clone(), symbol.offset);

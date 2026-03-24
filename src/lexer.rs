@@ -36,6 +36,10 @@ pub enum Token {
     #[token("call")]
     Call,
 
+    #[token("jmp")]
+    Jmp,
+
+
     // --- Punctuation ---
     #[token("(")]
     LParen,

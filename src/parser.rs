@@ -122,7 +122,7 @@ fn parse_body(ts: &mut TokenStream) -> ParseResult<Vec<Statement>> {
 
 fn parse_statement(ts: &mut TokenStream) -> ParseResult<Statement> {
     match ts.peek() {
-        Some(Token::LabelDef(name)) => {ts.advance(); Ok(Statement::Label(ts.expect_label()?))}
+        Some(Token::LabelDef(_)) => Ok(Statement::Label(ts.expect_label()?)),
         _ => Ok(Statement::Instruction(parse_instruction(ts)?)),
     }
 }
@@ -136,6 +136,7 @@ fn parse_instruction(ts: &mut TokenStream) -> ParseResult<Instruction> {
         Some(Token::Sub)       => { ts.advance(); Ok(Instruction::Sub) }
         Some(Token::Push)       => { ts.advance(); Ok(Instruction::Push(ts.expect_int()?)) }
         Some(Token::Call) => {ts.advance(); Ok(Instruction::Call(ts.expect_ident()?))}
+        Some(Token::Jmp) => {ts.advance(); Ok(Instruction::Jmp(ts.expect_ident()?))}
         Some(Token::Retv)      => { ts.advance(); Ok(Instruction::Retv(ts.expect_int()?)) }
         Some(Token::Ret)      => { ts.advance(); Ok(Instruction::Ret(ts.expect_int()?)) }
         other => {

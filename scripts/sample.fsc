@@ -22,5 +22,13 @@ fn caller():
     call call_forward
     ret -0x0
 
+fn jumper():
+    push 0x0
+    jmp target
+    push 0x1
+target:
+    push 0x2
+    ret 0x0
+
 private fn call_forward():
     ret -0x0

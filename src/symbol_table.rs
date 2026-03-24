@@ -53,3 +53,26 @@ impl SymbolTable {
         self.symbols.values().filter(|s| matches!(s.scope, Scope::Export))
     }
 }
+
+pub struct SymbolResolver<'a> {
+    symbol_table: &'a SymbolTable,
+    function: &'a str,
+}
+
+impl<'a> SymbolResolver<'a> {
+    pub fn new(symbol_table: &'a SymbolTable, function: &'a str) -> Self {
+        Self { symbol_table, function }
+    }
+
+    pub fn resolve_global(&self, name: &str) -> AssemblerResult<&Symbol> {
+        self.symbol_table
+            .lookup(name)
+            .ok_or_else(|| AssemblerError::UndefinedSymbol(name.to_string()))
+    }
+
+    pub fn resolve_local(&self, label: &str) -> AssemblerResult<&Symbol> {
+        self.symbol_table
+            .lookup_local(self.function, label)
+            .ok_or_else(|| AssemblerError::UndefinedSymbol(label.to_string()))
+    }
+}

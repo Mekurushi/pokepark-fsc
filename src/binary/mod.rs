@@ -28,7 +28,7 @@ impl FscriptBinary {
     pub fn serialize(&self) -> AssemblerResult<Vec<u8>> {
         let code_ptr         = HEADER_SIZE;
         let symbol_table_ptr = code_ptr + self.code.len() as u32;
-        let string_table_ptr = symbol_table_ptr + self.symbol_table.byte_len() as u32;
+        let string_table_ptr = symbol_table_ptr + self.symbol_table.byte_len();
 
         let header = FscriptHeader::new(
             self.script_name.clone(),

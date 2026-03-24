@@ -11,7 +11,7 @@ pub fn encode(operand: i16, subtype: u8, opcode: u8) -> u32{
 pub fn instruction_length(_ins: &Instruction) -> u32{
     0x4 // TODO: real insn len logic
 }
-pub fn compute_call_operand(current_offset: u32, target_offset: u32) -> AssemblerResult<i16>{
+pub fn calculate_call_operand(current_offset: u32, target_offset: u32) -> AssemblerResult<i16>{
     let branch_offset = target_offset as i32 - (current_offset as i32 + INSTRUCTION_LENGTH);
     i16::try_from(branch_offset / INSTRUCTION_LENGTH)
         .map_err(|_| AssemblerError::OperandOutOfRange(branch_offset))
