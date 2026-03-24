@@ -8,7 +8,12 @@ pub struct Function {
     pub name: String,
     pub _params: Vec<String>,
     pub private: bool,
-    pub body: Vec<Instruction>,
+    pub body: Vec<Statement>,
+}
+#[derive(Debug, Clone)]
+pub enum Statement {
+    Label(String),
+    Instruction(Instruction),
 }
 
 #[derive(Debug, Clone)]

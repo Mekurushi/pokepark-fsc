@@ -49,6 +49,12 @@ pub enum Token {
     #[token(":")]
     Colon,
 
+    #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*:", |lex| {
+    let s = lex.slice();
+    s[..s.len()-1].to_string() // strip the colon
+})]
+    LabelDef(String),
+
     #[regex(r"-?0x[0-9a-fA-F]+", |lex| {
         let s = lex.slice();
         if let Some(digits) = s.strip_prefix("-0x") {

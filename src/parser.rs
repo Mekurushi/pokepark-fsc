@@ -1,4 +1,4 @@
-use crate::ast::{Function, Instruction, Program};
+use crate::ast::{Function, Instruction, Program, Statement};
 use crate::lexer::Token;
 use crate::error::{ParseError, ParseResult};
 
@@ -50,6 +50,21 @@ impl TokenStream {
             ParseError::UnexpectedToken { got, expected: "identifier", offset: self.offset() }
         })
     }
+    fn eat_label(&mut self) -> Option<String> {
+        if let Some(Token::LabelDef(_)) = self.peek() {
+            if let Some(Token::LabelDef(name)) = self.advance() {
+                return Some(name.clone());
+            }
+        }
+        None
+    }
+
+    fn expect_label(&mut self) -> ParseResult<String> {
+        self.eat_label().ok_or_else(|| {
+            let got = self.peek().map(|t| format!("{t:?}")).unwrap_or("EOF".into());
+            ParseError::UnexpectedToken { got, expected: "label", offset: self.offset() }
+        })
+    }
 
     fn expect_int(&mut self) -> ParseResult<i16> {
         if let Some(Token::Int(_)) = self.peek() {
@@ -94,15 +109,22 @@ fn parse_param_list(ts: &mut TokenStream) -> ParseResult<Vec<String>> {
     Ok(params)
 }
 
-fn parse_body(ts: &mut TokenStream) -> ParseResult<Vec<Instruction>> {
+fn parse_body(ts: &mut TokenStream) -> ParseResult<Vec<Statement>> {
     let mut body = Vec::new();
     loop {
         match ts.peek() {
             None | Some(Token::Fn) | Some(Token::Private) => break,
-            _ => body.push(parse_instruction(ts)?),
+            _ => body.push(parse_statement(ts)?),
         }
     }
     Ok(body)
+}
+
+fn parse_statement(ts: &mut TokenStream) -> ParseResult<Statement> {
+    match ts.peek() {
+        Some(Token::LabelDef(name)) => {ts.advance(); Ok(Statement::Label(ts.expect_label()?))}
+        _ => Ok(Statement::Instruction(parse_instruction(ts)?)),
+    }
 }
 
 fn parse_instruction(ts: &mut TokenStream) -> ParseResult<Instruction> {

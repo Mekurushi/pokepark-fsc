@@ -23,24 +23,27 @@ pub type ParseResult<T> = Result<T, ParseError>;
 
 // Codegen Error
 #[derive(Debug)]
-pub enum CodegenError {
+pub enum AssemblerError {
     InvalidB40Char(char),
     OperandOutOfRange(i32),
     UndefinedSymbol(String),
+    DuplicateSymbol(String)
 
 }
 
-pub type CodegenResult<T> = Result<T, CodegenError>;
+pub type AssemblerResult<T> = Result<T, AssemblerError>;
 
-impl std::fmt::Display for CodegenError {
+impl std::fmt::Display for AssemblerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            CodegenError::InvalidB40Char(c) =>
+            AssemblerError::InvalidB40Char(c) =>
                 write!(f, "invalid character '{c}' in script name, allowed: ' 0-9 A-Z _ - /`"),
-            CodegenError::OperandOutOfRange(n) =>
+            AssemblerError::OperandOutOfRange(n) =>
                 write!(f, "operand {n:#x} out of 16-bit signed range"),
-            CodegenError::UndefinedSymbol(name) =>
+            AssemblerError::UndefinedSymbol(name) =>
                 write!(f, "undefined symbol '{name}'"),
+            AssemblerError::DuplicateSymbol(name) =>
+                write!(f, "duplicated symbol '{name}'"),
         }
     }
 }

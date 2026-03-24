@@ -2,14 +2,16 @@ mod lexer;
 mod parser;
 mod ast;
 mod error;
-mod codegen;
-mod b40string;
-mod formats;
+mod symbol_table;
+mod assembler;
+mod binary;
+mod encoding;
+
 
 use std::fs::{read_to_string, write};
 use std::path::PathBuf;
 use std::process;
-use crate::codegen::Codegen;
+use crate::assembler::Assembler;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -48,28 +50,42 @@ fn main() {
         input.with_extension("fsb")
     };
 
-    // TODO: connecting assembling
-    let ctx = read_to_string( input).expect("Should have been able to read the file");
-    let tokens = match lexer::tokenize(&ctx){
-        Ok(tokens) => tokens,
-        Err(e) => { eprintln!("parse error: {}", e); return; }
+    let script_name = input
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("unknown")
+        .to_string();
 
+    let source = match read_to_string(&input) {
+        Ok(s) => s,
+        Err(e) => { eprintln!("error reading file: {}", e); process::exit(1); }
     };
+
+    let tokens = match lexer::tokenize(&source) {
+        Ok(t) => t,
+        Err(e) => { eprintln!("lex error: {}", e); process::exit(1); }
+    };
+
     let program = match parser::parse(tokens) {
-        Ok(p)  => p,
-        Err(e) => { eprintln!("parse error: {}", e); return; }
-    };
-    let mut cg = Codegen::new();
-    if let Err(e) = cg.emit_program(&program) {
-        eprintln!("codegen error: {}", e);
-        return;
-    }
-
-    let fsb = match cg.assemble_fsb("sample".to_string()) {
-        Ok(fsb) => fsb,
-        Err(e) =>{ eprintln!("codegen error: {}", e); return; }
+        Ok(p) => p,
+        Err(e) => { eprintln!("parse error: {}", e); process::exit(1); }
     };
 
-    write(output, fsb).expect("failed to write out.fsb");
+    let assembly = match Assembler::assemble(&program) {
+        Ok(a) => a,
+        Err(e) => { eprintln!("assembler error: {}", e); process::exit(1); }
+    };
+
+    let binary = match assembly.into_binary(script_name) {
+        Ok(b) => b,
+        Err(e) => { eprintln!("binary error: {}", e); process::exit(1); }
+    };
+
+    let bytes = match binary.serialize() {
+        Ok(b) => b,
+        Err(e) => { eprintln!("serialize error: {}", e); process::exit(1); }
+    };
+
+    write(output, bytes).expect("failed to write output file");
 
 }
