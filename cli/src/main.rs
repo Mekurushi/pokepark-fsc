@@ -1,17 +1,9 @@
-mod lexer;
-mod parser;
-mod ast;
-mod error;
-mod symbol_table;
-mod assembler;
-mod binary;
-mod encoding;
-mod string_table;
-
 use std::fs::{read_to_string, write};
 use std::path::PathBuf;
 use std::process;
-use crate::assembler::Assembler;
+use fsc_frontend::{lexer, parser};
+use fsc_core::Assembler;
+use fsc_frontend::ast_walker::AstWalker;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -70,13 +62,15 @@ fn main() {
         Ok(p) => p,
         Err(e) => { eprintln!("parse error: {}", e); process::exit(1); }
     };
+    let mut core = Assembler::new();
+    let mut walker = AstWalker::new(&mut core);
 
-    let assembly = match Assembler::assemble(&program) {
+    match walker.walk(&program) {
         Ok(a) => a,
         Err(e) => { eprintln!("assembler error: {}", e); process::exit(1); }
     };
 
-    let binary = match assembly.into_binary(script_name) {
+    let binary = match core.finalize(script_name) {
         Ok(b) => b,
         Err(e) => { eprintln!("binary error: {}", e); process::exit(1); }
     };

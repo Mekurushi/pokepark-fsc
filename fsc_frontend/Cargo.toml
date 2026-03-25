@@ -1,0 +1,12 @@
+[package]
+name = "fsc_frontend"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "fsc_frontend"
+path = "src/lib.rs"
+
+[dependencies]
+fsc_core = { path = "../fsc_core" }
+logos = "0.16.1"
