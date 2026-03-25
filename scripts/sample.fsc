@@ -30,5 +30,10 @@ target:
     push 0x2
     ret 0x0
 
+fn string_loader():
+    push 0x1
+    lstr "test"
+    ret -0x0
+
 private fn call_forward():
     ret -0x0

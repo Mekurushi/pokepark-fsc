@@ -6,7 +6,7 @@ mod symbol_table;
 mod assembler;
 mod binary;
 mod encoding;
-
+mod string_table;
 
 use std::fs::{read_to_string, write};
 use std::path::PathBuf;

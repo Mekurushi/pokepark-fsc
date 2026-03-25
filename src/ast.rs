@@ -25,6 +25,7 @@ pub enum Instruction {
     Push(i16),               // push
     Call(String),
     Jmp(String),
+    LStr(String),
     Retv(i16),        // retv -0x2
     Ret(i16),        // ret -0x2
 }

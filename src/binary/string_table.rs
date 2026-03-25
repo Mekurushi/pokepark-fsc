@@ -1,20 +1,20 @@
 use crate::error::AssemblerResult;
 
 pub struct BinaryStringTable {
-    _entries: Vec<String>,
+    string_table: Vec<u8>,
 }
 
 
 
 impl BinaryStringTable {
-    pub fn new() -> Self {
-        Self { _entries: Vec::new() }
+    pub fn new(buffer: Vec<u8>) -> Self {
+        Self { string_table: buffer }
     }
 
     pub fn serialize(&self) -> AssemblerResult<Vec<u8>> {
+        //TODO: script name as first string
         let mut buf = Vec::new();
-        //TODO: fill with real used strings
-        buf.extend_from_slice("dummy".as_bytes());
+        buf.extend_from_slice(self.string_table.as_slice());
         Ok(buf)
     }
 

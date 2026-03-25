@@ -1,9 +1,9 @@
 use crate::ast::{Instruction, Program, Statement};
-use crate::binary::string_table::BinaryStringTable;
 use crate::binary::symbol_table::BinarySymbolTable;
 use crate::binary::FscriptBinary;
 use crate::encoding::{calculate_call_operand, encode, instruction_length};
 use crate::error::AssemblerResult;
+use crate::string_table::StringTable;
 use crate::symbol_table::{Scope, SymbolResolver, SymbolTable};
 
 // opcodes
@@ -15,6 +15,7 @@ pub enum Opcode {
     Jmp = 0x8,
 LoadArg = 0x0b,
     Push = 0x10,
+    LStr = 0x13,
     Alu = 0x14,
 }
 #[repr(u16)]
@@ -41,8 +42,8 @@ pub struct Assembler;
 impl Assembler {
     pub fn assemble(program: &Program) -> AssemblerResult<Assembly> {
         let symbol_table = Self::build_symbol_table(program)?;
-        let code = Self::emit(program, &symbol_table)?;
-        Ok(Assembly { code, symbol_table })
+        let (code, string_table) = Self::emit(program, &symbol_table)?;
+        Ok(Assembly { code, symbol_table, string_table })
     }
 
     fn build_symbol_table(program: &Program) -> AssemblerResult<SymbolTable> {
@@ -67,27 +68,34 @@ impl Assembler {
         }
         Ok(symbol_table)
     }
-    fn emit(program: &Program, symbol_table: &SymbolTable) -> AssemblerResult<Vec<u8>> {
+    fn emit(program: &Program, symbol_table: &SymbolTable) -> AssemblerResult<(Vec<u8>,StringTable)> {
         let mut out = Vec::new();
+        let mut strings = StringTable::new();
+
         for function in &program.functions {
             let resolver = SymbolResolver::new(symbol_table, &function.name);
             for stmt in &function.body {
                 if let Statement::Instruction(ins) = stmt {
                     let offset = out.len() as u32;
-                    let word = Self::emit_instruction(ins, offset,&resolver)?;
+                    let word = Self::emit_instruction(ins, offset,&resolver, &mut strings)?;
                     out.extend_from_slice(&word.to_be_bytes());
                 }
             }
         }
 
-        Ok(out)
+        Ok((out, strings))
     }
     fn emit_instruction(
         instruction: &Instruction,
         offset: u32,
         resolver: &SymbolResolver,
+        strings: &mut StringTable
     ) -> AssemblerResult<u32> {
         let word = match instruction {
+            Instruction::LStr(s) => {
+                let str_offset = strings.intern(s)?;
+                encode(0, str_offset as u8, Opcode::LStr as u8)
+            }
             Instruction::GrowStack(n) => encode(*n, 0, Opcode::GrowStack as u8),
 
             Instruction::LoadArg(n) => encode(*n, 0, Opcode::LoadArg as u8),
@@ -124,6 +132,7 @@ impl Assembler {
 pub struct Assembly {
     pub code: Vec<u8>,
     pub symbol_table: SymbolTable,
+    pub string_table: StringTable
 }
 
 impl Assembly {
@@ -137,7 +146,7 @@ impl Assembly {
             script_name,
             self.code.clone(),
             symbol_table,
-            BinaryStringTable::new(), // TODO: string fill logic replacement
+            self.string_table.into_binary(),
         ))
     }
 }

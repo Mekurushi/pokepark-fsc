@@ -39,6 +39,15 @@ pub enum Token {
     #[token("jmp")]
     Jmp,
 
+    #[token("lstr")]
+    LStr,
+
+    #[regex(r#""[^"]*""#, |lex| {
+    let s = lex.slice();
+    s[1..s.len()-1].to_string() // strip quotes
+})]
+    StringLiteral(String),
+
 
     // --- Punctuation ---
     #[token("(")]

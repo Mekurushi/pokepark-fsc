@@ -17,12 +17,12 @@ pub struct FscriptBinary {
 
 impl FscriptBinary {
     pub fn new(
-        program_name: String,
+        script_name: String,
         code: Vec<u8>,
         symbol_table: BinarySymbolTable,
         string_table: BinaryStringTable,
     ) -> Self {
-        Self { script_name: program_name, code, symbol_table, string_table }
+        Self { script_name, code, symbol_table, string_table }
     }
 
     pub fn serialize(&self) -> AssemblerResult<Vec<u8>> {

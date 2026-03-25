@@ -73,6 +73,16 @@ impl TokenStream {
         let got = self.peek().map(|t| format!("{t:?}")).unwrap_or("EOF".into());
         Err(ParseError::UnexpectedToken { got, expected: "integer", offset: self.offset() })
     }
+
+    fn expect_string(&mut self) -> ParseResult<String> {
+        if let Some(Token::StringLiteral(_)) = self.peek() {
+            if let Some(Token::StringLiteral(s)) = self.advance() {
+                return Ok(s.clone());
+            }
+        }
+        let got = self.peek().map(|t| format!("{t:?}")).unwrap_or("EOF".into());
+        Err(ParseError::UnexpectedToken { got, expected: "string literal", offset: self.offset() })
+    }
 }
 
 // Entrypoint
@@ -139,6 +149,7 @@ fn parse_instruction(ts: &mut TokenStream) -> ParseResult<Instruction> {
         Some(Token::Jmp) => {ts.advance(); Ok(Instruction::Jmp(ts.expect_ident()?))}
         Some(Token::Retv)      => { ts.advance(); Ok(Instruction::Retv(ts.expect_int()?)) }
         Some(Token::Ret)      => { ts.advance(); Ok(Instruction::Ret(ts.expect_int()?)) }
+        Some(Token::LStr) => { ts.advance(); Ok(Instruction::LStr(ts.expect_string()?)) }
         other => {
             let got = other.map(|t| format!("{t:?}")).unwrap_or("EOF".into());
             Err(ParseError::UnexpectedToken { got, expected: "instruction", offset })
