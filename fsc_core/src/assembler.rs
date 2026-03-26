@@ -15,6 +15,7 @@ pub enum Opcode {
     Jmp = 0x8,
 LoadArg = 0x0b,
     Push = 0x10,
+    PushResult = 0x12,
     LStr = 0x13,
     Alu = 0x14,
 }
@@ -101,6 +102,9 @@ impl Assembler {
     pub fn emit_push(&mut self, n: i16) {
         self.emit(encode(n, 0, Opcode::Push as u8));
         }
+    pub fn emit_push_result(&mut self) {
+        self.emit(encode(0, 0, Opcode::PushResult as u8));
+    }
     pub fn emit_add(&mut self) {
         self.emit(encode(AluOp::Add as i16, 0, Opcode::Alu as u8));
 
@@ -235,5 +239,13 @@ mod emit_tests {
         asm.emit_syscall(3, 0x0, 0x15);
         // SC3 0x0:0x15
         assert_eq!(last_bytes(&asm), [0x00, 0x15, 0x03, 0x01]);
+    }
+
+    // --- push_result ---
+    #[test]
+    fn emit_push_result() {
+        let mut asm = assembler_in_function();
+        asm.emit_push_result();
+        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x00, 0x12]);
     }
 }

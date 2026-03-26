@@ -39,6 +39,9 @@ pub enum Token {
     #[token("jmp")]
     Jmp,
 
+    #[token("push_result")]
+    PushResult,
+
     #[token("lstr")]
     LStr,
     #[regex(r"SC([0-9]+)", |lex| {

@@ -24,6 +24,7 @@ pub enum Instruction {
     Add,              // add
     Sub,                // sub
     Push(i16),               // push
+    PushResult,
     Call(String),
     Jmp(String),
     LStr(String),
