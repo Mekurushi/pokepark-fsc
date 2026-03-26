@@ -18,6 +18,7 @@ pub enum Statement {
 
 #[derive(Debug, Clone)]
 pub enum Instruction {
+    SysCall { argc: u8, page: u8, func: u8 },
     GrowStack(i16),   // grow_stack 0x1
     LoadArg(i16),     // load_arg 0x0
     Add,              // add

@@ -42,6 +42,8 @@ impl<'a> AstWalker<'a> {
 
     fn walk_instruction(&mut self, ins: &ast::Instruction) -> AssemblerResult<()> {
         match ins {
+            ast::Instruction::SysCall{argc, page, func} => Ok(self.core.emit_syscall(*argc,
+                                                                                     *page, *func)),
             ast::Instruction::GrowStack(n) => Ok(self.core.emit_grow_stack(*n)),
             ast::Instruction::LoadArg(n)   => Ok(self.core.emit_load_arg(*n)),
             ast::Instruction::Push(n)      => Ok(self.core.emit_push(*n)),

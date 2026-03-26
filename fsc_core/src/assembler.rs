@@ -1,6 +1,6 @@
 use crate::binary::symbol_table::BinarySymbolTable;
 use crate::binary::FscriptBinary;
-use crate::encoding::{calculate_call_operand, encode};
+use crate::encoding::{calculate_call_operand, encode, encode_syscall};
 use crate::error::{AssemblerError, AssemblerResult};
 use crate::string_table::StringTable;
 use crate::symbol_table::{Scope, SymbolTable};
@@ -8,6 +8,7 @@ use crate::symbol_table::{Scope, SymbolTable};
 // opcodes
 #[repr(u8)]
 pub enum Opcode {
+    SC = 0x1,
     Call = 0x3,
     Ret = 0x06,
     GrowStack = 0x07,
@@ -87,6 +88,10 @@ impl Assembler {
     }
 
     // instruction emission
+    pub fn emit_syscall(&mut self, argc: u8,page: u8, func: u8) {
+        self.emit(encode_syscall(page,func,argc,Opcode::SC as u8));
+    }
+
     pub fn emit_grow_stack(&mut self, n: i16) {
         self.emit(encode(n, 0, Opcode::GrowStack as u8));
     }
@@ -185,5 +190,50 @@ impl Assembler {
             table.add(symbol.name.clone(), symbol.offset);
         }
         table
+    }
+}
+
+#[cfg(test)]
+mod emit_tests {
+    use crate::assembler::Assembler;
+
+    // --- helpers ---
+    fn assembler_in_function() -> Assembler {
+        let mut asm = Assembler::new();
+        asm.define_function("test", false).unwrap();
+        asm
+    }
+
+    fn last_bytes(asm: &Assembler) -> [u8; 4] {
+        let code = &asm.code;
+        let idx = code.len() - 4;
+        code[idx..idx + 4].try_into().unwrap()
+    }
+
+    // --- push ---
+
+    #[test]
+    fn emit_push_1_bytes() {
+        let mut asm = assembler_in_function();
+        asm.emit_push(1);
+
+        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x00, 0x10]);
+    }
+
+    // --- syscalls ---
+    #[test]
+    fn emit_syscall_0x0_0x10_argc1_bytes() {
+        let mut asm = assembler_in_function();
+        asm.emit_syscall(1, 0x0, 0x10);
+        // SC1 0x0:0x10
+        assert_eq!(last_bytes(&asm), [0x00, 0x10, 0x01, 0x01]);
+    }
+
+    #[test]
+    fn emit_syscall_0x0_0x15_argc3_bytes() {
+        let mut asm = assembler_in_function();
+        asm.emit_syscall(3, 0x0, 0x15);
+        // SC3 0x0:0x15
+        assert_eq!(last_bytes(&asm), [0x00, 0x15, 0x03, 0x01]);
     }
 }

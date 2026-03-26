@@ -66,6 +66,16 @@ impl TokenStream {
         })
     }
 
+    pub fn expect_colon(&mut self) -> ParseResult<()> {
+        match self.peek() {
+            Some(Token::Colon) => { self.advance(); Ok(()) }
+            other => {
+                let got = other.map(|t| format!("{t:?}")).unwrap_or("EOF".into());
+                Err(ParseError::UnexpectedToken { got, expected: "':'", offset: self.offset() })
+            }
+        }
+    }
+
     fn expect_int(&mut self) -> ParseResult<i16> {
         if let Some(Token::Int(_)) = self.peek() {
             if let Some(Token::Int(n)) = self.advance() { return Ok(*n); }
@@ -150,6 +160,14 @@ fn parse_instruction(ts: &mut TokenStream) -> ParseResult<Instruction> {
         Some(Token::Retv)      => { ts.advance(); Ok(Instruction::Retv(ts.expect_int()?)) }
         Some(Token::Ret)      => { ts.advance(); Ok(Instruction::Ret(ts.expect_int()?)) }
         Some(Token::LStr) => { ts.advance(); Ok(Instruction::LStr(ts.expect_string()?)) }
+        Some(Token::SysCall(argc)) => {
+            let argc = *argc;
+            ts.advance();
+            let page = ts.expect_int()? as u8;
+            ts.expect_colon()?;
+            let func = ts.expect_int()? as u8;
+            Ok(Instruction::SysCall { argc, page, func })
+        }
         other => {
             let got = other.map(|t| format!("{t:?}")).unwrap_or("EOF".into());
             Err(ParseError::UnexpectedToken { got, expected: "instruction", offset })

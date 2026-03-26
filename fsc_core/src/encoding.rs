@@ -7,6 +7,10 @@ pub fn encode(operand: i16, subtype: u8, opcode: u8) -> u32{
         |  (opcode  as u32);
     word
 }
+
+pub fn encode_syscall(page:u8, func:u8, argc:u8, opcode: u8 ) -> u32{
+    u32::from_be_bytes([page, func, argc, opcode])
+}
 pub fn instruction_length() -> u32{
     0x4 // TODO: real insn len logic
 }

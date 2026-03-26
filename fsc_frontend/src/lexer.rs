@@ -41,6 +41,10 @@ pub enum Token {
 
     #[token("lstr")]
     LStr,
+    #[regex(r"SC([0-9]+)", |lex| {
+        lex.slice()[2..].parse::<u8>().ok()
+    })]
+    SysCall(u8),
 
     #[regex(r#""[^"]*""#, |lex| {
     let s = lex.slice();
