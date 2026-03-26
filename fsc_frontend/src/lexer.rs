@@ -18,6 +18,9 @@ pub enum Token {
     #[token("load_arg")]
     LoadArg,
 
+    #[token("store_arg")]
+    StoreArg,
+
     #[token("retv")]
     Retv,
 

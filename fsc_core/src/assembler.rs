@@ -13,7 +13,8 @@ pub enum Opcode {
     Ret = 0x06,
     GrowStack = 0x07,
     Jmp = 0x8,
-LoadArg = 0x0b,
+    LoadArg = 0x0b,
+    StoreArg = 0x0c,
     Push = 0x10,
     PushResult = 0x12,
     LStr = 0x13,
@@ -98,6 +99,9 @@ impl Assembler {
     }
     pub fn emit_load_arg(&mut self, n: i16) {
         self.emit(encode(n, 0, Opcode::LoadArg as u8));
+    }
+    pub fn emit_store_arg(&mut self, n: i16) {
+        self.emit(encode(n, 0, Opcode::StoreArg as u8));
     }
     pub fn emit_push(&mut self, n: i16) {
         self.emit(encode(n, 0, Opcode::Push as u8));
@@ -247,5 +251,14 @@ mod emit_tests {
         let mut asm = assembler_in_function();
         asm.emit_push_result();
         assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x00, 0x12]);
+    }
+
+
+    // --- store_arg ---
+    #[test]
+    fn emit_store_arg() {
+        let mut asm = assembler_in_function();
+        asm.emit_store_arg(1);
+        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x00, 0x0c]);
     }
 }
