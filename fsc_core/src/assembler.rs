@@ -24,6 +24,7 @@ pub enum Opcode {
 pub enum AluOp {
     Add = 0,
     Sub = 1,
+    Eq0 = 9
 }
 
 #[repr(u8)]
@@ -108,6 +109,9 @@ impl Assembler {
         }
     pub fn emit_push_result(&mut self) {
         self.emit(encode(0, 0, Opcode::PushResult as u8));
+    }
+    pub fn emit_eq0(&mut self) {
+        self.emit(encode(AluOp::Eq0 as i16, 0, Opcode::Alu as u8));
     }
     pub fn emit_add(&mut self) {
         self.emit(encode(AluOp::Add as i16, 0, Opcode::Alu as u8));
@@ -260,5 +264,13 @@ mod emit_tests {
         let mut asm = assembler_in_function();
         asm.emit_store_arg(1);
         assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x00, 0x0c]);
+    }
+
+    // --- eq ---
+    #[test]
+    fn emit_eq0() {
+        let mut asm = assembler_in_function();
+        asm.emit_eq0();
+        assert_eq!(last_bytes(&asm), [0x00, 0x09, 0x00, 0x14]);
     }
 }
