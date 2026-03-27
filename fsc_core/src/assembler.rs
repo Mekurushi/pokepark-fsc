@@ -19,7 +19,13 @@ pub enum Opcode {
     PushResult = 0x12,
     LStr = 0x13,
     Alu = 0x14,
+    Eq = 0x16,
 }
+#[repr(u16)]
+pub enum EqOp {
+    Eq = 0xb
+}
+
 #[repr(u16)]
 pub enum AluOp {
     Add = 0,
@@ -113,6 +119,9 @@ impl Assembler {
     }
     pub fn emit_eq0(&mut self) {
         self.emit(encode(AluOp::Eq0 as i16, 0, Opcode::Alu as u8));
+    }
+    pub fn emit_eq(&mut self) {
+        self.emit(encode(EqOp::Eq as i16, 0, Opcode::Eq as u8));
     }
     pub fn emit_add(&mut self) {
         self.emit(encode(AluOp::Add as i16, 0, Opcode::Alu as u8));
@@ -290,6 +299,13 @@ mod emit_tests {
         let mut asm = assembler_in_function();
         asm.emit_eq0();
         assert_eq!(last_bytes(&asm), [0x00, 0x09, 0x00, 0x14]);
+    }
+
+    #[test]
+    fn emit_eq() {
+        let mut asm = assembler_in_function();
+        asm.emit_eq();
+        assert_eq!(last_bytes(&asm), [0x00, 0x0b, 0x00, 0x16]);
     }
 
     // --- jmp ---

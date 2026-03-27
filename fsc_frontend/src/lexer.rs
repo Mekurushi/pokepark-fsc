@@ -48,6 +48,9 @@ pub enum Token {
     #[token("eq0")]
     Eq0,
 
+    #[token("eq")]
+    Eq,
+
     #[token("push_result")]
     PushResult,
 
