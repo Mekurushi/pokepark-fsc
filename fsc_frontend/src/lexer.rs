@@ -27,6 +27,9 @@ pub enum Token {
     #[token("ret")]
     Ret,
 
+    #[token("delay_load")]
+    DelayLoad,
+
     #[token("add")]
     Add,
 

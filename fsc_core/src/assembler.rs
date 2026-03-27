@@ -9,6 +9,7 @@ use crate::symbol_table::{Scope, SymbolTable};
 #[repr(u8)]
 pub enum Opcode {
     SC = 0x1,
+    DelayLoad = 0x2,
     Call = 0x3,
     Ret = 0x06,
     GrowStack = 0x07,
@@ -22,6 +23,7 @@ pub enum Opcode {
     Alu = 0x14,
     Eq = 0x16,
 }
+
 #[repr(u16)]
 pub enum EqOp {
     Eq = 0xb
@@ -40,6 +42,12 @@ pub enum JmpType {
     Jnz = 1,
     Jz = 2
 }
+
+#[repr(u8)]
+pub enum DelayType {
+    DelayLoad = 3,
+}
+
 
 
 #[repr(u8)]
@@ -111,6 +119,9 @@ impl Assembler {
     }
     pub fn emit_store_arg(&mut self, n: i16) {
         self.emit(encode(n, 0, Opcode::StoreArg as u8));
+    }
+    pub fn emit_delay_load(&mut self, ) {
+        self.emit(encode(0, DelayType::DelayLoad as u8, Opcode::DelayLoad as u8));
     }
     pub fn emit_push(&mut self, n: i16) {
         self.emit(encode(n, 0, Opcode::Push as u8));
@@ -309,6 +320,14 @@ mod emit_tests {
         let mut asm = assembler_in_function();
         asm.emit_store_arg(1);
         assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x00, 0x0c]);
+    }
+
+    // --- delay_load ---
+    #[test]
+    fn emit_delay_load() {
+        let mut asm = assembler_in_function();
+        asm.emit_delay_load();
+        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x03, 0x02]);
     }
 
     // --- eq ---
