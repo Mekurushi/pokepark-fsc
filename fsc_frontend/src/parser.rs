@@ -84,6 +84,14 @@ impl TokenStream {
         Err(ParseError::UnexpectedToken { got, expected: "integer", offset: self.offset() })
     }
 
+    fn expect_int32(&mut self) -> ParseResult<i32> {
+        if let Some(Token::Int32(_)) = self.peek() {
+            if let Some(Token::Int32(n)) = self.advance() { return Ok(*n); }
+        }
+        let got = self.peek().map(|t| format!("{t:?}")).unwrap_or("EOF".into());
+        Err(ParseError::UnexpectedToken { got, expected: "integer", offset: self.offset() })
+    }
+
     fn expect_string(&mut self) -> ParseResult<String> {
         if let Some(Token::StringLiteral(_)) = self.peek() {
             if let Some(Token::StringLiteral(s)) = self.advance() {
@@ -156,6 +164,7 @@ fn parse_instruction(ts: &mut TokenStream) -> ParseResult<Instruction> {
         Some(Token::Add)       => { ts.advance(); Ok(Instruction::Add) }
         Some(Token::Sub)       => { ts.advance(); Ok(Instruction::Sub) }
         Some(Token::Push)       => { ts.advance(); Ok(Instruction::Push(ts.expect_int()?)) }
+        Some(Token::PushImm)       => { ts.advance(); Ok(Instruction::PushImm(ts.expect_int32()?)) }
         Some(Token::PushResult)       => { ts.advance(); Ok(Instruction::PushResult) }
         Some(Token::Call) => {ts.advance(); Ok(Instruction::Call(ts.expect_ident()?))}
         Some(Token::Jmp) => {ts.advance(); Ok(Instruction::Jmp(ts.expect_ident()?))}
