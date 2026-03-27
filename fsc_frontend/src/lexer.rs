@@ -42,6 +42,9 @@ pub enum Token {
     #[token("jmp")]
     Jmp,
 
+    #[token("jz")]
+    Jz,
+
     #[token("eq0")]
     Eq0,
 

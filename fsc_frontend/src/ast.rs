@@ -28,6 +28,7 @@ pub enum Instruction {
     PushResult,
     Call(String),
     Jmp(String),
+    Jz(String),
     Eq0,
     LStr(String),
     Retv(i16),        // retv -0x2

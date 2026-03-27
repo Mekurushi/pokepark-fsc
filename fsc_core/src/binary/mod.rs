@@ -10,7 +10,7 @@ mod b40string;
 
 pub struct FscriptBinary {
     script_name: String,
-    code: Vec<u8>,
+    pub(crate) code: Vec<u8>,
     symbol_table: BinarySymbolTable,
     string_table: BinaryStringTable,
 }

@@ -28,9 +28,10 @@ pub enum AluOp {
 }
 
 #[repr(u8)]
-pub enum JmpOp {
+pub enum JmpType {
     Jmp = 0,
     Jnz = 1,
+    Jz = 2
 }
 
 
@@ -144,8 +145,24 @@ impl Assembler {
             symbol: label.to_string(),
             kind: RelocationKind::Local(function.to_string()),
         });
-        self.emit(encode(0, JmpOp::Jmp as u8, Opcode::Jmp as u8));
-        Ok(()) }
+        self.emit(encode(0, JmpType::Jmp as u8, Opcode::Jmp as u8));
+        Ok(())
+    }
+
+    pub fn emit_jz(&mut self, label: &str) -> AssemblerResult<()>  {
+        let function = match self.state {
+            EmitState::InFunction(ref function) => function,
+            EmitState::Idle => Err(AssemblerError::LabelOutsideFunction(label.to_string()))?
+        };
+        self.relocations.push(Relocation {
+            code_offset: self.program_counter,
+            symbol: label.to_string(),
+            kind: RelocationKind::Local(function.to_string()),
+        });
+        self.emit(encode(0, JmpType::Jz as u8, Opcode::Jmp as u8));
+        Ok(())
+    }
+
     pub fn emit_ret(&mut self, n: i16) {
         // Ghidra visualizes as neagtive but actual operand is positive TODO: define
         // explicit
@@ -216,6 +233,7 @@ mod emit_tests {
         asm
     }
 
+
     fn last_bytes(asm: &Assembler) -> [u8; 4] {
         let code = &asm.code;
         let idx = code.len() - 4;
@@ -272,5 +290,38 @@ mod emit_tests {
         let mut asm = assembler_in_function();
         asm.emit_eq0();
         assert_eq!(last_bytes(&asm), [0x00, 0x09, 0x00, 0x14]);
+    }
+
+    // --- jmp ---
+    #[test]
+    fn emit_jmp_bytes() {
+        let mut asm = assembler_in_function();
+        asm.define_label("target").unwrap();
+        asm.emit_jmp("target").unwrap();
+        // [operand: 0x0000][JmpType::Jmp = 0x00][Opcode::Jmp = 0x08]
+        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x00, 0x08]);
+    }
+
+    #[test]
+    fn emit_jz_bytes() {
+        let mut asm = assembler_in_function();
+        asm.define_label("target").unwrap();
+        asm.emit_jz("target").unwrap();
+        // [operand: 0x0000][JmpType::Jz = 0x02][Opcode::Jmp = 0x08]
+        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x02, 0x08]);
+    }
+
+    #[test]
+    fn emit_jmp_resolves_correctly() {
+        let mut asm = Assembler::new();
+        asm.define_function("test", false).unwrap();
+
+        asm.emit_jmp("loop").unwrap();   // offset 0
+        asm.emit_push(1);  // offset 4
+        asm.define_label("loop").unwrap(); // offset 8
+
+        let binary = asm.finalize("test".to_string()).unwrap();
+
+        assert_eq!(&binary.code[0..4], &[0x00, 0x01, 0x00, 0x08]);
     }
 }
