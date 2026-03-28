@@ -40,6 +40,7 @@ pub enum Instruction {
     JzSet(String),
     JzPause(String),
     Jz(String),
+    Jeq(String),
     Eq0,
     Eq,
     LStr(String),

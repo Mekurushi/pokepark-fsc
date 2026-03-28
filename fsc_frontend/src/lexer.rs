@@ -77,6 +77,9 @@ pub enum Token {
     #[token("jz")]
     Jz,
 
+    #[token("jeq")]
+    Jeq,
+
     #[token("eq0")]
     Eq0,
 
