@@ -30,6 +30,7 @@ pub enum Instruction {
     DelayLoad,
     DelayNeq0,
     Exit1,
+    Exit2,
     Call(String),
     Jmp(String),
     Jz(String),

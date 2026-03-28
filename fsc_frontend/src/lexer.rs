@@ -36,6 +36,9 @@ pub enum Token {
     #[token("exit_1")]
     Exit1, //unimpl
 
+    #[token("exit_2")]
+    Exit2, //unimpl
+
     #[token("add")]
     Add,
 
