@@ -42,6 +42,7 @@ pub enum JmpType {
     Jnz = 1,
     Jz = 2,
     JnzPause = 3,
+    JzPause = 4,
 
 }
 
@@ -232,6 +233,20 @@ impl Assembler {
             kind: RelocationKind::Local(function.to_string()),
         });
         self.emit(encode(0, JmpType::JnzPause as u8, Opcode::Jmp as u8));
+        Ok(())
+    }
+
+    pub fn emit_jz_pause(&mut self, label: &str) -> AssemblerResult<()>  {
+        let function = match self.state {
+            EmitState::InFunction(ref function) => function,
+            EmitState::Idle => Err(AssemblerError::LabelOutsideFunction(label.to_string()))?
+        };
+        self.relocations.push(Relocation {
+            code_offset: self.program_counter,
+            symbol: label.to_string(),
+            kind: RelocationKind::Local(function.to_string()),
+        });
+        self.emit(encode(0, JmpType::JzPause as u8, Opcode::Jmp as u8));
         Ok(())
     }
 
@@ -452,9 +467,19 @@ mod emit_tests {
         let mut asm = assembler_in_function();
         asm.define_label("target").unwrap();
         asm.emit_jnz_pause("target").unwrap();
-        // [operand: 0x0000][JmpType::Jnz = 0x01][Opcode::Jmp = 0x08]
+        // [operand: 0x0000][JmpType::JnzPause = 0x03][Opcode::Jmp = 0x08]
         assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x03, 0x08]);
     }
+
+    #[test]
+    fn emit_jz_pause_bytes() {
+        let mut asm = assembler_in_function();
+        asm.define_label("target").unwrap();
+        asm.emit_jz_pause("target").unwrap();
+        // [operand: 0x0000][JmpType::JzPause = 0x03][Opcode::Jmp = 0x08]
+        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x04, 0x08]);
+    }
+
 
     #[test]
     fn emit_jmp_resolves_correctly() {
