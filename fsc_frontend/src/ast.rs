@@ -28,6 +28,7 @@ pub enum Instruction {
     PushImm(i32),
     PushResult,
     DelayLoad,
+    DelayNeq0,
     Call(String),
     Jmp(String),
     Jz(String),

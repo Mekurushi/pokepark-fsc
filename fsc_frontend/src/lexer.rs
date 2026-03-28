@@ -30,6 +30,9 @@ pub enum Token {
     #[token("delay_load")]
     DelayLoad,
 
+    #[token("delay_neq0")]
+    DelayNeq0,
+
     #[token("add")]
     Add,
 
