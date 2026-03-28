@@ -61,6 +61,8 @@ pub enum Token {
 
     #[token("jnz")]
     Jnz,
+    #[token("jnz_pause")]
+    JnzPause,
 
     #[token("jz")]
     Jz,

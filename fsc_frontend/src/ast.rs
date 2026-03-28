@@ -35,6 +35,7 @@ pub enum Instruction {
     Call(String),
     Jmp(String),
     Jnz(String),
+    JnzPause(String),
     Jz(String),
     Eq0,
     Eq,
