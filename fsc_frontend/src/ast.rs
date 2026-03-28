@@ -31,6 +31,7 @@ pub enum Instruction {
     DelayNeq0,
     Exit1,
     Exit2,
+    SetArgMode,
     Call(String),
     Jmp(String),
     Jz(String),

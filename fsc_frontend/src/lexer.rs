@@ -39,6 +39,9 @@ pub enum Token {
     #[token("exit_2")]
     Exit2, //unimpl
 
+    #[token("set_arg_mode")]
+    SetArgMode,
+
     #[token("add")]
     Add,
 

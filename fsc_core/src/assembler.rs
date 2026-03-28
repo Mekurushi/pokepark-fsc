@@ -49,6 +49,7 @@ pub enum DelayType {
     Exit2 = 2,
     DelayLoad = 3,
     DelayNeq0 = 4,
+    SetArgMode = 5,
 }
 
 
@@ -134,6 +135,10 @@ impl Assembler {
     }
     pub fn emit_exit_2(&mut self, ) {
         self.emit(encode(0, DelayType::Exit2 as u8, Opcode::Delay as u8));
+    }
+
+    pub fn emit_set_arg_mode(&mut self, ) {
+        self.emit(encode(0, DelayType::SetArgMode as u8, Opcode::Delay as u8));
     }
     pub fn emit_push(&mut self, n: i16) {
         self.emit(encode(n, 0, Opcode::Push as u8));
@@ -361,6 +366,13 @@ mod emit_tests {
         let mut asm = assembler_in_function();
         asm.emit_exit_2();
         assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x02, 0x02]);
+    }
+
+    #[test]
+    fn emit_set_arg_mode() {
+        let mut asm = assembler_in_function();
+        asm.emit_set_arg_mode();
+        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x05, 0x02]);
     }
 
     // --- eq ---
