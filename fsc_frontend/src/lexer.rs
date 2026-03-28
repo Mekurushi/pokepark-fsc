@@ -71,6 +71,9 @@ pub enum Token {
     #[token("jnz_set")]
     JnzSet,
 
+    #[token("jz_set")]
+    JzSet,
+
     #[token("jz")]
     Jz,
 

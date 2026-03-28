@@ -171,6 +171,7 @@ fn parse_instruction(ts: &mut TokenStream) -> ParseResult<Instruction> {
         Some(Token::Jnz) => {ts.advance(); Ok(Instruction::Jnz(ts.expect_ident()?))}
         Some(Token::JnzPause) => {ts.advance(); Ok(Instruction::JnzPause(ts.expect_ident()?))}
         Some(Token::JnzSet) => {ts.advance(); Ok(Instruction::JnzSet(ts.expect_ident()?))}
+        Some(Token::JzSet) => {ts.advance(); Ok(Instruction::JzSet(ts.expect_ident()?))}
         Some(Token::JzPause) => {ts.advance(); Ok(Instruction::JzPause(ts.expect_ident()?))}
         Some(Token::Jz) => {ts.advance(); Ok(Instruction::Jz(ts.expect_ident()?))}
         Some(Token::Eq0) => {ts.advance(); Ok(Instruction::Eq0)}
