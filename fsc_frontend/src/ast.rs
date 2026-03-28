@@ -34,6 +34,7 @@ pub enum Instruction {
     SetArgMode,
     Call(String),
     Jmp(String),
+    Jnz(String),
     Jz(String),
     Eq0,
     Eq,
