@@ -33,6 +33,9 @@ pub enum Token {
     #[token("delay_neq0")]
     DelayNeq0,
 
+    #[token("exit_1")]
+    Exit1, //unimpl
+
     #[token("add")]
     Add,
 

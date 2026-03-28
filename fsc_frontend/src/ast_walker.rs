@@ -55,6 +55,7 @@ impl<'a> AstWalker<'a> {
             ast::Instruction::LStr(s)      => self.core.emit_lstr(s),
             ast::Instruction::DelayLoad     => Ok(self.core.emit_delay_load()),
             ast::Instruction::DelayNeq0     => Ok(self.core.emit_delay_neq0()),
+            ast::Instruction::Exit1     => Ok(self.core.emit_exit_1()),
             ast::Instruction::Call(sym)    => self.core.emit_call(sym),
             ast::Instruction::Jmp(label)   => self.core.emit_jmp(label),
             ast::Instruction::Jz(label)   => self.core.emit_jz(label),

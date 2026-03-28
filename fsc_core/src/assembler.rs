@@ -45,6 +45,7 @@ pub enum JmpType {
 
 #[repr(u8)]
 pub enum DelayType {
+    Exit1 = 1,
     DelayLoad = 3,
     DelayNeq0 = 4,
 }
@@ -126,6 +127,9 @@ impl Assembler {
     }
     pub fn emit_delay_neq0(&mut self, ) {
         self.emit(encode(0, DelayType::DelayNeq0 as u8, Opcode::Delay as u8));
+    }
+    pub fn emit_exit_1(&mut self, ) {
+        self.emit(encode(0, DelayType::Exit1 as u8, Opcode::Delay as u8));
     }
     pub fn emit_push(&mut self, n: i16) {
         self.emit(encode(n, 0, Opcode::Push as u8));
@@ -339,6 +343,13 @@ mod emit_tests {
         let mut asm = assembler_in_function();
         asm.emit_delay_neq0();
         assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x04, 0x02]);
+    }
+
+    #[test]
+    fn emit_exit1() {
+        let mut asm = assembler_in_function();
+        asm.emit_exit_1();
+        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x01, 0x02]);
     }
 
     // --- eq ---

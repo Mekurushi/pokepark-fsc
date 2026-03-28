@@ -176,6 +176,7 @@ fn parse_instruction(ts: &mut TokenStream) -> ParseResult<Instruction> {
         Some(Token::LStr) => { ts.advance(); Ok(Instruction::LStr(ts.expect_string()?)) }
         Some(Token::DelayLoad) => { ts.advance(); Ok(Instruction::DelayLoad) }
         Some(Token::DelayNeq0) => { ts.advance(); Ok(Instruction::DelayNeq0) }
+        Some(Token::Exit1) => { ts.advance(); Ok(Instruction::Exit1) }
         Some(Token::SysCall(argc)) => {
             let argc = *argc;
             ts.advance();
