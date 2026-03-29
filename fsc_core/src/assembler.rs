@@ -43,6 +43,7 @@ pub enum EqOp {
     Neq = 0xc,
     Lt = 0xd,
     Gt = 0xe,
+    Le = 0xf,
 }
 
 #[repr(u16)]
@@ -216,6 +217,10 @@ impl Assembler {
 
     pub fn emit_gt(&mut self) {
         self.emit(encode(EqOp::Gt as i16, 0, Opcode::Eq as u8));
+    }
+
+    pub fn emit_le(&mut self) {
+        self.emit(encode(EqOp::Le as i16, 0, Opcode::Eq as u8));
     }
 
     pub fn emit_add(&mut self) {
@@ -801,6 +806,14 @@ mod emit_tests {
         asm.emit_gt();
         assert_eq!(last_bytes(&asm), [0x00, 0x0e, 0x00, 0x16]);
     }
+
+    #[test]
+    fn emit_le() {
+        let mut asm = assembler_in_function();
+        asm.emit_le();
+        assert_eq!(last_bytes(&asm), [0x00, 0x0f, 0x00, 0x16]);
+    }
+
 
     // --- jmp ---
     #[test]
