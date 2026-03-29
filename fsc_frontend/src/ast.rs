@@ -22,6 +22,7 @@ pub enum Instruction {
     GrowStack(i16),   // grow_stack 0x1
     LoadArg(i16),     // load_arg 0x0
     StoreArg(i16),
+    ArgAddi(i16),
     Add,              // add
     Sub,                // sub
     Push(i16),               // push
