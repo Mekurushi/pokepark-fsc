@@ -52,6 +52,7 @@ pub enum EqOp {
 pub enum FeqOp {
     Feq = 0xb,
     Fneq = 0xc,
+    Flt = 0xd,
 }
 
 
@@ -320,6 +321,10 @@ impl Assembler {
 
     pub fn emit_fneq(&mut self) {
         self.emit(encode(FeqOp::Fneq as i16, 0, Opcode::Feq as u8));
+
+    }
+    pub fn emit_flt(&mut self) {
+        self.emit(encode(FeqOp::Flt as i16, 0, Opcode::Feq as u8));
 
     }
 
@@ -685,6 +690,14 @@ mod emit_tests {
         asm.emit_fneq();
 
         assert_eq!(last_bytes(&asm), [0x00, 0x0c, 0x00, 0x17]);
+    }
+
+    #[test]
+    fn emit_flt() {
+        let mut asm = assembler_in_function();
+        asm.emit_flt();
+
+        assert_eq!(last_bytes(&asm), [0x00, 0x0d, 0x00, 0x17]);
     }
 
 
