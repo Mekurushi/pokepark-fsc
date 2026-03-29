@@ -23,7 +23,7 @@ pub enum Opcode {
     PushResult = 0x12,
     LStr = 0x13,
     Alu = 0x14,
-    Falu = 0x15,
+    FAlu = 0x15,
     Eq = 0x16,
     Feq = 0x17,
     Shift = 0x18,
@@ -479,6 +479,55 @@ impl Assembler {
                 .build(),
         );
     }
+
+    // --- FAlu ---
+
+    pub fn emit_fadd(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::FAlu as u8)
+                .operand(FaluOp::Fadd as i16)
+                .build(),
+        );
+    }
+    pub fn emit_fsub(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::FAlu as u8)
+                .operand(FaluOp::Fsub as i16)
+                .build(),
+        );
+    }
+
+    pub fn emit_fmul(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::FAlu as u8)
+                .operand(FaluOp::Fmul as i16)
+                .build(),
+        );
+    }
+
+    pub fn emit_fdiv(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::FAlu as u8)
+                .operand(FaluOp::Fdiv as i16)
+                .build(),
+        );
+    }
+
+    pub fn emit_feq0(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::FAlu as u8)
+                .operand(FaluOp::Feq0 as i16)
+                .build(),
+        );
+    }
+
+    pub fn emit_fneg(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::FAlu as u8)
+                .operand(FaluOp::Fneg as i16)
+                .build(),
+        );
+    }
     pub fn emit_neq(&mut self) {
         self.emit(encode(EqOp::Neq as i16, 0, Opcode::Eq as u8));
     }
@@ -521,29 +570,6 @@ impl Assembler {
             kind: RelocationKind::Global,
         });
         self.emit(encode(0, 0, Opcode::Lea as u8));
-    }
-
-    pub fn emit_fadd(&mut self) {
-        self.emit(encode(FaluOp::Fadd as i16, 0, Opcode::Falu as u8));
-    }
-    pub fn emit_fsub(&mut self) {
-        self.emit(encode(FaluOp::Fsub as i16, 0, Opcode::Falu as u8));
-    }
-
-    pub fn emit_fmul(&mut self) {
-        self.emit(encode(FaluOp::Fmul as i16, 0, Opcode::Falu as u8));
-    }
-
-    pub fn emit_fdiv(&mut self) {
-        self.emit(encode(FaluOp::Fdiv as i16, 0, Opcode::Falu as u8));
-    }
-
-    pub fn emit_feq0(&mut self) {
-        self.emit(encode(FaluOp::Feq0 as i16, 0, Opcode::Falu as u8));
-    }
-
-    pub fn emit_fneg(&mut self) {
-        self.emit(encode(FaluOp::Fneg as i16, 0, Opcode::Falu as u8));
     }
 
     pub fn emit_feq(&mut self) {
