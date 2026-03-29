@@ -61,6 +61,7 @@ pub enum Instruction {
     JeqImm{ imm: i8, label: String },
     Eq0,
     Eq,
+    Neq,
     LStr(String),
     Retv(i16),        // retv -0x2
     Ret(i16),        // ret -0x2

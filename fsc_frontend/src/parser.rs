@@ -212,6 +212,7 @@ fn parse_instruction(ts: &mut TokenStream) -> ParseResult<Instruction> {
             Ok(Instruction::JeqImm { imm, label })}
         Some(Token::Eq0) => {ts.advance(); Ok(Instruction::Eq0)}
         Some(Token::Eq) => {ts.advance(); Ok(Instruction::Eq)}
+        Some(Token::Neq) => {ts.advance(); Ok(Instruction::Neq)}
         Some(Token::Retv)      => { ts.advance(); Ok(Instruction::Retv(ts.expect_int()?)) }
         Some(Token::Ret)      => { ts.advance(); Ok(Instruction::Ret(ts.expect_int()?)) }
         Some(Token::LStr) => { ts.advance(); Ok(Instruction::LStr(ts.expect_string()?)) }
