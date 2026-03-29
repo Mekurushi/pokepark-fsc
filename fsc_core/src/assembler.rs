@@ -1,6 +1,6 @@
-use crate::binary::symbol_table::BinarySymbolTable;
 use crate::binary::FscriptBinary;
-use crate::encoding::{calculate_call_operand, encode, InsnWord};
+use crate::binary::symbol_table::BinarySymbolTable;
+use crate::encoding::{InsnWord, calculate_call_operand, encode};
 use crate::error::{AssemblerError, AssemblerResult};
 use crate::string_table::StringTable;
 use crate::symbol_table::{Scope, SymbolTable};
@@ -232,6 +232,21 @@ impl Assembler {
                 .build(),
         );
     }
+    pub fn emit_set_arg_mode(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::Ctrl as u8)
+                .subtype(CtrlSubtype::SetArgMode as u8)
+                .build(),
+        );
+    }
+
+    // --- Call (0x3) ---
+
+    pub fn emit_call(&mut self, symbol: &str) -> AssemblerResult<()> {
+        self.push_relocation(symbol, RelocationKind::Global);
+        self.emit(InsnWord::new(Opcode::Call as u8).build());
+        Ok(())
+    }
 
     pub fn emit_grow_stack(&mut self, n: i16) {
         self.emit(encode(n, 0, Opcode::GrowStack as u8));
@@ -253,9 +268,6 @@ impl Assembler {
         self.emit(encode(n, ArgType::ArgSubi as u8, Opcode::ArgAlu as u8));
     }
 
-    pub fn emit_set_arg_mode(&mut self) {
-        self.emit(encode(0, CtrlSubtype::SetArgMode as u8, Opcode::Ctrl as u8));
-    }
     pub fn emit_push(&mut self, n: i16) {
         self.emit(encode(n, 0, Opcode::Push as u8));
     }
@@ -402,15 +414,7 @@ impl Assembler {
         self.emit(encode(0, str_offset as u8, Opcode::LStr as u8));
         Ok(())
     }
-    pub fn emit_call(&mut self, symbol: &str) -> AssemblerResult<()> {
-        self.relocations.push(Relocation {
-            code_offset: self.program_counter,
-            symbol: symbol.to_string(),
-            kind: RelocationKind::Global,
-        });
-        self.emit(encode(0, 0, Opcode::Call as u8));
-        Ok(())
-    }
+
     pub fn emit_jmp(&mut self, label: &str) -> AssemblerResult<()> {
         let function = match self.state {
             EmitState::InFunction(ref function) => function,
@@ -561,7 +565,16 @@ impl Assembler {
         self.program_counter += 4; // TODO: new Instruction Lenght way
     }
 
-    // finalize
+    // --- helpers ---
+    fn push_relocation(&mut self, symbol: &str, kind: RelocationKind) {
+        self.relocations.push(Relocation {
+            code_offset: self.program_counter,
+            symbol: symbol.to_string(),
+            kind,
+        });
+    }
+
+    // --- finalize ---
     pub fn finalize(mut self, script_name: String) -> AssemblerResult<FscriptBinary> {
         self.state = EmitState::Idle;
         self.apply_relocations()?;
@@ -603,6 +616,7 @@ impl Assembler {
 #[cfg(test)]
 mod emit_tests {
     use crate::assembler::Assembler;
+    use crate::binary::FscriptBinary;
 
     // --- helpers ---
     fn assembler_in_function() -> Assembler {
@@ -615,6 +629,166 @@ mod emit_tests {
         let code = &asm.code;
         let idx = code.len() - 4;
         code[idx..idx + 4].try_into().unwrap()
+    }
+
+    fn insn_at(binary: &FscriptBinary, insn_index: usize) -> [u8; 4] {
+        let offset = insn_index * 4;
+        binary.code[offset..offset + 4].try_into().unwrap()
+    }
+    // --- SC ---
+
+    #[test]
+    fn emit_sc2_0x0_0x15() {
+        let mut asm = assembler_in_function();
+        asm.emit_syscall(2, 0x0, 0x15);
+        assert_eq!(last_bytes(&asm), [0x00, 0x15, 0x02, 0x01]);
+    }
+
+    #[test]
+    fn emit_sc3_0x0_0x15() {
+        let mut asm = assembler_in_function();
+        asm.emit_syscall(3, 0x0, 0x15);
+        assert_eq!(last_bytes(&asm), [0x00, 0x15, 0x03, 0x01]);
+    }
+
+    #[test]
+    fn emit_sc2_0x0_0x3() {
+        let mut asm = assembler_in_function();
+        asm.emit_syscall(2, 0x0, 0x3);
+        assert_eq!(last_bytes(&asm), [0x00, 0x3, 0x02, 0x01]);
+    }
+
+    #[test]
+    fn emit_sc1_0x0_0x1() {
+        let mut asm = assembler_in_function();
+        asm.emit_syscall(1, 0x0, 0x1);
+        assert_eq!(last_bytes(&asm), [0x00, 0x1, 0x01, 0x01]);
+    }
+
+    #[test]
+    fn emit_sc1_0x3_0x1() {
+        let mut asm = assembler_in_function();
+        asm.emit_syscall(1, 0x3, 0x1);
+        assert_eq!(last_bytes(&asm), [0x0c, 0x1, 0x01, 0x01]);
+    }
+
+    // --- Ctrl ---
+    #[test]
+    fn emit_delay() {
+        let mut asm = assembler_in_function();
+        asm.emit_delay(5);
+        assert_eq!(last_bytes(&asm), [0x00, 0x05, 0x00, 0x02]);
+    }
+    #[test]
+    fn emit_delay_load() {
+        let mut asm = assembler_in_function();
+        asm.emit_delay_load();
+        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x03, 0x02]);
+    }
+
+    #[test]
+    fn emit_delay_neq0() {
+        let mut asm = assembler_in_function();
+        asm.emit_delay_neq0();
+        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x04, 0x02]);
+    }
+
+    #[test]
+    fn emit_exit1() {
+        let mut asm = assembler_in_function();
+        asm.emit_exit_1();
+        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x01, 0x02]);
+    }
+
+    #[test]
+    fn emit_exit2() {
+        let mut asm = assembler_in_function();
+        asm.emit_exit_2();
+        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x02, 0x02]);
+    }
+
+    #[test]
+    fn emit_set_arg_mode() {
+        let mut asm = assembler_in_function();
+        asm.emit_set_arg_mode();
+        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x05, 0x02]);
+    }
+
+    // --- call ---
+    #[test]
+    fn emit_call_resolves_forward() {
+        let mut asm = Assembler::new();
+        asm.define_function("main", false).unwrap();
+        asm.emit_call("sub").unwrap();
+        asm.emit_ret(0);
+
+        asm.define_function("sub", true).unwrap();
+        asm.emit_ret(0);
+
+        let binary = asm.finalize("test".to_string()).unwrap();
+        assert_eq!(insn_at(&binary, 0).as_slice(), &[0x00, 0x01, 0x00, 0x03]);
+    }
+
+    #[test]
+    fn emit_call_resolves_backward() {
+        let mut asm = Assembler::new();
+        asm.define_function("fun1", false).unwrap();
+        asm.emit_ret(0);
+
+        asm.define_function("fun2", true).unwrap();
+        asm.emit_call("fun1").unwrap();
+        asm.emit_ret(0);
+
+        let binary = asm.finalize("test".to_string()).unwrap();
+        assert_eq!(insn_at(&binary, 1).as_slice(), &[0xff, 0xfe, 0x00, 0x03]);
+    }
+
+    #[test]
+    fn emit_call_undefined_symbol_returns_error() {
+        let mut asm = Assembler::new();
+        asm.define_function("main", false).unwrap();
+        asm.emit_call("nonexistent").unwrap();
+        asm.emit_ret(0);
+
+        assert!(asm.finalize("test".to_string()).is_err());
+    }
+
+    #[test]
+    fn emit_call_placeholder_bytes() {
+        let mut asm = assembler_in_function();
+        asm.emit_call("foo").unwrap();
+        // operand=0 placeholder
+        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x00, 0x03]);
+    }
+
+    #[test]
+    fn emit_call_self_resolves() {
+        let mut asm = Assembler::new();
+        asm.define_function("recursive", false).unwrap();
+        asm.emit_call("recursive").unwrap();
+        asm.emit_ret(0);
+
+        let binary = asm.finalize("test".to_string()).unwrap();
+        assert_eq!(insn_at(&binary, 0).as_slice(), &[0xff, 0xff, 0x00, 0x03]);
+    }
+
+    #[test]
+    fn emit_call_multiple_resolve_independently() {
+        let mut asm = Assembler::new();
+        asm.define_function("main", false).unwrap();
+        asm.emit_call("a").unwrap();
+        asm.emit_call("b").unwrap();
+        asm.emit_ret(0);
+
+        asm.define_function("a", true).unwrap();
+        asm.emit_ret(0);
+
+        asm.define_function("b", true).unwrap();
+        asm.emit_ret(0);
+
+        let binary = asm.finalize("test".to_string()).unwrap();
+        assert_eq!(insn_at(&binary, 0).as_slice(), &[0x00, 0x02, 0x00, 0x03]);
+        assert_eq!(insn_at(&binary, 1).as_slice(), &[0x00, 0x02, 0x00, 0x03]);
     }
 
     // --- alu ---
@@ -816,42 +990,6 @@ mod emit_tests {
         assert_eq!(&asm.code[4..8], &[0x3f, 0x80, 0x80, 0x00]);
     }
 
-    // --- syscalls ---
-    #[test]
-    fn emit_sc2_0x0_0x15() {
-        let mut asm = assembler_in_function();
-        asm.emit_syscall(2, 0x0, 0x15);
-        assert_eq!(last_bytes(&asm), [0x00, 0x15, 0x02, 0x01]);
-    }
-
-    #[test]
-    fn emit_sc3_0x0_0x15() {
-        let mut asm = assembler_in_function();
-        asm.emit_syscall(3, 0x0, 0x15);
-        assert_eq!(last_bytes(&asm), [0x00, 0x15, 0x03, 0x01]);
-    }
-
-    #[test]
-    fn emit_sc2_0x0_0x3() {
-        let mut asm = assembler_in_function();
-        asm.emit_syscall(2, 0x0, 0x3);
-        assert_eq!(last_bytes(&asm), [0x00, 0x3, 0x02, 0x01]);
-    }
-
-    #[test]
-    fn emit_sc1_0x0_0x1() {
-        let mut asm = assembler_in_function();
-        asm.emit_syscall(1, 0x0, 0x1);
-        assert_eq!(last_bytes(&asm), [0x00, 0x1, 0x01, 0x01]);
-    }
-
-    #[test]
-    fn emit_sc1_0x3_0x1() {
-        let mut asm = assembler_in_function();
-        asm.emit_syscall(1, 0x3, 0x1);
-        assert_eq!(last_bytes(&asm), [0x0c, 0x1, 0x01, 0x01]);
-    }
-
     // --- stack ---
     #[test]
     fn emit_grow_stack() {
@@ -895,42 +1033,6 @@ mod emit_tests {
         let mut asm = assembler_in_function();
         asm.emit_arg_subi(1);
         assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x02, 0x0c]);
-    }
-
-    // --- delay_load ---
-    #[test]
-    fn emit_delay_load() {
-        let mut asm = assembler_in_function();
-        asm.emit_delay_load();
-        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x03, 0x02]);
-    }
-
-    #[test]
-    fn emit_delay_neq0() {
-        let mut asm = assembler_in_function();
-        asm.emit_delay_neq0();
-        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x04, 0x02]);
-    }
-
-    #[test]
-    fn emit_exit1() {
-        let mut asm = assembler_in_function();
-        asm.emit_exit_1();
-        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x01, 0x02]);
-    }
-
-    #[test]
-    fn emit_exit2() {
-        let mut asm = assembler_in_function();
-        asm.emit_exit_2();
-        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x02, 0x02]);
-    }
-
-    #[test]
-    fn emit_set_arg_mode() {
-        let mut asm = assembler_in_function();
-        asm.emit_set_arg_mode();
-        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x05, 0x02]);
     }
 
     // --- eq ---
