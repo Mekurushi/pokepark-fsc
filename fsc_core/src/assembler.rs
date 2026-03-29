@@ -11,7 +11,7 @@ pub enum Opcode {
     SC = 0x1,
     Ctrl = 0x2,
     Call = 0x3,
-    Ret = 0x06,
+    Return = 0x06,
     GrowStack = 0x07,
     Jmp = 0x8,
     JeqImm = 0xa,
@@ -112,7 +112,7 @@ pub enum JmpType {
 }
 
 #[repr(u8)]
-pub enum RetOp {
+pub enum ReturnSubtype {
     Ret = 0,
     Retv = 1,
 }
@@ -246,6 +246,27 @@ impl Assembler {
         self.push_relocation(symbol, RelocationKind::Global);
         self.emit(InsnWord::new(Opcode::Call as u8).build());
         Ok(())
+    }
+
+    // --- Return (0x6) ---
+    pub fn emit_ret(&mut self, n: i16) {
+        // TODO: define explicit usage of operand; Ghidra visualizes as neagtive but actual operand is positive
+        let operand = n.unsigned_abs() as i16;
+        self.emit(
+            InsnWord::new(Opcode::Return as u8)
+                .subtype(ReturnSubtype::Ret as u8)
+                .operand(operand)
+                .build(),
+        );
+    }
+    pub fn emit_retv(&mut self, n: i16) {
+        let operand = n.unsigned_abs() as i16;
+        self.emit(
+            InsnWord::new(Opcode::Return as u8)
+                .subtype(ReturnSubtype::Retv as u8)
+                .operand(operand)
+                .build(),
+        );
     }
 
     pub fn emit_grow_stack(&mut self, n: i16) {
@@ -543,23 +564,6 @@ impl Assembler {
         Ok(())
     }
 
-    pub fn emit_ret(&mut self, n: i16) {
-        // Ghidra visualizes as neagtive but actual operand is positive TODO: define
-        // explicit
-        self.emit(encode(
-            n.unsigned_abs() as i16,
-            RetOp::Ret as u8,
-            Opcode::Ret as u8,
-        ));
-    }
-    pub fn emit_retv(&mut self, n: i16) {
-        self.emit(encode(
-            n.unsigned_abs() as i16,
-            RetOp::Retv as u8,
-            Opcode::Ret as u8,
-        ));
-    }
-
     fn emit(&mut self, word: u32) {
         self.code.extend_from_slice(&word.to_be_bytes());
         self.program_counter += 4; // TODO: new Instruction Lenght way
@@ -790,7 +794,35 @@ mod emit_tests {
         assert_eq!(insn_at(&binary, 0).as_slice(), &[0x00, 0x02, 0x00, 0x03]);
         assert_eq!(insn_at(&binary, 1).as_slice(), &[0x00, 0x02, 0x00, 0x03]);
     }
+    // --- Return ---
+    #[test]
+    fn emit_ret_without_stack() {
+        let mut asm = assembler_in_function();
+        asm.emit_ret(0);
 
+        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x00, 0x6]);
+    }
+    #[test]
+    fn emit_retv_without_stack() {
+        let mut asm = assembler_in_function();
+        asm.emit_retv(0);
+
+        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x01, 0x06]);
+    }
+    #[test]
+    fn emit_ret_with_stack() {
+        let mut asm = assembler_in_function();
+        asm.emit_ret(3);
+
+        assert_eq!(last_bytes(&asm), [0x00, 0x03, 0x00, 0x6]);
+    }
+    #[test]
+    fn emit_retv_with_stack() {
+        let mut asm = assembler_in_function();
+        asm.emit_retv(2);
+
+        assert_eq!(last_bytes(&asm), [0x00, 0x02, 0x01, 0x06]);
+    }
     // --- alu ---
 
     #[test]
