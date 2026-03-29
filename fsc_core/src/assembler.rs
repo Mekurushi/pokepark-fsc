@@ -16,7 +16,7 @@ pub enum Opcode {
     Jump = 0x8,
     JeqImm = 0xa,
     LoadArg = 0x0b,
-    ArgAlu = 0x0c,
+    ArgMem = 0x0c,
     ShrinkStack = 0xf,
     Push = 0x10,
     PushImm = 0x11,
@@ -38,6 +38,31 @@ pub enum CtrlSubtype {
     DelayLoad = 3,
     DelayNeq0 = 4,
     SetArgMode = 5,
+}
+
+#[repr(u8)]
+pub enum ReturnSubtype {
+    Ret = 0,
+    Retv = 1,
+}
+
+#[repr(u8)]
+pub enum JumpSubtype {
+    Jmp = 0,
+    Jnz = 1,
+    Jz = 2,
+    JnzPause = 3,
+    JzPause = 4,
+    JnzSet = 5,
+    JzSet = 6,
+    Jeq = 7,
+}
+
+#[repr(u8)]
+pub enum ArgMemSubtype {
+    StoreArg = 0,
+    ArgAddi = 1,
+    ArgSubi = 2,
 }
 
 #[repr(u16)]
@@ -90,31 +115,6 @@ pub enum AluOp {
     Not = 8,
     Eq0 = 9,
     Neg = 10,
-}
-
-#[repr(u8)]
-pub enum ArgType {
-    StoreArg = 0,
-    ArgAddi = 1,
-    ArgSubi = 2,
-}
-
-#[repr(u8)]
-pub enum JumpSubtype {
-    Jmp = 0,
-    Jnz = 1,
-    Jz = 2,
-    JnzPause = 3,
-    JzPause = 4,
-    JnzSet = 5,
-    JzSet = 6,
-    Jeq = 7,
-}
-
-#[repr(u8)]
-pub enum ReturnSubtype {
-    Ret = 0,
-    Retv = 1,
 }
 
 enum RelocationKind {
@@ -332,18 +332,35 @@ impl Assembler {
         );
     }
 
-    pub fn emit_shrink_stack(&mut self, n: i16) {
-        self.emit(encode(n, 0, Opcode::ShrinkStack as u8));
+    // --- ArgMem ---
+    pub fn emit_store_arg(&mut self, operand: i16) {
+        self.emit(
+            InsnWord::new(Opcode::ArgMem as u8)
+                .subtype(ArgMemSubtype::StoreArg as u8)
+                .operand(operand)
+                .build(),
+        );
     }
 
-    pub fn emit_store_arg(&mut self, n: i16) {
-        self.emit(encode(n, ArgType::StoreArg as u8, Opcode::ArgAlu as u8));
+    pub fn emit_arg_addi(&mut self, operand: i16) {
+        self.emit(
+            InsnWord::new(Opcode::ArgMem as u8)
+                .subtype(ArgMemSubtype::ArgAddi as u8)
+                .operand(operand)
+                .build(),
+        );
     }
-    pub fn emit_arg_addi(&mut self, n: i16) {
-        self.emit(encode(n, ArgType::ArgAddi as u8, Opcode::ArgAlu as u8));
+    pub fn emit_arg_subi(&mut self, operand: i16) {
+        self.emit(
+            InsnWord::new(Opcode::ArgMem as u8)
+                .subtype(ArgMemSubtype::ArgSubi as u8)
+                .operand(operand)
+                .build(),
+        );
     }
-    pub fn emit_arg_subi(&mut self, n: i16) {
-        self.emit(encode(n, ArgType::ArgSubi as u8, Opcode::ArgAlu as u8));
+
+    pub fn emit_shrink_stack(&mut self, n: i16) {
+        self.emit(encode(n, 0, Opcode::ShrinkStack as u8));
     }
 
     pub fn emit_push(&mut self, n: i16) {
@@ -1152,6 +1169,28 @@ mod emit_tests {
         assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x00, 0x0b]);
     }
 
+    // --- ArgMem ---
+    #[test]
+    fn emit_store_arg() {
+        let mut asm = assembler_in_function();
+        asm.emit_store_arg(1);
+        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x00, 0x0c]);
+    }
+
+    #[test]
+    fn emit_arg_addi() {
+        let mut asm = assembler_in_function();
+        asm.emit_arg_addi(1);
+        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x01, 0x0c]);
+    }
+
+    #[test]
+    fn emit_arg_subi() {
+        let mut asm = assembler_in_function();
+        asm.emit_arg_subi(1);
+        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x02, 0x0c]);
+    }
+
     // --- alu ---
 
     #[test]
@@ -1366,28 +1405,6 @@ mod emit_tests {
         let mut asm = assembler_in_function();
         asm.emit_push_result();
         assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x00, 0x12]);
-    }
-
-    // --- store_arg ---
-    #[test]
-    fn emit_store_arg() {
-        let mut asm = assembler_in_function();
-        asm.emit_store_arg(1);
-        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x00, 0x0c]);
-    }
-
-    #[test]
-    fn emit_arg_addi() {
-        let mut asm = assembler_in_function();
-        asm.emit_arg_addi(1);
-        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x01, 0x0c]);
-    }
-
-    #[test]
-    fn emit_arg_subi() {
-        let mut asm = assembler_in_function();
-        asm.emit_arg_subi(1);
-        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x02, 0x0c]);
     }
 
     // --- eq ---
