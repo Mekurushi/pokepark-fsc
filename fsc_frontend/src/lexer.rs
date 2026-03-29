@@ -56,9 +56,12 @@ pub enum Token {
 
     #[token("sub")]
     Sub,
-    
+
     #[token("mul")]
     Mul,
+
+    #[token("div")]
+    Div,
 
     #[token("push")]
     Push,

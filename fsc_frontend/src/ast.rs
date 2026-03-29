@@ -28,6 +28,7 @@ pub enum Instruction {
     Add,
     Sub,
     Mul,
+    Div,
     Push(i16),
     PushImm(i32),
     PushResult,
