@@ -66,6 +66,9 @@ pub enum Token {
     #[token("mod")]
     Mod,
 
+    #[token("and")]
+    And,
+
     #[token("push")]
     Push,
 

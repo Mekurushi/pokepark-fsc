@@ -30,6 +30,7 @@ pub enum Instruction {
     Mul,
     Div,
     Mod,
+    And,
     Push(i16),
     PushImm(i32),
     PushResult,
