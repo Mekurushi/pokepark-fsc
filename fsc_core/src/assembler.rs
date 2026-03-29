@@ -13,7 +13,7 @@ pub enum Opcode {
     Call = 0x3,
     Return = 0x06,
     GrowStack = 0x07,
-    Jmp = 0x8,
+    Jump = 0x8,
     JeqImm = 0xa,
     LoadArg = 0x0b,
     ArgAlu = 0x0c,
@@ -100,7 +100,7 @@ pub enum ArgType {
 }
 
 #[repr(u8)]
-pub enum JmpType {
+pub enum JumpSubtype {
     Jmp = 0,
     Jnz = 1,
     Jz = 2,
@@ -278,6 +278,51 @@ impl Assembler {
         );
     }
 
+    // --- Jump (0x8) ---
+
+    pub fn emit_jmp(&mut self, label: &str) -> AssemblerResult<()> {
+        self.emit_jump(JumpSubtype::Jmp, label)
+    }
+    pub fn emit_jnz(&mut self, label: &str) -> AssemblerResult<()> {
+        self.emit_jump(JumpSubtype::Jnz, label)
+    }
+    pub fn emit_jz(&mut self, label: &str) -> AssemblerResult<()> {
+        self.emit_jump(JumpSubtype::Jz, label)
+    }
+
+    pub fn emit_jnz_pause(&mut self, label: &str) -> AssemblerResult<()> {
+        self.emit_jump(JumpSubtype::JnzPause, label)
+    }
+
+    pub fn emit_jz_pause(&mut self, label: &str) -> AssemblerResult<()> {
+        self.emit_jump(JumpSubtype::JzPause, label)
+    }
+
+    pub fn emit_jnz_set(&mut self, label: &str) -> AssemblerResult<()> {
+        self.emit_jump(JumpSubtype::JnzSet, label)
+    }
+
+    pub fn emit_jz_set(&mut self, label: &str) -> AssemblerResult<()> {
+        self.emit_jump(JumpSubtype::JzSet, label)
+    }
+
+    pub fn emit_jeq(&mut self, label: &str) -> AssemblerResult<()> {
+        self.emit_jump(JumpSubtype::Jeq, label)
+    }
+
+    // TODO: integrate jeq_imm cleanly, don't like current impl at all; also get integer handling
+    // straight
+    pub fn emit_jeq_imm(&mut self, imm: i8, label: &str) -> AssemblerResult<()> {
+        let function_name = self.current_function(label)?;
+        self.push_relocation(label, RelocationKind::Local(function_name.to_string()));
+        self.emit(
+            InsnWord::new(Opcode::JeqImm as u8)
+                .subtype(imm as u8)
+                .build(),
+        );
+        Ok(())
+    }
+
     pub fn emit_shrink_stack(&mut self, n: i16) {
         self.emit(encode(n, 0, Opcode::ShrinkStack as u8));
     }
@@ -441,134 +486,6 @@ impl Assembler {
         Ok(())
     }
 
-    pub fn emit_jmp(&mut self, label: &str) -> AssemblerResult<()> {
-        let function = match self.state {
-            EmitState::InFunction(ref function) => function,
-            EmitState::Idle => Err(AssemblerError::LabelOutsideFunction(label.to_string()))?,
-        };
-        self.relocations.push(Relocation {
-            code_offset: self.program_counter,
-            symbol: label.to_string(),
-            kind: RelocationKind::Local(function.to_string()),
-        });
-        self.emit(encode(0, JmpType::Jmp as u8, Opcode::Jmp as u8));
-        Ok(())
-    }
-
-    pub fn emit_jz(&mut self, label: &str) -> AssemblerResult<()> {
-        let function = match self.state {
-            EmitState::InFunction(ref function) => function,
-            EmitState::Idle => Err(AssemblerError::LabelOutsideFunction(label.to_string()))?,
-        };
-        self.relocations.push(Relocation {
-            code_offset: self.program_counter,
-            symbol: label.to_string(),
-            kind: RelocationKind::Local(function.to_string()),
-        });
-        self.emit(encode(0, JmpType::Jz as u8, Opcode::Jmp as u8));
-        Ok(())
-    }
-
-    pub fn emit_jeq(&mut self, label: &str) -> AssemblerResult<()> {
-        let function = match self.state {
-            EmitState::InFunction(ref function) => function,
-            EmitState::Idle => Err(AssemblerError::LabelOutsideFunction(label.to_string()))?,
-        };
-        self.relocations.push(Relocation {
-            code_offset: self.program_counter,
-            symbol: label.to_string(),
-            kind: RelocationKind::Local(function.to_string()),
-        });
-        self.emit(encode(0, JmpType::Jeq as u8, Opcode::Jmp as u8));
-        Ok(())
-    }
-
-    // TODO: integrate jeq_imm cleanly, don't like current impl at all; also get integer handling
-    // straight
-    pub fn emit_jeq_imm(&mut self, imm: i8, label: &str) -> AssemblerResult<()> {
-        let function = match self.state {
-            EmitState::InFunction(ref function) => function,
-            EmitState::Idle => Err(AssemblerError::LabelOutsideFunction(label.to_string()))?,
-        };
-        self.relocations.push(Relocation {
-            code_offset: self.program_counter,
-            symbol: label.to_string(),
-            kind: RelocationKind::Local(function.to_string()),
-        });
-        self.emit(encode(0, imm as u8, Opcode::JeqImm as u8));
-        Ok(())
-    }
-
-    pub fn emit_jnz(&mut self, label: &str) -> AssemblerResult<()> {
-        let function = match self.state {
-            EmitState::InFunction(ref function) => function,
-            EmitState::Idle => Err(AssemblerError::LabelOutsideFunction(label.to_string()))?,
-        };
-        self.relocations.push(Relocation {
-            code_offset: self.program_counter,
-            symbol: label.to_string(),
-            kind: RelocationKind::Local(function.to_string()),
-        });
-        self.emit(encode(0, JmpType::Jnz as u8, Opcode::Jmp as u8));
-        Ok(())
-    }
-
-    pub fn emit_jnz_pause(&mut self, label: &str) -> AssemblerResult<()> {
-        let function = match self.state {
-            EmitState::InFunction(ref function) => function,
-            EmitState::Idle => Err(AssemblerError::LabelOutsideFunction(label.to_string()))?,
-        };
-        self.relocations.push(Relocation {
-            code_offset: self.program_counter,
-            symbol: label.to_string(),
-            kind: RelocationKind::Local(function.to_string()),
-        });
-        self.emit(encode(0, JmpType::JnzPause as u8, Opcode::Jmp as u8));
-        Ok(())
-    }
-
-    pub fn emit_jnz_set(&mut self, label: &str) -> AssemblerResult<()> {
-        let function = match self.state {
-            EmitState::InFunction(ref function) => function,
-            EmitState::Idle => Err(AssemblerError::LabelOutsideFunction(label.to_string()))?,
-        };
-        self.relocations.push(Relocation {
-            code_offset: self.program_counter,
-            symbol: label.to_string(),
-            kind: RelocationKind::Local(function.to_string()),
-        });
-        self.emit(encode(0, JmpType::JnzSet as u8, Opcode::Jmp as u8));
-        Ok(())
-    }
-
-    pub fn emit_jz_set(&mut self, label: &str) -> AssemblerResult<()> {
-        let function = match self.state {
-            EmitState::InFunction(ref function) => function,
-            EmitState::Idle => Err(AssemblerError::LabelOutsideFunction(label.to_string()))?,
-        };
-        self.relocations.push(Relocation {
-            code_offset: self.program_counter,
-            symbol: label.to_string(),
-            kind: RelocationKind::Local(function.to_string()),
-        });
-        self.emit(encode(0, JmpType::JzSet as u8, Opcode::Jmp as u8));
-        Ok(())
-    }
-
-    pub fn emit_jz_pause(&mut self, label: &str) -> AssemblerResult<()> {
-        let function = match self.state {
-            EmitState::InFunction(ref function) => function,
-            EmitState::Idle => Err(AssemblerError::LabelOutsideFunction(label.to_string()))?,
-        };
-        self.relocations.push(Relocation {
-            code_offset: self.program_counter,
-            symbol: label.to_string(),
-            kind: RelocationKind::Local(function.to_string()),
-        });
-        self.emit(encode(0, JmpType::JzPause as u8, Opcode::Jmp as u8));
-        Ok(())
-    }
-
     fn emit(&mut self, word: u32) {
         self.code.extend_from_slice(&word.to_be_bytes());
         self.program_counter += 4; // TODO: new Instruction Lenght way
@@ -583,6 +500,23 @@ impl Assembler {
         });
     }
 
+    fn current_function(&self, label: &str) -> AssemblerResult<&String> {
+        match self.state {
+            EmitState::InFunction(ref function) => Ok(function),
+            EmitState::Idle => Err(AssemblerError::LabelOutsideFunction(label.to_string())),
+        }
+    }
+
+    fn emit_jump(&mut self, subtype: JumpSubtype, label: &str) -> AssemblerResult<()> {
+        let function_name = self.current_function(label)?;
+        self.push_relocation(label, RelocationKind::Local(function_name.to_string()));
+        self.emit(
+            InsnWord::new(Opcode::Jump as u8)
+                .subtype(subtype as u8)
+                .build(),
+        );
+        Ok(())
+    }
     // --- finalize ---
     pub fn finalize(mut self, script_name: String) -> AssemblerResult<FscriptBinary> {
         self.state = EmitState::Idle;
@@ -834,6 +768,366 @@ mod emit_tests {
         let mut asm = assembler_in_function();
         asm.emit_grow_stack(1);
         assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x00, 0x07]);
+    }
+
+    // --- Jump ---
+    #[test]
+    fn emit_jmp_resolves_forward() {
+        let mut asm = Assembler::new();
+        asm.define_function("test", false).unwrap();
+        asm.emit_jmp("end").unwrap();
+        asm.emit_push(1);
+        asm.define_label("end").unwrap();
+        asm.emit_ret(0);
+
+        let binary = asm.finalize("test".to_string()).unwrap();
+        assert_eq!(insn_at(&binary, 0).as_slice(), &[0x00, 0x01, 0x00, 0x08]);
+    }
+    #[test]
+    fn emit_jz_resolves_forward() {
+        let mut asm = Assembler::new();
+        asm.define_function("test", false).unwrap();
+        asm.emit_jz("end").unwrap();
+        asm.emit_push(1);
+        asm.define_label("end").unwrap();
+        asm.emit_ret(0);
+
+        let binary = asm.finalize("test".to_string()).unwrap();
+        assert_eq!(insn_at(&binary, 0).as_slice(), &[0x00, 0x01, 0x02, 0x08]);
+    }
+
+    #[test]
+    fn emit_jnz_resolves_forward() {
+        let mut asm = Assembler::new();
+        asm.define_function("test", false).unwrap();
+        asm.emit_jnz("end").unwrap();
+        asm.emit_push(1);
+        asm.define_label("end").unwrap();
+        asm.emit_ret(0);
+
+        let binary = asm.finalize("test".to_string()).unwrap();
+        assert_eq!(insn_at(&binary, 0).as_slice(), &[0x00, 0x01, 0x01, 0x08]);
+    }
+
+    #[test]
+    fn emit_jnz_pause_resolves_forward() {
+        let mut asm = Assembler::new();
+        asm.define_function("test", false).unwrap();
+        asm.emit_jnz_pause("end").unwrap();
+        asm.emit_push(1);
+        asm.define_label("end").unwrap();
+        asm.emit_ret(0);
+
+        let binary = asm.finalize("test".to_string()).unwrap();
+        assert_eq!(insn_at(&binary, 0).as_slice(), &[0x00, 0x01, 0x03, 0x08]);
+    }
+
+    #[test]
+    fn emit_jz_pause_resolves_forward() {
+        let mut asm = Assembler::new();
+        asm.define_function("test", false).unwrap();
+        asm.emit_jz_pause("end").unwrap();
+        asm.emit_push(1);
+        asm.define_label("end").unwrap();
+        asm.emit_ret(0);
+
+        let binary = asm.finalize("test".to_string()).unwrap();
+        assert_eq!(insn_at(&binary, 0).as_slice(), &[0x00, 0x01, 0x04, 0x08]);
+    }
+
+    #[test]
+    fn emit_jnz_set_resolves_forward() {
+        let mut asm = Assembler::new();
+        asm.define_function("test", false).unwrap();
+        asm.emit_jnz_set("end").unwrap();
+        asm.emit_push(1);
+        asm.define_label("end").unwrap();
+        asm.emit_ret(0);
+
+        let binary = asm.finalize("test".to_string()).unwrap();
+        assert_eq!(insn_at(&binary, 0).as_slice(), &[0x00, 0x01, 0x05, 0x08]);
+    }
+
+    #[test]
+    fn emit_jz_set_resolves_forward() {
+        let mut asm = Assembler::new();
+        asm.define_function("test", false).unwrap();
+        asm.emit_jz_set("end").unwrap();
+        asm.emit_push(1);
+        asm.define_label("end").unwrap();
+        asm.emit_ret(0);
+
+        let binary = asm.finalize("test".to_string()).unwrap();
+        assert_eq!(insn_at(&binary, 0).as_slice(), &[0x00, 0x01, 0x06, 0x08]);
+    }
+
+    #[test]
+    fn emit_jeq_resolves_forward() {
+        let mut asm = Assembler::new();
+        asm.define_function("test", false).unwrap();
+        asm.emit_jeq("end").unwrap();
+        asm.emit_push(1);
+        asm.define_label("end").unwrap();
+        asm.emit_ret(0);
+
+        let binary = asm.finalize("test".to_string()).unwrap();
+        assert_eq!(insn_at(&binary, 0).as_slice(), &[0x00, 0x01, 0x07, 0x08]);
+    }
+
+    #[test]
+    fn emit_jeq_imm_resolves_forward() {
+        let mut asm = Assembler::new();
+        asm.define_function("test", false).unwrap();
+        asm.emit_jeq_imm(0x2, "end").unwrap();
+        asm.emit_push(1);
+        asm.define_label("end").unwrap();
+        asm.emit_ret(0);
+
+        let binary = asm.finalize("test".to_string()).unwrap();
+        assert_eq!(insn_at(&binary, 0).as_slice(), &[0x00, 0x01, 0x02, 0x0a]);
+    }
+
+    #[test]
+    fn emit_jmp_resolves_backward() {
+        let mut asm = Assembler::new();
+        asm.define_function("test", false).unwrap();
+        asm.define_label("loop").unwrap();
+        asm.emit_push(1);
+        asm.emit_jmp("loop").unwrap();
+
+        let binary = asm.finalize("test".to_string()).unwrap();
+        assert_eq!(insn_at(&binary, 1).as_slice(), &[0xff, 0xfe, 0x00, 0x08]);
+    }
+
+    #[test]
+    fn emit_jnz_resolves_backward() {
+        let mut asm = Assembler::new();
+        asm.define_function("test", false).unwrap();
+        asm.define_label("loop").unwrap();
+        asm.emit_push(1);
+        asm.emit_jnz("loop").unwrap();
+
+        let binary = asm.finalize("test".to_string()).unwrap();
+        assert_eq!(insn_at(&binary, 1).as_slice(), &[0xff, 0xfe, 0x01, 0x08]);
+    }
+
+    #[test]
+    fn emit_jz_resolves_backward() {
+        let mut asm = Assembler::new();
+        asm.define_function("test", false).unwrap();
+        asm.define_label("loop").unwrap();
+        asm.emit_push(1);
+        asm.emit_jz("loop").unwrap();
+
+        let binary = asm.finalize("test".to_string()).unwrap();
+        assert_eq!(insn_at(&binary, 1).as_slice(), &[0xff, 0xfe, 0x02, 0x08]);
+    }
+
+    #[test]
+    fn emit_jnz_pause_resolves_backward() {
+        let mut asm = Assembler::new();
+        asm.define_function("test", false).unwrap();
+        asm.define_label("loop").unwrap();
+        asm.emit_push(1);
+        asm.emit_jnz_pause("loop").unwrap();
+
+        let binary = asm.finalize("test".to_string()).unwrap();
+        assert_eq!(insn_at(&binary, 1).as_slice(), &[0xff, 0xfe, 0x03, 0x08]);
+    }
+
+    #[test]
+    fn emit_jz_pause_resolves_backward() {
+        let mut asm = Assembler::new();
+        asm.define_function("test", false).unwrap();
+        asm.define_label("loop").unwrap();
+        asm.emit_push(1);
+        asm.emit_jz_pause("loop").unwrap();
+
+        let binary = asm.finalize("test".to_string()).unwrap();
+        assert_eq!(insn_at(&binary, 1).as_slice(), &[0xff, 0xfe, 0x04, 0x08]);
+    }
+
+    #[test]
+    fn emit_jnz_set_resolves_backward() {
+        let mut asm = Assembler::new();
+        asm.define_function("test", false).unwrap();
+        asm.define_label("loop").unwrap();
+        asm.emit_push(1);
+        asm.emit_jnz_set("loop").unwrap();
+
+        let binary = asm.finalize("test".to_string()).unwrap();
+        assert_eq!(insn_at(&binary, 1).as_slice(), &[0xff, 0xfe, 0x05, 0x08]);
+    }
+
+    #[test]
+    fn emit_jz_set_resolves_backward() {
+        let mut asm = Assembler::new();
+        asm.define_function("test", false).unwrap();
+        asm.define_label("loop").unwrap();
+        asm.emit_push(1);
+        asm.emit_jz_set("loop").unwrap();
+
+        let binary = asm.finalize("test".to_string()).unwrap();
+        assert_eq!(insn_at(&binary, 1).as_slice(), &[0xff, 0xfe, 0x06, 0x08]);
+    }
+
+    #[test]
+    fn emit_jeq_resolves_backward() {
+        let mut asm = Assembler::new();
+        asm.define_function("test", false).unwrap();
+        asm.define_label("loop").unwrap();
+        asm.emit_push(1);
+        asm.emit_jeq("loop").unwrap();
+
+        let binary = asm.finalize("test".to_string()).unwrap();
+        assert_eq!(insn_at(&binary, 1).as_slice(), &[0xff, 0xfe, 0x07, 0x08]);
+    }
+
+    #[test]
+    fn emit_jeq_imm_resolves_backward() {
+        let mut asm = Assembler::new();
+        asm.define_function("test", false).unwrap();
+        asm.define_label("loop").unwrap();
+        asm.emit_push(1);
+        asm.emit_jeq_imm(0x2, "loop").unwrap();
+
+        let binary = asm.finalize("test".to_string()).unwrap();
+        assert_eq!(insn_at(&binary, 1).as_slice(), &[0xff, 0xfe, 0x02, 0x0a]);
+    }
+
+    #[test]
+    fn emit_jmp_outside_function_returns_error() {
+        let mut asm = Assembler::new();
+        assert!(asm.emit_jmp("end").is_err());
+    }
+
+    #[test]
+    fn emit_jnz_outside_function_returns_error() {
+        let mut asm = Assembler::new();
+        assert!(asm.emit_jnz("end").is_err());
+    }
+
+    #[test]
+    fn emit_jz_outside_function_returns_error() {
+        let mut asm = Assembler::new();
+        assert!(asm.emit_jz("end").is_err());
+    }
+
+    #[test]
+    fn emit_jnz_pause_outside_function_returns_error() {
+        let mut asm = Assembler::new();
+        assert!(asm.emit_jnz_pause("end").is_err());
+    }
+
+    #[test]
+    fn emit_jz_pause_outside_function_returns_error() {
+        let mut asm = Assembler::new();
+        assert!(asm.emit_jz_pause("end").is_err());
+    }
+
+    #[test]
+    fn emit_jnz_set_outside_function_returns_error() {
+        let mut asm = Assembler::new();
+        assert!(asm.emit_jnz_set("end").is_err());
+    }
+
+    #[test]
+    fn emit_jz_set_outside_function_returns_error() {
+        let mut asm = Assembler::new();
+        assert!(asm.emit_jz_set("end").is_err());
+    }
+
+    #[test]
+    fn emit_jeq_outside_function_returns_error() {
+        let mut asm = Assembler::new();
+        assert!(asm.emit_jeq("end").is_err());
+    }
+
+    #[test]
+    fn emit_jeq_imm_outside_function_returns_error() {
+        let mut asm = Assembler::new();
+        assert!(asm.emit_jeq_imm(0x2, "end").is_err());
+    }
+
+    #[test]
+    fn emit_jmp_undefined_label_returns_error() {
+        let mut asm = Assembler::new();
+        asm.define_function("test", false).unwrap();
+        asm.emit_jmp("nonexistent").unwrap();
+        asm.emit_ret(0);
+        assert!(asm.finalize("test".to_string()).is_err());
+    }
+
+    #[test]
+    fn emit_jnz_undefined_label_returns_error() {
+        let mut asm = Assembler::new();
+        asm.define_function("test", false).unwrap();
+        asm.emit_jnz("nonexistent").unwrap();
+        asm.emit_ret(0);
+        assert!(asm.finalize("test".to_string()).is_err());
+    }
+
+    #[test]
+    fn emit_jz_undefined_label_returns_error() {
+        let mut asm = Assembler::new();
+        asm.define_function("test", false).unwrap();
+        asm.emit_jz("nonexistent").unwrap();
+        asm.emit_ret(0);
+        assert!(asm.finalize("test".to_string()).is_err());
+    }
+
+    #[test]
+    fn emit_jnz_pause_undefined_label_returns_error() {
+        let mut asm = Assembler::new();
+        asm.define_function("test", false).unwrap();
+        asm.emit_jnz_pause("nonexistent").unwrap();
+        asm.emit_ret(0);
+        assert!(asm.finalize("test".to_string()).is_err());
+    }
+
+    #[test]
+    fn emit_jz_pause_undefined_label_returns_error() {
+        let mut asm = Assembler::new();
+        asm.define_function("test", false).unwrap();
+        asm.emit_jz_pause("nonexistent").unwrap();
+        asm.emit_ret(0);
+        assert!(asm.finalize("test".to_string()).is_err());
+    }
+
+    #[test]
+    fn emit_jnz_set_undefined_label_returns_error() {
+        let mut asm = Assembler::new();
+        asm.define_function("test", false).unwrap();
+        asm.emit_jnz_set("nonexistent").unwrap();
+        asm.emit_ret(0);
+        assert!(asm.finalize("test".to_string()).is_err());
+    }
+
+    #[test]
+    fn emit_jz_set_undefined_label_returns_error() {
+        let mut asm = Assembler::new();
+        asm.define_function("test", false).unwrap();
+        asm.emit_jz_set("nonexistent").unwrap();
+        asm.emit_ret(0);
+        assert!(asm.finalize("test".to_string()).is_err());
+    }
+
+    #[test]
+    fn emit_jeq_undefined_label_returns_error() {
+        let mut asm = Assembler::new();
+        asm.define_function("test", false).unwrap();
+        asm.emit_jeq("nonexistent").unwrap();
+        asm.emit_ret(0);
+        assert!(asm.finalize("test".to_string()).is_err());
+    }
+
+    #[test]
+    fn emit_jeq_imm_undefined_label_returns_error() {
+        let mut asm = Assembler::new();
+        asm.define_function("test", false).unwrap();
+        asm.emit_jeq_imm(0x2, "nonexistent").unwrap();
+        asm.emit_ret(0);
+        assert!(asm.finalize("test".to_string()).is_err());
     }
 
     // --- alu ---
@@ -1172,101 +1466,5 @@ mod emit_tests {
 
         let binary = asm.finalize("test".to_string()).unwrap();
         assert_eq!(&binary.code[0..4], &[0x00, 0x01, 0x00, 0x19]);
-    }
-
-    // --- jmp ---
-    #[test]
-    fn emit_jmp_bytes() {
-        let mut asm = assembler_in_function();
-        asm.define_label("target").unwrap();
-        asm.emit_jmp("target").unwrap();
-        // [operand: 0x0000][JmpType::Jmp = 0x00][Opcode::Jmp = 0x08]
-        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x00, 0x08]);
-    }
-
-    #[test]
-    fn emit_jz_bytes() {
-        let mut asm = assembler_in_function();
-        asm.define_label("target").unwrap();
-        asm.emit_jz("target").unwrap();
-        // [operand: 0x0000][JmpType::Jz = 0x02][Opcode::Jmp = 0x08]
-        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x02, 0x08]);
-    }
-
-    #[test]
-    fn emit_jnz_bytes() {
-        let mut asm = assembler_in_function();
-        asm.define_label("target").unwrap();
-        asm.emit_jnz("target").unwrap();
-        // [operand: 0x0000][JmpType::Jnz = 0x01][Opcode::Jmp = 0x08]
-        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x01, 0x08]);
-    }
-
-    #[test]
-    fn emit_jnz_pause_bytes() {
-        let mut asm = assembler_in_function();
-        asm.define_label("target").unwrap();
-        asm.emit_jnz_pause("target").unwrap();
-        // [operand: 0x0000][JmpType::JnzPause = 0x03][Opcode::Jmp = 0x08]
-        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x03, 0x08]);
-    }
-
-    #[test]
-    fn emit_jnz_set_bytes() {
-        let mut asm = assembler_in_function();
-        asm.define_label("target").unwrap();
-        asm.emit_jnz_set("target").unwrap();
-        // [operand: 0x0000][JmpType::JnzSet = 0x05][Opcode::Jmp = 0x08]
-        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x05, 0x08]);
-    }
-
-    #[test]
-    fn emit_jz_pause_bytes() {
-        let mut asm = assembler_in_function();
-        asm.define_label("target").unwrap();
-        asm.emit_jz_pause("target").unwrap();
-        // [operand: 0x0000][JmpType::JzPause = 0x04][Opcode::Jmp = 0x08]
-        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x04, 0x08]);
-    }
-
-    #[test]
-    fn emit_jz_set_bytes() {
-        let mut asm = assembler_in_function();
-        asm.define_label("target").unwrap();
-        asm.emit_jz_set("target").unwrap();
-        // [operand: 0x0000][JmpType::JzSet = 0x06][Opcode::Jmp = 0x08]
-        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x06, 0x08]);
-    }
-
-    #[test]
-    fn emit_jeq_bytes() {
-        let mut asm = assembler_in_function();
-        asm.define_label("target").unwrap();
-        asm.emit_jeq("target").unwrap();
-        // [operand: 0x0000][JmpType::Jeq = 0x07][Opcode::Jmp = 0x08]
-        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x07, 0x08]);
-    }
-
-    #[test]
-    fn emit_jeq_imm_bytes() {
-        let mut asm = assembler_in_function();
-        asm.define_label("target").unwrap();
-        asm.emit_jeq_imm(0x2, "target").unwrap();
-        // [operand: 0x0000][imm = 0x02][Opcode::JeqImm = 0x0a]
-        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x02, 0x0a]);
-    }
-
-    #[test]
-    fn emit_jmp_resolves_correctly() {
-        let mut asm = Assembler::new();
-        asm.define_function("test", false).unwrap();
-
-        asm.emit_jmp("loop").unwrap(); // offset 0
-        asm.emit_push(1); // offset 4
-        asm.define_label("loop").unwrap(); // offset 8
-
-        let binary = asm.finalize("test".to_string()).unwrap();
-
-        assert_eq!(&binary.code[0..4], &[0x00, 0x01, 0x00, 0x08]);
     }
 }
