@@ -41,6 +41,7 @@ pub enum Instruction {
     Fdiv,
     Feq0,
     Fneg,
+    Feq,
     Push(i16),
     PushImm(i32),
     PushResult,

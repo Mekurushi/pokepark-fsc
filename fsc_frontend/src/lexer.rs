@@ -99,6 +99,9 @@ pub enum Token {
     #[token("fneg")]
     Fneg,
 
+    #[token("feq")]
+    Feq,
+
     #[token("push")]
     Push,
 

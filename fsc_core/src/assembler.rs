@@ -25,6 +25,7 @@ pub enum Opcode {
     Alu = 0x14,
     Falu = 0x15,
     Eq = 0x16,
+    Feq = 0x17,
 }
 
 #[repr(u16)]
@@ -46,6 +47,12 @@ pub enum EqOp {
     Le = 0xf,
     Ge = 0x10,
 }
+
+#[repr(u16)]
+pub enum FeqOp {
+    Feq = 0xb,
+}
+
 
 #[repr(u16)]
 pub enum AluOp {
@@ -302,6 +309,11 @@ impl Assembler {
 
     pub fn emit_fneg(&mut self) {
         self.emit(encode(FaluOp::Fneg as i16, 0, Opcode::Falu as u8));
+
+    }
+
+    pub fn emit_feq(&mut self) {
+        self.emit(encode(FeqOp::Feq as i16, 0, Opcode::Feq as u8));
 
     }
 
@@ -651,6 +663,14 @@ mod emit_tests {
         asm.emit_fneg();
 
         assert_eq!(last_bytes(&asm), [0x00, 0x0a, 0x00, 0x15]);
+    }
+
+    #[test]
+    fn emit_feq() {
+        let mut asm = assembler_in_function();
+        asm.emit_feq();
+
+        assert_eq!(last_bytes(&asm), [0x00, 0x0b, 0x00, 0x17]);
     }
 
 
