@@ -1,6 +1,6 @@
 use crate::binary::symbol_table::BinarySymbolTable;
 use crate::binary::FscriptBinary;
-use crate::encoding::{calculate_call_operand, encode, InsnWord};
+use crate::encoding::{calculate_call_operand, InsnWord};
 use crate::error::{AssemblerError, AssemblerResult};
 use crate::string_table::StringTable;
 use crate::symbol_table::{Scope, SymbolTable};
@@ -323,7 +323,7 @@ impl Assembler {
         Ok(())
     }
 
-    // --- load_arg ---
+    // --- load_arg (0xb) ---
     pub fn emit_load_arg(&mut self, operand: i16) {
         self.emit(
             InsnWord::new(Opcode::LoadArg as u8)
@@ -332,7 +332,7 @@ impl Assembler {
         );
     }
 
-    // --- ArgMem ---
+    // --- ArgMem (0xc) ---
     pub fn emit_store_arg(&mut self, operand: i16) {
         self.emit(
             InsnWord::new(Opcode::ArgMem as u8)
@@ -359,7 +359,7 @@ impl Assembler {
         );
     }
 
-    // --- shrink_stack ---
+    // --- shrink_stack (0xf) ---
 
     pub fn emit_shrink_stack(&mut self, operand: i16) {
         self.emit(
@@ -369,23 +369,23 @@ impl Assembler {
         );
     }
 
-    // --- push ---
+    // --- push (0x10) ---
 
     pub fn emit_push(&mut self, operand: i16) {
         self.emit(InsnWord::new(Opcode::Push as u8).operand(operand).build());
     }
 
-    // --- push_imm ---
+    // --- push_imm (0x11) ---
     pub fn emit_push_imm(&mut self, operand: u32) {
         self.emit(InsnWord::new(Opcode::PushImm as u8).build());
         self.emit(operand);
     }
-    // --- push_result ---
+    // --- push_result (0x12) ---
     pub fn emit_push_result(&mut self) {
         self.emit(InsnWord::new(Opcode::PushResult as u8).build());
     }
 
-    // --- lstr ---
+    // --- lstr (0x13) ---
     pub fn emit_lstr(&mut self, s: &str) -> AssemblerResult<()> {
         let str_offset = self.string_table.intern(s)?;
         self.emit(InsnWord::new(Opcode::LStr as u8).imm(str_offset).build());
@@ -393,7 +393,7 @@ impl Assembler {
         Ok(())
     }
 
-    // --- alu ---
+    // --- alu (0x14) ---
 
     pub fn emit_add(&mut self) {
         self.emit(
@@ -480,7 +480,7 @@ impl Assembler {
         );
     }
 
-    // --- FAlu ---
+    // --- FAlu (0x15) ---
 
     pub fn emit_fadd(&mut self) {
         self.emit(
@@ -529,7 +529,7 @@ impl Assembler {
         );
     }
 
-    // --- eq ---
+    // --- Cmp (0x16) ---
     pub fn emit_eq(&mut self) {
         self.emit(
             InsnWord::new(Opcode::Cmp as u8)
@@ -577,7 +577,7 @@ impl Assembler {
         );
     }
 
-    // --- FCmp ---
+    // --- FCmp (0x17) ---
     pub fn emit_feq(&mut self) {
         self.emit(
             InsnWord::new(Opcode::FCmp as u8)
@@ -624,7 +624,7 @@ impl Assembler {
         );
     }
 
-    // --- shift ---
+    // --- shift (0x18) ---
 
     pub fn emit_sl(&mut self) {
         self.emit(
@@ -650,21 +650,24 @@ impl Assembler {
         );
     }
 
+    // --- lea (0x19) ---
+
     pub fn emit_lea(&mut self, symbol: &str) {
         self.relocations.push(Relocation {
             code_offset: self.program_counter,
             symbol: symbol.to_string(),
             kind: RelocationKind::Global,
         });
-        self.emit(encode(0, 0, Opcode::Lea as u8));
+        self.emit(InsnWord::new(Opcode::Lea as u8).build());
     }
+
+    // --- helpers ---
 
     fn emit(&mut self, word: u32) {
         self.code.extend_from_slice(&word.to_be_bytes());
         self.program_counter += 4; // TODO: new Instruction Lenght way
     }
 
-    // --- helpers ---
     fn push_relocation(&mut self, symbol: &str, kind: RelocationKind) {
         self.relocations.push(Relocation {
             code_offset: self.program_counter,
