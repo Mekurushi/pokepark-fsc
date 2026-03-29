@@ -9,7 +9,7 @@ use crate::symbol_table::{Scope, SymbolTable};
 #[repr(u8)]
 pub enum Opcode {
     SC = 0x1,
-    Delay = 0x2,
+    Ctrl = 0x2,
     Call = 0x3,
     Ret = 0x06,
     GrowStack = 0x07,
@@ -28,6 +28,16 @@ pub enum Opcode {
     Feq = 0x17,
     Shift = 0x18,
     Lea = 0x19,
+}
+
+#[repr(u8)]
+pub enum CtrlSubtype {
+    Delay = 0,
+    Exit1 = 1,
+    Exit2 = 2,
+    DelayLoad = 3,
+    DelayNeq0 = 4,
+    SetArgMode = 5,
 }
 
 #[repr(u16)]
@@ -102,16 +112,6 @@ pub enum JmpType {
 }
 
 #[repr(u8)]
-pub enum DelayType {
-    Delay = 0,
-    Exit1 = 1,
-    Exit2 = 2,
-    DelayLoad = 3,
-    DelayNeq0 = 4,
-    SetArgMode = 5,
-}
-
-#[repr(u8)]
 pub enum RetOp {
     Ret = 0,
     Retv = 1,
@@ -180,6 +180,8 @@ impl Assembler {
     }
 
     // instruction emission
+
+    // --- SC (0x1) ---
     pub fn emit_syscall(&mut self, subtype: u8, page: u8, func: u16) {
         self.emit(
             InsnWord::new(Opcode::SC as u8)
@@ -190,11 +192,43 @@ impl Assembler {
         );
     }
 
+    // --- Ctrl (0x2) ---
+
     pub fn emit_delay(&mut self, operand: i16) {
         self.emit(
-            InsnWord::new(Opcode::Delay as u8)
-                .subtype(DelayType::Delay as u8)
+            InsnWord::new(Opcode::Ctrl as u8)
+                .subtype(CtrlSubtype::Delay as u8)
                 .operand(operand)
+                .build(),
+        );
+    }
+
+    pub fn emit_exit_1(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::Ctrl as u8)
+                .subtype(CtrlSubtype::Exit1 as u8)
+                .build(),
+        );
+    }
+    pub fn emit_exit_2(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::Ctrl as u8)
+                .subtype(CtrlSubtype::Exit2 as u8)
+                .build(),
+        );
+    }
+
+    pub fn emit_delay_load(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::Ctrl as u8)
+                .subtype(CtrlSubtype::DelayLoad as u8)
+                .build(),
+        );
+    }
+    pub fn emit_delay_neq0(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::Ctrl as u8)
+                .subtype(CtrlSubtype::DelayNeq0 as u8)
                 .build(),
         );
     }
@@ -218,21 +252,9 @@ impl Assembler {
     pub fn emit_arg_subi(&mut self, n: i16) {
         self.emit(encode(n, ArgType::ArgSubi as u8, Opcode::ArgAlu as u8));
     }
-    pub fn emit_delay_load(&mut self) {
-        self.emit(encode(0, DelayType::DelayLoad as u8, Opcode::Delay as u8));
-    }
-    pub fn emit_delay_neq0(&mut self) {
-        self.emit(encode(0, DelayType::DelayNeq0 as u8, Opcode::Delay as u8));
-    }
-    pub fn emit_exit_1(&mut self) {
-        self.emit(encode(0, DelayType::Exit1 as u8, Opcode::Delay as u8));
-    }
-    pub fn emit_exit_2(&mut self) {
-        self.emit(encode(0, DelayType::Exit2 as u8, Opcode::Delay as u8));
-    }
 
     pub fn emit_set_arg_mode(&mut self) {
-        self.emit(encode(0, DelayType::SetArgMode as u8, Opcode::Delay as u8));
+        self.emit(encode(0, CtrlSubtype::SetArgMode as u8, Opcode::Ctrl as u8));
     }
     pub fn emit_push(&mut self, n: i16) {
         self.emit(encode(n, 0, Opcode::Push as u8));
