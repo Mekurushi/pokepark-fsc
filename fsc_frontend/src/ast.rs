@@ -48,7 +48,7 @@ pub enum Instruction {
     Fle,
     Fge,
     Push(i16),
-    PushImm(i32),
+    PushImm(u32),
     PushResult,
     Delay(i16),
     DelayLoad,

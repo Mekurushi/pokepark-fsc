@@ -367,7 +367,7 @@ fn parse_instruction(ts: &mut TokenStream) -> ParseResult<Instruction> {
         }
         Some(Token::PushImm) => {
             ts.advance();
-            Ok(Instruction::PushImm(ts.expect_int32()?))
+            Ok(Instruction::PushImm(ts.expect_int32()? as u32))
         }
         Some(Token::PushResult) => {
             ts.advance();
