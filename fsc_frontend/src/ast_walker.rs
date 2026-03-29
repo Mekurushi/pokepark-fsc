@@ -74,6 +74,7 @@ impl<'a> AstWalker<'a> {
             ast::Instruction::Feq => Ok(self.core.emit_feq()),
             ast::Instruction::Fneq => Ok(self.core.emit_fneq()),
             ast::Instruction::Flt => Ok(self.core.emit_flt()),
+            ast::Instruction::Fgt => Ok(self.core.emit_fgt()),
             ast::Instruction::LStr(s) => self.core.emit_lstr(s),
             ast::Instruction::DelayLoad => Ok(self.core.emit_delay_load()),
             ast::Instruction::DelayNeq0 => Ok(self.core.emit_delay_neq0()),
