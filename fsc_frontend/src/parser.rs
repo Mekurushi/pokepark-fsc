@@ -500,7 +500,7 @@ fn parse_instruction(ts: &mut TokenStream) -> ParseResult<Instruction> {
             ts.advance();
             let page = ts.expect_int()? as u8;
             ts.expect_colon()?;
-            let func = ts.expect_int()? as u8;
+            let func = ts.expect_int()? as u16;
             Ok(Instruction::SysCall { argc, page, func })
         }
         other => {
