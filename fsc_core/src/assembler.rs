@@ -1,6 +1,6 @@
-use crate::binary::FscriptBinary;
 use crate::binary::symbol_table::BinarySymbolTable;
-use crate::encoding::{InsnWord, calculate_call_operand, encode};
+use crate::binary::FscriptBinary;
+use crate::encoding::{calculate_call_operand, encode, InsnWord};
 use crate::error::{AssemblerError, AssemblerResult};
 use crate::string_table::StringTable;
 use crate::symbol_table::{Scope, SymbolTable};
@@ -380,8 +380,9 @@ impl Assembler {
         self.emit(InsnWord::new(Opcode::PushImm as u8).build());
         self.emit(operand);
     }
+    // --- push_result ---
     pub fn emit_push_result(&mut self) {
-        self.emit(encode(0, 0, Opcode::PushResult as u8));
+        self.emit(InsnWord::new(Opcode::PushResult as u8).build());
     }
     pub fn emit_eq0(&mut self) {
         self.emit(encode(AluOp::Eq0 as i16, 0, Opcode::Alu as u8));
@@ -1246,6 +1247,14 @@ mod emit_tests {
         assert_eq!(&asm.code[4..8], &[0x3f, 0x80, 0x80, 0x00]);
     }
 
+    // --- push_result ---
+    #[test]
+    fn emit_push_result() {
+        let mut asm = assembler_in_function();
+        asm.emit_push_result();
+        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x00, 0x12]);
+    }
+
     // --- alu ---
 
     #[test]
@@ -1421,14 +1430,6 @@ mod emit_tests {
         asm.emit_fge();
 
         assert_eq!(last_bytes(&asm), [0x00, 0x10, 0x00, 0x17]);
-    }
-
-    // --- push_result ---
-    #[test]
-    fn emit_push_result() {
-        let mut asm = assembler_in_function();
-        asm.emit_push_result();
-        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x00, 0x12]);
     }
 
     // --- eq ---
