@@ -624,16 +624,30 @@ impl Assembler {
         );
     }
 
+    // --- shift ---
+
     pub fn emit_sl(&mut self) {
-        self.emit(encode(ShiftOp::Sl as i16, 0, Opcode::Shift as u8));
+        self.emit(
+            InsnWord::new(Opcode::Shift as u8)
+                .operand(ShiftOp::Sl as i16)
+                .build(),
+        );
     }
 
     pub fn emit_srm(&mut self) {
-        self.emit(encode(ShiftOp::Srm as i16, 0, Opcode::Shift as u8));
+        self.emit(
+            InsnWord::new(Opcode::Shift as u8)
+                .operand(ShiftOp::Srm as i16)
+                .build(),
+        );
     }
 
     pub fn emit_sr(&mut self) {
-        self.emit(encode(ShiftOp::Sr as i16, 0, Opcode::Shift as u8));
+        self.emit(
+            InsnWord::new(Opcode::Shift as u8)
+                .operand(ShiftOp::Sr as i16)
+                .build(),
+        );
     }
 
     pub fn emit_lea(&mut self, symbol: &str) {
