@@ -369,8 +369,10 @@ impl Assembler {
         );
     }
 
-    pub fn emit_push(&mut self, n: i16) {
-        self.emit(encode(n, 0, Opcode::Push as u8));
+    // --- push ---
+
+    pub fn emit_push(&mut self, operand: i16) {
+        self.emit(InsnWord::new(Opcode::Push as u8).operand(operand).build());
     }
     pub fn emit_push_imm(&mut self, n: i32) {
         self.emit(encode(0, 0, Opcode::PushImm as u8));
@@ -1206,6 +1208,32 @@ mod emit_tests {
         assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x00, 0x0f]);
     }
 
+    // --- push ---
+
+    #[test]
+    fn emit_push_1() {
+        let mut asm = assembler_in_function();
+        asm.emit_push(1);
+
+        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x00, 0x10]);
+    }
+
+    #[test]
+    fn emit_push_negative1() {
+        let mut asm = assembler_in_function();
+        asm.emit_push(-1);
+
+        assert_eq!(last_bytes(&asm), [0xff, 0xff, 0x00, 0x10]);
+    }
+
+    #[test]
+    fn emit_push_100() {
+        let mut asm = assembler_in_function();
+        asm.emit_push(100);
+
+        assert_eq!(last_bytes(&asm), [0x00, 0x64, 0x00, 0x10]);
+    }
+
     // --- alu ---
 
     #[test]
@@ -1381,16 +1409,6 @@ mod emit_tests {
         asm.emit_fge();
 
         assert_eq!(last_bytes(&asm), [0x00, 0x10, 0x00, 0x17]);
-    }
-
-    // --- push ---
-
-    #[test]
-    fn emit_push_1_bytes() {
-        let mut asm = assembler_in_function();
-        asm.emit_push(1);
-
-        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x00, 0x10]);
     }
 
     // --- push_imm ---
