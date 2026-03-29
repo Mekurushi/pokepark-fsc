@@ -392,15 +392,98 @@ impl Assembler {
 
         Ok(())
     }
+
+    // --- alu ---
+
+    pub fn emit_add(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::Alu as u8)
+                .operand(AluOp::Add as i16)
+                .build(),
+        );
+    }
+    pub fn emit_sub(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::Alu as u8)
+                .operand(AluOp::Sub as i16)
+                .build(),
+        );
+    }
+    pub fn emit_mul(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::Alu as u8)
+                .operand(AluOp::Mul as i16)
+                .build(),
+        );
+    }
+
+    pub fn emit_div(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::Alu as u8)
+                .operand(AluOp::Div as i16)
+                .build(),
+        );
+    }
+
+    pub fn emit_mod(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::Alu as u8)
+                .operand(AluOp::Mod as i16)
+                .build(),
+        );
+    }
+
+    pub fn emit_and(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::Alu as u8)
+                .operand(AluOp::And as i16)
+                .build(),
+        );
+    }
+
+    pub fn emit_or(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::Alu as u8)
+                .operand(AluOp::Or as i16)
+                .build(),
+        );
+    }
+
+    pub fn emit_xor(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::Alu as u8)
+                .operand(AluOp::Xor as i16)
+                .build(),
+        );
+    }
+
+    pub fn emit_not(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::Alu as u8)
+                .operand(AluOp::Not as i16)
+                .build(),
+        );
+    }
+
     pub fn emit_eq0(&mut self) {
-        self.emit(encode(AluOp::Eq0 as i16, 0, Opcode::Alu as u8));
+        self.emit(
+            InsnWord::new(Opcode::Alu as u8)
+                .operand(AluOp::Eq0 as i16)
+                .build(),
+        );
+    }
+    pub fn emit_neg(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::Alu as u8)
+                .operand(AluOp::Neg as i16)
+                .build(),
+        );
+    }
+    pub fn emit_neq(&mut self) {
+        self.emit(encode(EqOp::Neq as i16, 0, Opcode::Eq as u8));
     }
     pub fn emit_eq(&mut self) {
         self.emit(encode(EqOp::Eq as i16, 0, Opcode::Eq as u8));
-    }
-
-    pub fn emit_neq(&mut self) {
-        self.emit(encode(EqOp::Neq as i16, 0, Opcode::Eq as u8));
     }
 
     pub fn emit_lt(&mut self) {
@@ -438,44 +521,6 @@ impl Assembler {
             kind: RelocationKind::Global,
         });
         self.emit(encode(0, 0, Opcode::Lea as u8));
-    }
-
-    pub fn emit_add(&mut self) {
-        self.emit(encode(AluOp::Add as i16, 0, Opcode::Alu as u8));
-    }
-    pub fn emit_sub(&mut self) {
-        self.emit(encode(AluOp::Sub as i16, 0, Opcode::Alu as u8));
-    }
-    pub fn emit_mul(&mut self) {
-        self.emit(encode(AluOp::Mul as i16, 0, Opcode::Alu as u8));
-    }
-
-    pub fn emit_div(&mut self) {
-        self.emit(encode(AluOp::Div as i16, 0, Opcode::Alu as u8));
-    }
-
-    pub fn emit_mod(&mut self) {
-        self.emit(encode(AluOp::Mod as i16, 0, Opcode::Alu as u8));
-    }
-
-    pub fn emit_and(&mut self) {
-        self.emit(encode(AluOp::And as i16, 0, Opcode::Alu as u8));
-    }
-
-    pub fn emit_or(&mut self) {
-        self.emit(encode(AluOp::Or as i16, 0, Opcode::Alu as u8));
-    }
-
-    pub fn emit_xor(&mut self) {
-        self.emit(encode(AluOp::Xor as i16, 0, Opcode::Alu as u8));
-    }
-
-    pub fn emit_not(&mut self) {
-        self.emit(encode(AluOp::Not as i16, 0, Opcode::Alu as u8));
-    }
-
-    pub fn emit_neg(&mut self) {
-        self.emit(encode(AluOp::Neg as i16, 0, Opcode::Alu as u8));
     }
 
     pub fn emit_fadd(&mut self) {
@@ -1367,6 +1412,13 @@ mod emit_tests {
     }
 
     #[test]
+    fn emit_eq0() {
+        let mut asm = assembler_in_function();
+        asm.emit_eq0();
+        assert_eq!(last_bytes(&asm), [0x00, 0x09, 0x00, 0x14]);
+    }
+
+    #[test]
     fn emit_neg() {
         let mut asm = assembler_in_function();
         asm.emit_neg();
@@ -1472,12 +1524,6 @@ mod emit_tests {
     }
 
     // --- eq ---
-    #[test]
-    fn emit_eq0() {
-        let mut asm = assembler_in_function();
-        asm.emit_eq0();
-        assert_eq!(last_bytes(&asm), [0x00, 0x09, 0x00, 0x14]);
-    }
 
     #[test]
     fn emit_eq() {
