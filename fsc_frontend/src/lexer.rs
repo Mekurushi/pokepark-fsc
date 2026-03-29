@@ -78,6 +78,10 @@ pub enum Token {
     #[token("not")]
     Not,
 
+    #[token("neg")]
+    Neg,
+
+
     #[token("push")]
     Push,
 

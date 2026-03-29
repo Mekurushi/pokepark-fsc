@@ -43,7 +43,8 @@ pub enum AluOp {
     Or = 6,
     Xor = 7,
     Not = 8,
-    Eq0 = 9
+    Eq0 = 9,
+    Neg = 10
 }
 
 #[repr(u8)]
@@ -231,6 +232,11 @@ impl Assembler {
 
     pub fn emit_not(&mut self) {
         self.emit(encode(AluOp::Not as i16, 0, Opcode::Alu as u8));
+
+    }
+
+    pub fn emit_neg(&mut self) {
+        self.emit(encode(AluOp::Neg as i16, 0, Opcode::Alu as u8));
 
     }
 
@@ -523,6 +529,14 @@ mod emit_tests {
         asm.emit_not();
 
         assert_eq!(last_bytes(&asm), [0x00, 0x08, 0x00, 0x14]);
+    }
+
+    #[test]
+    fn emit_neg() {
+        let mut asm = assembler_in_function();
+        asm.emit_neg();
+
+        assert_eq!(last_bytes(&asm), [0x00, 0x0a, 0x00, 0x14]);
     }
 
 
