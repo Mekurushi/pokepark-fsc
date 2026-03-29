@@ -46,6 +46,7 @@ pub enum Instruction {
     Flt,
     Fgt,
     Fle,
+    Fge,
     Push(i16),
     PushImm(i32),
     PushResult,

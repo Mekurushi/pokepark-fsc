@@ -357,6 +357,10 @@ fn parse_instruction(ts: &mut TokenStream) -> ParseResult<Instruction> {
             ts.advance();
             Ok(Instruction::Fle)
         }
+        Some(Token::Fge) => {
+            ts.advance();
+            Ok(Instruction::Fge)
+        }
         Some(Token::Push) => {
             ts.advance();
             Ok(Instruction::Push(ts.expect_int()?))
