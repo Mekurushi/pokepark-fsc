@@ -111,6 +111,9 @@ pub enum Token {
     #[token("fgt")]
     Fgt,
 
+    #[token("fle")]
+    Fle,
+
     #[token("push")]
     Push,
 

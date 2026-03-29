@@ -54,6 +54,7 @@ pub enum FeqOp {
     Fneq = 0xc,
     Flt = 0xd,
     Fgt = 0xe,
+    Fle = 0xf,
 }
 
 #[repr(u16)]
@@ -313,7 +314,9 @@ impl Assembler {
     pub fn emit_fgt(&mut self) {
         self.emit(encode(FeqOp::Fgt as i16, 0, Opcode::Feq as u8));
     }
-
+    pub fn emit_fle(&mut self) {
+        self.emit(encode(FeqOp::Fle as i16, 0, Opcode::Feq as u8));
+    }
 
     pub fn emit_lstr(&mut self, s: &str) -> AssemblerResult<()> {
         let str_offset = self.string_table.intern(s)?;
@@ -694,6 +697,14 @@ mod emit_tests {
         asm.emit_fgt();
 
         assert_eq!(last_bytes(&asm), [0x00, 0x0e, 0x00, 0x17]);
+    }
+
+    #[test]
+    fn emit_fle() {
+        let mut asm = assembler_in_function();
+        asm.emit_fle();
+
+        assert_eq!(last_bytes(&asm), [0x00, 0x0f, 0x00, 0x17]);
     }
 
     // --- push ---
