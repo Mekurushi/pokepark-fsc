@@ -25,7 +25,7 @@ pub enum Opcode {
     Alu = 0x14,
     FAlu = 0x15,
     Cmp = 0x16,
-    Feq = 0x17,
+    FCmp = 0x17,
     Shift = 0x18,
     Lea = 0x19,
 }
@@ -93,7 +93,7 @@ pub enum CmpOp {
 }
 
 #[repr(u16)]
-pub enum FeqOp {
+pub enum FCmpOp {
     Feq = 0xb,
     Fneq = 0xc,
     Flt = 0xd,
@@ -577,6 +577,53 @@ impl Assembler {
         );
     }
 
+    // --- FCmp ---
+    pub fn emit_feq(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::FCmp as u8)
+                .operand(FCmpOp::Feq as i16)
+                .build(),
+        );
+    }
+
+    pub fn emit_fneq(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::FCmp as u8)
+                .operand(FCmpOp::Fneq as i16)
+                .build(),
+        );
+    }
+    pub fn emit_flt(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::FCmp as u8)
+                .operand(FCmpOp::Flt as i16)
+                .build(),
+        );
+    }
+
+    pub fn emit_fgt(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::FCmp as u8)
+                .operand(FCmpOp::Fgt as i16)
+                .build(),
+        );
+    }
+    pub fn emit_fle(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::FCmp as u8)
+                .operand(FCmpOp::Fle as i16)
+                .build(),
+        );
+    }
+
+    pub fn emit_fge(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::FCmp as u8)
+                .operand(FCmpOp::Fge as i16)
+                .build(),
+        );
+    }
+
     pub fn emit_sl(&mut self) {
         self.emit(encode(ShiftOp::Sl as i16, 0, Opcode::Shift as u8));
     }
@@ -596,28 +643,6 @@ impl Assembler {
             kind: RelocationKind::Global,
         });
         self.emit(encode(0, 0, Opcode::Lea as u8));
-    }
-
-    pub fn emit_feq(&mut self) {
-        self.emit(encode(FeqOp::Feq as i16, 0, Opcode::Feq as u8));
-    }
-
-    pub fn emit_fneq(&mut self) {
-        self.emit(encode(FeqOp::Fneq as i16, 0, Opcode::Feq as u8));
-    }
-    pub fn emit_flt(&mut self) {
-        self.emit(encode(FeqOp::Flt as i16, 0, Opcode::Feq as u8));
-    }
-
-    pub fn emit_fgt(&mut self) {
-        self.emit(encode(FeqOp::Fgt as i16, 0, Opcode::Feq as u8));
-    }
-    pub fn emit_fle(&mut self) {
-        self.emit(encode(FeqOp::Fle as i16, 0, Opcode::Feq as u8));
-    }
-
-    pub fn emit_fge(&mut self) {
-        self.emit(encode(FeqOp::Fge as i16, 0, Opcode::Feq as u8));
     }
 
     fn emit(&mut self, word: u32) {
@@ -1527,6 +1552,52 @@ mod emit_tests {
         assert_eq!(last_bytes(&asm), [0x00, 0x0a, 0x00, 0x15]);
     }
 
+    // --- Compare ---
+
+    #[test]
+    fn emit_eq() {
+        let mut asm = assembler_in_function();
+        asm.emit_eq();
+        assert_eq!(last_bytes(&asm), [0x00, 0x0b, 0x00, 0x16]);
+    }
+
+    #[test]
+    fn emit_neq() {
+        let mut asm = assembler_in_function();
+        asm.emit_neq();
+        assert_eq!(last_bytes(&asm), [0x00, 0x0c, 0x00, 0x16]);
+    }
+
+    #[test]
+    fn emit_lt() {
+        let mut asm = assembler_in_function();
+        asm.emit_lt();
+        assert_eq!(last_bytes(&asm), [0x00, 0x0d, 0x00, 0x16]);
+    }
+
+    #[test]
+    fn emit_gt() {
+        let mut asm = assembler_in_function();
+        asm.emit_gt();
+        assert_eq!(last_bytes(&asm), [0x00, 0x0e, 0x00, 0x16]);
+    }
+
+    #[test]
+    fn emit_le() {
+        let mut asm = assembler_in_function();
+        asm.emit_le();
+        assert_eq!(last_bytes(&asm), [0x00, 0x0f, 0x00, 0x16]);
+    }
+
+    #[test]
+    fn emit_ge() {
+        let mut asm = assembler_in_function();
+        asm.emit_ge();
+        assert_eq!(last_bytes(&asm), [0x00, 0x10, 0x00, 0x16]);
+    }
+
+    // --- FCompare ---
+
     #[test]
     fn emit_feq() {
         let mut asm = assembler_in_function();
@@ -1573,50 +1644,6 @@ mod emit_tests {
         asm.emit_fge();
 
         assert_eq!(last_bytes(&asm), [0x00, 0x10, 0x00, 0x17]);
-    }
-
-    // --- eq ---
-
-    #[test]
-    fn emit_eq() {
-        let mut asm = assembler_in_function();
-        asm.emit_eq();
-        assert_eq!(last_bytes(&asm), [0x00, 0x0b, 0x00, 0x16]);
-    }
-
-    #[test]
-    fn emit_neq() {
-        let mut asm = assembler_in_function();
-        asm.emit_neq();
-        assert_eq!(last_bytes(&asm), [0x00, 0x0c, 0x00, 0x16]);
-    }
-
-    #[test]
-    fn emit_lt() {
-        let mut asm = assembler_in_function();
-        asm.emit_lt();
-        assert_eq!(last_bytes(&asm), [0x00, 0x0d, 0x00, 0x16]);
-    }
-
-    #[test]
-    fn emit_gt() {
-        let mut asm = assembler_in_function();
-        asm.emit_gt();
-        assert_eq!(last_bytes(&asm), [0x00, 0x0e, 0x00, 0x16]);
-    }
-
-    #[test]
-    fn emit_le() {
-        let mut asm = assembler_in_function();
-        asm.emit_le();
-        assert_eq!(last_bytes(&asm), [0x00, 0x0f, 0x00, 0x16]);
-    }
-
-    #[test]
-    fn emit_ge() {
-        let mut asm = assembler_in_function();
-        asm.emit_ge();
-        assert_eq!(last_bytes(&asm), [0x00, 0x10, 0x00, 0x16]);
     }
 
     // --- Shift ---
