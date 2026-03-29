@@ -31,7 +31,7 @@ pub fn encode_b40(name: &str) -> AssemblerResult<[u8; 8]> {
     out[4..8].copy_from_slice(&second.to_be_bytes());
     Ok(out)
 }
-fn decode_b40_uint(mut val: u32) -> String {
+fn _decode_b40_uint(mut val: u32) -> String {
     let mut chars = [0u8; 6];
     for i in (0..6).rev() {
         let idx = (val % 40) as usize;
@@ -40,14 +40,14 @@ fn decode_b40_uint(mut val: u32) -> String {
     }
     unsafe { String::from_utf8_unchecked(chars.to_vec()) }
 }
-pub fn decode_b40(bytes: &[u8; 8]) -> String {
+pub fn _decode_b40(bytes: &[u8; 8]) -> String {
     let a = u32::from_be_bytes(bytes[0..4].try_into().unwrap());
     let b = u32::from_be_bytes(bytes[4..8].try_into().unwrap());
-    (decode_b40_uint(a) + &decode_b40_uint(b))
+    (_decode_b40_uint(a) + &_decode_b40_uint(b))
         .trim_end()
         .to_string()
 }
-pub fn validate_b40_chars(name: &str) -> AssemblerResult<()> {
+pub fn _validate_b40_chars(name: &str) -> AssemblerResult<()> {
     for byte in name.bytes() {
         let upper = byte.to_ascii_uppercase();
         if !B40_ALPHABET.contains(&upper) {
@@ -69,7 +69,7 @@ mod tests {
 
     #[test]
     fn test_b40_decode() {
-        let decoded = decode_b40(&[0x60, 0x7a, 0xed, 0x2a, 0xdf, 0x64, 0x8c, 0x60]);
+        let decoded = _decode_b40(&[0x60, 0x7a, 0xed, 0x2a, 0xdf, 0x64, 0x8c, 0x60]);
         assert_eq!(decoded, "EVAR01ZN01_N");
     }
 
@@ -77,14 +77,14 @@ mod tests {
     fn test_b40_roundtrip() {
         let name = "ADD";
         let encoded = encode_b40(name).unwrap();
-        let decoded = decode_b40(&encoded);
+        let decoded = _decode_b40(&encoded);
         assert_eq!(decoded, name);
     }
     #[test]
     fn test_b40_roundtrip_full_len() {
         let name = "EVAR01ZN01_N";
         let encoded = encode_b40(name).unwrap();
-        let decoded = decode_b40(&encoded);
+        let decoded = _decode_b40(&encoded);
         assert_eq!(decoded, name);
     }
 
@@ -96,12 +96,12 @@ mod tests {
 
     #[test]
     fn test_validate_b40_chars() {
-        let invalid_result = validate_b40_chars("INVALID!");
+        let invalid_result = _validate_b40_chars("INVALID!");
         assert!(matches!(
             invalid_result,
             Err(AssemblerError::InvalidB40Char('!'))
         ));
-        let valid_result = validate_b40_chars("VALID");
+        let valid_result = _validate_b40_chars("VALID");
         assert!(matches!(valid_result, Ok(..)));
     }
 }

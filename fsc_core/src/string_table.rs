@@ -7,6 +7,12 @@ pub struct StringTable {
     index: HashMap<String, u32>,
 }
 
+impl Default for StringTable {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StringTable {
     pub fn new() -> Self {
         Self {

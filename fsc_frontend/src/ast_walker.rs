@@ -1,6 +1,6 @@
 use crate::ast;
-use fsc_core::Assembler;
 use fsc_core::error::AssemblerResult;
+use fsc_core::Assembler;
 
 pub struct AstWalker<'a> {
     core: &'a mut Assembler,
@@ -44,45 +44,154 @@ impl<'a> AstWalker<'a> {
     fn walk_instruction(&mut self, ins: &ast::Instruction) -> AssemblerResult<()> {
         match ins {
             ast::Instruction::SysCall { argc, page, func } => {
-                Ok(self.core.emit_syscall(*argc, *page, *func))
+                self.core.emit_syscall(*argc, *page, *func);
+                Ok(())
             }
-            ast::Instruction::GrowStack(n) => Ok(self.core.emit_grow_stack(*n)),
-            ast::Instruction::ShrinkStack(n) => Ok(self.core.emit_shrink_stack(*n)),
-            ast::Instruction::LoadArg(n) => Ok(self.core.emit_load_arg(*n)),
-            ast::Instruction::StoreArg(n) => Ok(self.core.emit_store_arg(*n)),
-            ast::Instruction::ArgAddi(n) => Ok(self.core.emit_arg_addi(*n)),
-            ast::Instruction::ArgSubi(n) => Ok(self.core.emit_arg_subi(*n)),
-            ast::Instruction::Push(n) => Ok(self.core.emit_push(*n)),
-            ast::Instruction::PushImm(n) => Ok(self.core.emit_push_imm(*n)),
-            ast::Instruction::PushResult => Ok(self.core.emit_push_result()),
-            ast::Instruction::Add => Ok(self.core.emit_add()),
-            ast::Instruction::Sub => Ok(self.core.emit_sub()),
-            ast::Instruction::Mul => Ok(self.core.emit_mul()),
-            ast::Instruction::Div => Ok(self.core.emit_div()),
-            ast::Instruction::Mod => Ok(self.core.emit_mod()),
-            ast::Instruction::And => Ok(self.core.emit_and()),
-            ast::Instruction::Or => Ok(self.core.emit_or()),
-            ast::Instruction::Xor => Ok(self.core.emit_xor()),
-            ast::Instruction::Not => Ok(self.core.emit_not()),
-            ast::Instruction::Neg => Ok(self.core.emit_neg()),
-            ast::Instruction::Fadd => Ok(self.core.emit_fadd()),
-            ast::Instruction::Fsub => Ok(self.core.emit_fsub()),
-            ast::Instruction::Fmul => Ok(self.core.emit_fmul()),
-            ast::Instruction::Fdiv => Ok(self.core.emit_fdiv()),
-            ast::Instruction::Feq0 => Ok(self.core.emit_feq0()),
-            ast::Instruction::Fneg => Ok(self.core.emit_fneg()),
-            ast::Instruction::Feq => Ok(self.core.emit_feq()),
-            ast::Instruction::Fneq => Ok(self.core.emit_fneq()),
-            ast::Instruction::Flt => Ok(self.core.emit_flt()),
-            ast::Instruction::Fgt => Ok(self.core.emit_fgt()),
-            ast::Instruction::Fle => Ok(self.core.emit_fle()),
-            ast::Instruction::Fge => Ok(self.core.emit_fge()),
+            ast::Instruction::GrowStack(n) => {
+                self.core.emit_grow_stack(*n);
+                Ok(())
+            }
+            ast::Instruction::ShrinkStack(n) => {
+                self.core.emit_shrink_stack(*n);
+                Ok(())
+            }
+            ast::Instruction::LoadArg(n) => {
+                self.core.emit_load_arg(*n);
+                Ok(())
+            }
+            ast::Instruction::StoreArg(n) => {
+                self.core.emit_store_arg(*n);
+                Ok(())
+            }
+            ast::Instruction::ArgAddi(n) => {
+                self.core.emit_arg_addi(*n);
+                Ok(())
+            }
+            ast::Instruction::ArgSubi(n) => {
+                self.core.emit_arg_subi(*n);
+                Ok(())
+            }
+            ast::Instruction::Push(n) => {
+                self.core.emit_push(*n);
+                Ok(())
+            }
+            ast::Instruction::PushImm(n) => {
+                self.core.emit_push_imm(*n);
+                Ok(())
+            }
+            ast::Instruction::PushResult => {
+                self.core.emit_push_result();
+                Ok(())
+            }
+            ast::Instruction::Add => {
+                self.core.emit_add();
+                Ok(())
+            }
+            ast::Instruction::Sub => {
+                self.core.emit_sub();
+                Ok(())
+            }
+            ast::Instruction::Mul => {
+                self.core.emit_mul();
+                Ok(())
+            }
+            ast::Instruction::Div => {
+                self.core.emit_div();
+                Ok(())
+            }
+            ast::Instruction::Mod => {
+                self.core.emit_mod();
+                Ok(())
+            }
+            ast::Instruction::And => {
+                self.core.emit_and();
+                Ok(())
+            }
+            ast::Instruction::Or => {
+                self.core.emit_or();
+                Ok(())
+            }
+            ast::Instruction::Xor => {
+                self.core.emit_xor();
+                Ok(())
+            }
+            ast::Instruction::Not => {
+                self.core.emit_not();
+                Ok(())
+            }
+            ast::Instruction::Neg => {
+                self.core.emit_neg();
+                Ok(())
+            }
+            ast::Instruction::Fadd => {
+                self.core.emit_fadd();
+                Ok(())
+            }
+            ast::Instruction::Fsub => {
+                self.core.emit_fsub();
+                Ok(())
+            }
+            ast::Instruction::Fmul => {
+                self.core.emit_fmul();
+                Ok(())
+            }
+            ast::Instruction::Fdiv => {
+                self.core.emit_fdiv();
+                Ok(())
+            }
+            ast::Instruction::Feq0 => {
+                self.core.emit_feq0();
+                Ok(())
+            }
+            ast::Instruction::Fneg => {
+                self.core.emit_fneg();
+                Ok(())
+            }
+            ast::Instruction::Feq => {
+                self.core.emit_feq();
+                Ok(())
+            }
+            ast::Instruction::Fneq => {
+                self.core.emit_fneq();
+                Ok(())
+            }
+            ast::Instruction::Flt => {
+                self.core.emit_flt();
+                Ok(())
+            }
+            ast::Instruction::Fgt => {
+                self.core.emit_fgt();
+                Ok(())
+            }
+            ast::Instruction::Fle => {
+                self.core.emit_fle();
+                Ok(())
+            }
+            ast::Instruction::Fge => {
+                self.core.emit_fge();
+                Ok(())
+            }
             ast::Instruction::LStr(s) => self.core.emit_lstr(s),
-            ast::Instruction::DelayLoad => Ok(self.core.emit_delay_load()),
-            ast::Instruction::DelayNeq0 => Ok(self.core.emit_delay_neq0()),
-            ast::Instruction::Exit1 => Ok(self.core.emit_exit_1()),
-            ast::Instruction::Exit2 => Ok(self.core.emit_exit_2()),
-            ast::Instruction::SetArgMode => Ok(self.core.emit_set_arg_mode()),
+            ast::Instruction::DelayLoad => {
+                self.core.emit_delay_load();
+                Ok(())
+            }
+            ast::Instruction::DelayNeq0 => {
+                self.core.emit_delay_neq0();
+                Ok(())
+            }
+            ast::Instruction::Exit1 => {
+                self.core.emit_exit_1();
+                Ok(())
+            }
+            ast::Instruction::Exit2 => {
+                self.core.emit_exit_2();
+                Ok(())
+            }
+            ast::Instruction::SetArgMode => {
+                self.core.emit_set_arg_mode();
+                Ok(())
+            }
             ast::Instruction::Call(sym) => self.core.emit_call(sym),
             ast::Instruction::Jmp(label) => self.core.emit_jmp(label),
             ast::Instruction::Jnz(label) => self.core.emit_jnz(label),

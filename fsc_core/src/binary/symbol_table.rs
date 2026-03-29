@@ -22,6 +22,12 @@ impl SymbolEntry {
     }
 }
 
+impl Default for BinarySymbolTable {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BinarySymbolTable {
     pub fn new() -> Self {
         Self {

@@ -1,6 +1,6 @@
-use crate::binary::FscriptBinary;
 use crate::binary::symbol_table::BinarySymbolTable;
-use crate::encoding::{InsnWord, calculate_call_operand, encode};
+use crate::binary::FscriptBinary;
+use crate::encoding::{calculate_call_operand, encode, InsnWord};
 use crate::error::{AssemblerError, AssemblerResult};
 use crate::string_table::StringTable;
 use crate::symbol_table::{Scope, SymbolTable};
@@ -548,7 +548,7 @@ impl Assembler {
                 RelocationKind::Global => self.symbol_table.resolve_global(&relocation.symbol)?,
                 RelocationKind::Local(function) => self
                     .symbol_table
-                    .resolve_local(&function, &relocation.symbol)?,
+                    .resolve_local(function, &relocation.symbol)?,
             };
             let operand = calculate_call_operand(relocation.code_offset, target.offset)?;
             let operand_bytes = operand.to_be_bytes();
