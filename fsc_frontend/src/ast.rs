@@ -27,6 +27,7 @@ pub enum Instruction {
     ArgSubi(i16),
     Add,
     Sub,
+    Mul,
     Push(i16),
     PushImm(i32),
     PushResult,

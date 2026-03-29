@@ -36,6 +36,7 @@ pub enum EqOp {
 pub enum AluOp {
     Add = 0,
     Sub = 1,
+    Mul = 2,
     Eq0 = 9
 }
 
@@ -190,6 +191,10 @@ impl Assembler {
     }
     pub fn emit_sub(&mut self) {
         self.emit(encode(AluOp::Sub as i16, 0, Opcode::Alu as u8));
+
+    }
+    pub fn emit_mul(&mut self) {
+        self.emit(encode(AluOp::Mul as i16, 0, Opcode::Alu as u8));
 
     }
     pub fn emit_lstr(&mut self, s: &str) -> AssemblerResult<()> {
@@ -409,6 +414,31 @@ mod emit_tests {
         let code = &asm.code;
         let idx = code.len() - 4;
         code[idx..idx + 4].try_into().unwrap()
+    }
+
+    // --- alu ---
+
+    #[test]
+    fn emit_add() {
+        let mut asm = assembler_in_function();
+        asm.emit_add();
+
+        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x00, 0x14]);
+    }
+    #[test]
+    fn emit_sub() {
+        let mut asm = assembler_in_function();
+        asm.emit_sub();
+
+        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x00, 0x14]);
+    }
+
+    #[test]
+    fn emit_mul() {
+        let mut asm = assembler_in_function();
+        asm.emit_mul();
+
+        assert_eq!(last_bytes(&asm), [0x00, 0x02, 0x00, 0x14]);
     }
 
     // --- push ---
