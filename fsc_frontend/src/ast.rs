@@ -65,6 +65,7 @@ pub enum Instruction {
     Lt,
     Gt,
     Le,
+    Ge,
     LStr(String),
     Retv(i16),        // retv -0x2
     Ret(i16),        // ret -0x2

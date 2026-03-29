@@ -153,6 +153,9 @@ pub enum Token {
     #[token("le")]
     Le,
 
+    #[token("ge")]
+    Ge,
+
     #[token("push_result")]
     PushResult,
 
