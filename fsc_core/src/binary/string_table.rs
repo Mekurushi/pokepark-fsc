@@ -4,11 +4,11 @@ pub struct BinaryStringTable {
     string_table: Vec<u8>,
 }
 
-
-
 impl BinaryStringTable {
     pub fn new(buffer: Vec<u8>) -> Self {
-        Self { string_table: buffer }
+        Self {
+            string_table: buffer,
+        }
     }
 
     pub fn serialize(&self) -> AssemblerResult<Vec<u8>> {
@@ -17,5 +17,4 @@ impl BinaryStringTable {
         buf.extend_from_slice(self.string_table.as_slice());
         Ok(buf)
     }
-
 }

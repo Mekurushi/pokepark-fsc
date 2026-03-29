@@ -1,10 +1,10 @@
-use std::collections::HashMap;
 use crate::error::{AssemblerError, AssemblerResult};
+use std::collections::HashMap;
 
 pub enum Scope {
-    Export,           // entry points
+    Export, // entry points
     Private,
-    Local(String),    // label
+    Local(String), // label
 }
 
 pub struct Symbol {
@@ -28,17 +28,27 @@ impl SymbolTable {
         if self.symbols.contains_key(&name) {
             return Err(AssemblerError::DuplicateSymbol(name));
         }
-        self.symbols.insert(name.clone(), Symbol { name, offset, scope });
+        self.symbols.insert(
+            name.clone(),
+            Symbol {
+                name,
+                offset,
+                scope,
+            },
+        );
         Ok(())
     }
 
     pub fn define_local(&mut self, function: &str, label: String, offset: u32) {
         let key = format!("{}.{}", function, label);
-        self.symbols.insert(key, Symbol {
-            name: label,
-            offset,
-            scope: Scope::Local(function.to_string()),
-        });
+        self.symbols.insert(
+            key,
+            Symbol {
+                name: label,
+                offset,
+                scope: Scope::Local(function.to_string()),
+            },
+        );
     }
 
     pub fn lookup(&self, name: &str) -> Option<&Symbol> {
@@ -60,6 +70,8 @@ impl SymbolTable {
     }
 
     pub fn exports(&self) -> impl Iterator<Item = &Symbol> {
-        self.symbols.values().filter(|s| matches!(s.scope, Scope::Export))
+        self.symbols
+            .values()
+            .filter(|s| matches!(s.scope, Scope::Export))
     }
 }

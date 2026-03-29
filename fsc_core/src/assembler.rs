@@ -1,5 +1,5 @@
-use crate::binary::symbol_table::BinarySymbolTable;
 use crate::binary::FscriptBinary;
+use crate::binary::symbol_table::BinarySymbolTable;
 use crate::encoding::{calculate_call_operand, encode, encode_syscall};
 use crate::error::{AssemblerError, AssemblerResult};
 use crate::string_table::StringTable;
@@ -35,7 +35,7 @@ pub enum FaluOp {
     Fmul = 2,
     Fdiv = 3,
     Feq0 = 9,
-    Fneg = 10
+    Fneg = 10,
 }
 
 #[repr(u16)]
@@ -55,7 +55,6 @@ pub enum FeqOp {
     Flt = 0xd,
 }
 
-
 #[repr(u16)]
 pub enum AluOp {
     Add = 0,
@@ -68,15 +67,14 @@ pub enum AluOp {
     Xor = 7,
     Not = 8,
     Eq0 = 9,
-    Neg = 10
+    Neg = 10,
 }
 
 #[repr(u8)]
 pub enum ArgType {
     StoreArg = 0,
     ArgAddi = 1,
-    ArgSubi = 2
-
+    ArgSubi = 2,
 }
 
 #[repr(u8)]
@@ -89,7 +87,6 @@ pub enum JmpType {
     JnzSet = 5,
     JzSet = 6,
     Jeq = 7,
-
 }
 
 #[repr(u8)]
@@ -101,8 +98,6 @@ pub enum DelayType {
     SetArgMode = 5,
 }
 
-
-
 #[repr(u8)]
 pub enum RetOp {
     Ret = 0,
@@ -111,7 +106,7 @@ pub enum RetOp {
 
 enum RelocationKind {
     Global,
-    Local(String)
+    Local(String),
 }
 
 struct Relocation {
@@ -140,28 +135,34 @@ impl Assembler {
             string_table: StringTable::new(),
             program_counter: 0,
             relocations: Vec::new(),
-           state: EmitState::Idle,
+            state: EmitState::Idle,
         }
     }
     // symbol definition
     pub fn define_function(&mut self, name: &str, private: bool) -> AssemblerResult<()> {
-        let scope = if private { Scope::Private } else { Scope::Export };
-        self.symbol_table.define(name.to_string(), self.program_counter, scope)?;
+        let scope = if private {
+            Scope::Private
+        } else {
+            Scope::Export
+        };
+        self.symbol_table
+            .define(name.to_string(), self.program_counter, scope)?;
         self.state = EmitState::InFunction(name.to_string());
         Ok(())
     }
     pub fn define_label(&mut self, name: &str) -> AssemblerResult<()> {
         let function = match self.state {
             EmitState::InFunction(ref function) => function,
-            EmitState::Idle => Err(AssemblerError::LabelOutsideFunction(name.to_string()))?
+            EmitState::Idle => Err(AssemblerError::LabelOutsideFunction(name.to_string()))?,
         };
-        self.symbol_table.define_local(function, name.to_string(), self.program_counter);
+        self.symbol_table
+            .define_local(function, name.to_string(), self.program_counter);
         Ok(())
     }
 
     // instruction emission
-    pub fn emit_syscall(&mut self, argc: u8,page: u8, func: u8) {
-        self.emit(encode_syscall(page,func,argc,Opcode::SC as u8));
+    pub fn emit_syscall(&mut self, argc: u8, page: u8, func: u8) {
+        self.emit(encode_syscall(page, func, argc, Opcode::SC as u8));
     }
 
     pub fn emit_grow_stack(&mut self, n: i16) {
@@ -183,20 +184,20 @@ impl Assembler {
     pub fn emit_arg_subi(&mut self, n: i16) {
         self.emit(encode(n, ArgType::ArgSubi as u8, Opcode::ArgAlu as u8));
     }
-    pub fn emit_delay_load(&mut self, ) {
+    pub fn emit_delay_load(&mut self) {
         self.emit(encode(0, DelayType::DelayLoad as u8, Opcode::Delay as u8));
     }
-    pub fn emit_delay_neq0(&mut self, ) {
+    pub fn emit_delay_neq0(&mut self) {
         self.emit(encode(0, DelayType::DelayNeq0 as u8, Opcode::Delay as u8));
     }
-    pub fn emit_exit_1(&mut self, ) {
+    pub fn emit_exit_1(&mut self) {
         self.emit(encode(0, DelayType::Exit1 as u8, Opcode::Delay as u8));
     }
-    pub fn emit_exit_2(&mut self, ) {
+    pub fn emit_exit_2(&mut self) {
         self.emit(encode(0, DelayType::Exit2 as u8, Opcode::Delay as u8));
     }
 
-    pub fn emit_set_arg_mode(&mut self, ) {
+    pub fn emit_set_arg_mode(&mut self) {
         self.emit(encode(0, DelayType::SetArgMode as u8, Opcode::Delay as u8));
     }
     pub fn emit_push(&mut self, n: i16) {
@@ -205,7 +206,6 @@ impl Assembler {
     pub fn emit_push_imm(&mut self, n: i32) {
         self.emit(encode(0, 0, Opcode::PushImm as u8));
         self.emit(n as u32);
-
     }
     pub fn emit_push_result(&mut self) {
         self.emit(encode(0, 0, Opcode::PushResult as u8));
@@ -239,93 +239,74 @@ impl Assembler {
 
     pub fn emit_add(&mut self) {
         self.emit(encode(AluOp::Add as i16, 0, Opcode::Alu as u8));
-
     }
     pub fn emit_sub(&mut self) {
         self.emit(encode(AluOp::Sub as i16, 0, Opcode::Alu as u8));
-
     }
     pub fn emit_mul(&mut self) {
         self.emit(encode(AluOp::Mul as i16, 0, Opcode::Alu as u8));
-
     }
 
     pub fn emit_div(&mut self) {
         self.emit(encode(AluOp::Div as i16, 0, Opcode::Alu as u8));
-
     }
 
     pub fn emit_mod(&mut self) {
         self.emit(encode(AluOp::Mod as i16, 0, Opcode::Alu as u8));
-
     }
 
     pub fn emit_and(&mut self) {
         self.emit(encode(AluOp::And as i16, 0, Opcode::Alu as u8));
-
     }
 
     pub fn emit_or(&mut self) {
         self.emit(encode(AluOp::Or as i16, 0, Opcode::Alu as u8));
-
     }
 
     pub fn emit_xor(&mut self) {
         self.emit(encode(AluOp::Xor as i16, 0, Opcode::Alu as u8));
-
     }
 
     pub fn emit_not(&mut self) {
         self.emit(encode(AluOp::Not as i16, 0, Opcode::Alu as u8));
-
     }
 
     pub fn emit_neg(&mut self) {
         self.emit(encode(AluOp::Neg as i16, 0, Opcode::Alu as u8));
-
     }
 
     pub fn emit_fadd(&mut self) {
         self.emit(encode(FaluOp::Fadd as i16, 0, Opcode::Falu as u8));
-
     }
     pub fn emit_fsub(&mut self) {
         self.emit(encode(FaluOp::Fsub as i16, 0, Opcode::Falu as u8));
-
     }
 
     pub fn emit_fmul(&mut self) {
         self.emit(encode(FaluOp::Fmul as i16, 0, Opcode::Falu as u8));
-
     }
 
     pub fn emit_fdiv(&mut self) {
         self.emit(encode(FaluOp::Fdiv as i16, 0, Opcode::Falu as u8));
-
     }
 
     pub fn emit_feq0(&mut self) {
         self.emit(encode(FaluOp::Feq0 as i16, 0, Opcode::Falu as u8));
-
     }
 
     pub fn emit_fneg(&mut self) {
         self.emit(encode(FaluOp::Fneg as i16, 0, Opcode::Falu as u8));
-
     }
 
     pub fn emit_feq(&mut self) {
         self.emit(encode(FeqOp::Feq as i16, 0, Opcode::Feq as u8));
-
     }
 
     pub fn emit_fneq(&mut self) {
         self.emit(encode(FeqOp::Fneq as i16, 0, Opcode::Feq as u8));
-
     }
     pub fn emit_flt(&mut self) {
         self.emit(encode(FeqOp::Flt as i16, 0, Opcode::Feq as u8));
-
     }
 
     pub fn emit_lstr(&mut self, s: &str) -> AssemblerResult<()> {
@@ -340,11 +321,12 @@ impl Assembler {
             kind: RelocationKind::Global,
         });
         self.emit(encode(0, 0, Opcode::Call as u8));
-        Ok(()) }
-    pub fn emit_jmp(&mut self, label: &str) -> AssemblerResult<()>  {
+        Ok(())
+    }
+    pub fn emit_jmp(&mut self, label: &str) -> AssemblerResult<()> {
         let function = match self.state {
             EmitState::InFunction(ref function) => function,
-            EmitState::Idle => Err(AssemblerError::LabelOutsideFunction(label.to_string()))?
+            EmitState::Idle => Err(AssemblerError::LabelOutsideFunction(label.to_string()))?,
         };
         self.relocations.push(Relocation {
             code_offset: self.program_counter,
@@ -355,10 +337,10 @@ impl Assembler {
         Ok(())
     }
 
-    pub fn emit_jz(&mut self, label: &str) -> AssemblerResult<()>  {
+    pub fn emit_jz(&mut self, label: &str) -> AssemblerResult<()> {
         let function = match self.state {
             EmitState::InFunction(ref function) => function,
-            EmitState::Idle => Err(AssemblerError::LabelOutsideFunction(label.to_string()))?
+            EmitState::Idle => Err(AssemblerError::LabelOutsideFunction(label.to_string()))?,
         };
         self.relocations.push(Relocation {
             code_offset: self.program_counter,
@@ -369,10 +351,10 @@ impl Assembler {
         Ok(())
     }
 
-    pub fn emit_jeq(&mut self, label: &str) -> AssemblerResult<()>  {
+    pub fn emit_jeq(&mut self, label: &str) -> AssemblerResult<()> {
         let function = match self.state {
             EmitState::InFunction(ref function) => function,
-            EmitState::Idle => Err(AssemblerError::LabelOutsideFunction(label.to_string()))?
+            EmitState::Idle => Err(AssemblerError::LabelOutsideFunction(label.to_string()))?,
         };
         self.relocations.push(Relocation {
             code_offset: self.program_counter,
@@ -385,10 +367,10 @@ impl Assembler {
 
     // TODO: integrate jeq_imm cleanly, don't like current impl at all; also get integer handling
     // straight
-    pub fn emit_jeq_imm(&mut self, imm: i8, label: &str) -> AssemblerResult<()>  {
+    pub fn emit_jeq_imm(&mut self, imm: i8, label: &str) -> AssemblerResult<()> {
         let function = match self.state {
             EmitState::InFunction(ref function) => function,
-            EmitState::Idle => Err(AssemblerError::LabelOutsideFunction(label.to_string()))?
+            EmitState::Idle => Err(AssemblerError::LabelOutsideFunction(label.to_string()))?,
         };
         self.relocations.push(Relocation {
             code_offset: self.program_counter,
@@ -399,10 +381,10 @@ impl Assembler {
         Ok(())
     }
 
-    pub fn emit_jnz(&mut self, label: &str) -> AssemblerResult<()>  {
+    pub fn emit_jnz(&mut self, label: &str) -> AssemblerResult<()> {
         let function = match self.state {
             EmitState::InFunction(ref function) => function,
-            EmitState::Idle => Err(AssemblerError::LabelOutsideFunction(label.to_string()))?
+            EmitState::Idle => Err(AssemblerError::LabelOutsideFunction(label.to_string()))?,
         };
         self.relocations.push(Relocation {
             code_offset: self.program_counter,
@@ -413,10 +395,10 @@ impl Assembler {
         Ok(())
     }
 
-    pub fn emit_jnz_pause(&mut self, label: &str) -> AssemblerResult<()>  {
+    pub fn emit_jnz_pause(&mut self, label: &str) -> AssemblerResult<()> {
         let function = match self.state {
             EmitState::InFunction(ref function) => function,
-            EmitState::Idle => Err(AssemblerError::LabelOutsideFunction(label.to_string()))?
+            EmitState::Idle => Err(AssemblerError::LabelOutsideFunction(label.to_string()))?,
         };
         self.relocations.push(Relocation {
             code_offset: self.program_counter,
@@ -427,10 +409,10 @@ impl Assembler {
         Ok(())
     }
 
-    pub fn emit_jnz_set(&mut self, label: &str) -> AssemblerResult<()>  {
+    pub fn emit_jnz_set(&mut self, label: &str) -> AssemblerResult<()> {
         let function = match self.state {
             EmitState::InFunction(ref function) => function,
-            EmitState::Idle => Err(AssemblerError::LabelOutsideFunction(label.to_string()))?
+            EmitState::Idle => Err(AssemblerError::LabelOutsideFunction(label.to_string()))?,
         };
         self.relocations.push(Relocation {
             code_offset: self.program_counter,
@@ -441,10 +423,10 @@ impl Assembler {
         Ok(())
     }
 
-    pub fn emit_jz_set(&mut self, label: &str) -> AssemblerResult<()>  {
+    pub fn emit_jz_set(&mut self, label: &str) -> AssemblerResult<()> {
         let function = match self.state {
             EmitState::InFunction(ref function) => function,
-            EmitState::Idle => Err(AssemblerError::LabelOutsideFunction(label.to_string()))?
+            EmitState::Idle => Err(AssemblerError::LabelOutsideFunction(label.to_string()))?,
         };
         self.relocations.push(Relocation {
             code_offset: self.program_counter,
@@ -455,11 +437,10 @@ impl Assembler {
         Ok(())
     }
 
-
-    pub fn emit_jz_pause(&mut self, label: &str) -> AssemblerResult<()>  {
+    pub fn emit_jz_pause(&mut self, label: &str) -> AssemblerResult<()> {
         let function = match self.state {
             EmitState::InFunction(ref function) => function,
-            EmitState::Idle => Err(AssemblerError::LabelOutsideFunction(label.to_string()))?
+            EmitState::Idle => Err(AssemblerError::LabelOutsideFunction(label.to_string()))?,
         };
         self.relocations.push(Relocation {
             code_offset: self.program_counter,
@@ -473,10 +454,18 @@ impl Assembler {
     pub fn emit_ret(&mut self, n: i16) {
         // Ghidra visualizes as neagtive but actual operand is positive TODO: define
         // explicit
-        self.emit(encode(n.unsigned_abs() as i16, RetOp::Ret as u8, Opcode::Ret as u8));
+        self.emit(encode(
+            n.unsigned_abs() as i16,
+            RetOp::Ret as u8,
+            Opcode::Ret as u8,
+        ));
     }
     pub fn emit_retv(&mut self, n: i16) {
-        self.emit(encode(n.unsigned_abs() as i16, RetOp::Retv as u8, Opcode::Ret as u8));
+        self.emit(encode(
+            n.unsigned_abs() as i16,
+            RetOp::Retv as u8,
+            Opcode::Ret as u8,
+        ));
     }
 
     fn emit(&mut self, word: u32) {
@@ -498,27 +487,21 @@ impl Assembler {
         ))
     }
     fn apply_relocations(&mut self) -> AssemblerResult<()> {
-        for relocation in self.relocations.iter_mut(){
+        for relocation in self.relocations.iter_mut() {
             let target = match &relocation.kind {
-                RelocationKind::Global => {
-                    self.symbol_table.resolve_global(&relocation.symbol)?
-                }
-                RelocationKind::Local(function) => {
-                    self.symbol_table.resolve_local(&function,&relocation.symbol)?
-                }
+                RelocationKind::Global => self.symbol_table.resolve_global(&relocation.symbol)?,
+                RelocationKind::Local(function) => self
+                    .symbol_table
+                    .resolve_local(&function, &relocation.symbol)?,
             };
-            let operand = calculate_call_operand(
-                relocation.code_offset,
-                target.offset
-            )?;
+            let operand = calculate_call_operand(relocation.code_offset, target.offset)?;
             let operand_bytes = operand.to_be_bytes();
             let idx = relocation.code_offset as usize;
-            self.code[idx]     = operand_bytes[0];
+            self.code[idx] = operand_bytes[0];
             self.code[idx + 1] = operand_bytes[1];
         }
         Ok(())
     }
-
 
     fn build_binary_symbol_table(&self) -> BinarySymbolTable {
         let mut table = BinarySymbolTable::new();
@@ -539,7 +522,6 @@ mod emit_tests {
         asm.define_function("test", false).unwrap();
         asm
     }
-
 
     fn last_bytes(asm: &Assembler) -> [u8; 4] {
         let code = &asm.code;
@@ -700,8 +682,6 @@ mod emit_tests {
         assert_eq!(last_bytes(&asm), [0x00, 0x0d, 0x00, 0x17]);
     }
 
-
-
     // --- push ---
 
     #[test]
@@ -763,7 +743,6 @@ mod emit_tests {
         asm.emit_push_result();
         assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x00, 0x12]);
     }
-
 
     // --- store_arg ---
     #[test]
@@ -873,8 +852,6 @@ mod emit_tests {
         assert_eq!(last_bytes(&asm), [0x00, 0x10, 0x00, 0x16]);
     }
 
-
-
     // --- jmp ---
     #[test]
     fn emit_jmp_bytes() {
@@ -939,7 +916,6 @@ mod emit_tests {
         assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x06, 0x08]);
     }
 
-
     #[test]
     fn emit_jeq_bytes() {
         let mut asm = assembler_in_function();
@@ -953,19 +929,18 @@ mod emit_tests {
     fn emit_jeq_imm_bytes() {
         let mut asm = assembler_in_function();
         asm.define_label("target").unwrap();
-        asm.emit_jeq_imm(0x2,"target").unwrap();
+        asm.emit_jeq_imm(0x2, "target").unwrap();
         // [operand: 0x0000][imm = 0x02][Opcode::JeqImm = 0x0a]
         assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x02, 0x0a]);
     }
-
 
     #[test]
     fn emit_jmp_resolves_correctly() {
         let mut asm = Assembler::new();
         asm.define_function("test", false).unwrap();
 
-        asm.emit_jmp("loop").unwrap();   // offset 0
-        asm.emit_push(1);  // offset 4
+        asm.emit_jmp("loop").unwrap(); // offset 0
+        asm.emit_push(1); // offset 4
         asm.define_label("loop").unwrap(); // offset 8
 
         let binary = asm.finalize("test".to_string()).unwrap();

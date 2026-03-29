@@ -1,6 +1,6 @@
-use std::collections::HashMap;
 use crate::binary::string_table::BinaryStringTable;
 use crate::error::{AssemblerError, AssemblerResult};
+use std::collections::HashMap;
 
 pub struct StringTable {
     buffer: Vec<u8>,
@@ -20,8 +20,7 @@ impl StringTable {
             return Ok(offset);
         }
         let offset = self.buffer.len() as u32;
-        i16::try_from(offset)
-            .map_err(|_| AssemblerError::OperandOutOfRange(offset as i32))?;
+        i16::try_from(offset).map_err(|_| AssemblerError::OperandOutOfRange(offset as i32))?;
         self.buffer.extend_from_slice(s.as_bytes());
         self.buffer.push(0);
         self.index.insert(s.to_string(), offset);

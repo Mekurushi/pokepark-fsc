@@ -1,11 +1,10 @@
 use crate::error::{AssemblerError, AssemblerResult};
 const B40_ALPHABET: &[u8; 40] = b" 0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_-/";
 
-
 fn encode_b40_uint(s: &[u8]) -> AssemblerResult<u32> {
     let mut result = 0u32;
 
-    for &byte in s.iter().take(6){
+    for &byte in s.iter().take(6) {
         let upper = byte.to_ascii_uppercase();
         let idx = B40_ALPHABET
             .iter()
@@ -20,9 +19,12 @@ fn encode_b40_uint(s: &[u8]) -> AssemblerResult<u32> {
 }
 pub fn encode_b40(name: &str) -> AssemblerResult<[u8; 8]> {
     let bytes = name.as_bytes();
-    let first  = encode_b40_uint(&bytes[..bytes.len().min(6)])?;
+    let first = encode_b40_uint(&bytes[..bytes.len().min(6)])?;
     // just silently truncate longer strings TODO: explicitly define behavior
-    let second = encode_b40_uint(if bytes.len() > 6 { &bytes[6..12.min(bytes.len())] } else { &[]
+    let second = encode_b40_uint(if bytes.len() > 6 {
+        &bytes[6..12.min(bytes.len())]
+    } else {
+        &[]
     })?;
     let mut out = [0u8; 8];
     out[0..4].copy_from_slice(&first.to_be_bytes());
@@ -41,7 +43,9 @@ fn decode_b40_uint(mut val: u32) -> String {
 pub fn decode_b40(bytes: &[u8; 8]) -> String {
     let a = u32::from_be_bytes(bytes[0..4].try_into().unwrap());
     let b = u32::from_be_bytes(bytes[4..8].try_into().unwrap());
-    (decode_b40_uint(a) + &decode_b40_uint(b)).trim_end().to_string()
+    (decode_b40_uint(a) + &decode_b40_uint(b))
+        .trim_end()
+        .to_string()
 }
 pub fn validate_b40_chars(name: &str) -> AssemblerResult<()> {
     for byte in name.bytes() {
@@ -52,7 +56,6 @@ pub fn validate_b40_chars(name: &str) -> AssemblerResult<()> {
     }
     Ok(())
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -94,7 +97,10 @@ mod tests {
     #[test]
     fn test_validate_b40_chars() {
         let invalid_result = validate_b40_chars("INVALID!");
-        assert!(matches!(invalid_result, Err(AssemblerError::InvalidB40Char('!'))));
+        assert!(matches!(
+            invalid_result,
+            Err(AssemblerError::InvalidB40Char('!'))
+        ));
         let valid_result = validate_b40_chars("VALID");
         assert!(matches!(valid_result, Ok(..)));
     }

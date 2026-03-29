@@ -61,7 +61,7 @@ pub enum Instruction {
     JzPause(String),
     Jz(String),
     Jeq(String),
-    JeqImm{ imm: i8, label: String },
+    JeqImm { imm: i8, label: String },
     Eq0,
     Eq,
     Neq,
@@ -70,6 +70,6 @@ pub enum Instruction {
     Le,
     Ge,
     LStr(String),
-    Retv(i16),        // retv -0x2
-    Ret(i16),        // ret -0x2
+    Retv(i16), // retv -0x2
+    Ret(i16),  // ret -0x2
 }

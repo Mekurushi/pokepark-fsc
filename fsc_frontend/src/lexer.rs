@@ -1,5 +1,5 @@
-use logos::Logos;
 use crate::error::{ParseError, ParseResult};
+use logos::Logos;
 
 #[derive(Logos, Debug, Clone, PartialEq)]
 #[logos(skip r"[ \t\n\f]+")] // Ignore this regex pattern between tokens
@@ -181,7 +181,6 @@ pub enum Token {
 })]
     StringLiteral(String),
 
-
     // --- Punctuation ---
     #[token("(")]
     LParen,
@@ -216,8 +215,7 @@ pub enum Token {
 })]
     Int32(i32),
     #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*", |lex| lex.slice().to_string())]
-    Ident(String)
-
+    Ident(String),
 }
 
 pub fn tokenize(src: &str) -> ParseResult<Vec<(Token, std::ops::Range<usize>)>> {

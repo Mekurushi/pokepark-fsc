@@ -3,10 +3,10 @@ use crate::binary::string_table::BinaryStringTable;
 use crate::binary::symbol_table::BinarySymbolTable;
 use crate::error::AssemblerResult;
 
-mod header;
-pub mod symbol_table;
-pub mod string_table;
 mod b40string;
+mod header;
+pub mod string_table;
+pub mod symbol_table;
 
 pub struct FscriptBinary {
     script_name: String,
@@ -22,11 +22,16 @@ impl FscriptBinary {
         symbol_table: BinarySymbolTable,
         string_table: BinaryStringTable,
     ) -> Self {
-        Self { script_name, code, symbol_table, string_table }
+        Self {
+            script_name,
+            code,
+            symbol_table,
+            string_table,
+        }
     }
 
     pub fn serialize(&self) -> AssemblerResult<Vec<u8>> {
-        let code_ptr         = HEADER_SIZE;
+        let code_ptr = HEADER_SIZE;
         let symbol_table_ptr = code_ptr + self.code.len() as u32;
         let string_table_ptr = symbol_table_ptr + self.symbol_table.byte_len();
         let header = FscriptHeader::new(

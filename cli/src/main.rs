@@ -1,9 +1,9 @@
+use fsc_core::Assembler;
+use fsc_frontend::ast_walker::AstWalker;
+use fsc_frontend::{lexer, parser};
 use std::fs::{read_to_string, write};
 use std::path::PathBuf;
 use std::process;
-use fsc_frontend::{lexer, parser};
-use fsc_core::Assembler;
-use fsc_frontend::ast_walker::AstWalker;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -50,36 +50,53 @@ fn main() {
 
     let source = match read_to_string(&input) {
         Ok(s) => s,
-        Err(e) => { eprintln!("error reading file: {}", e); process::exit(1); }
+        Err(e) => {
+            eprintln!("error reading file: {}", e);
+            process::exit(1);
+        }
     };
 
     let tokens = match lexer::tokenize(&source) {
         Ok(t) => t,
-        Err(e) => { eprintln!("lex error: {}", e); process::exit(1); }
+        Err(e) => {
+            eprintln!("lex error: {}", e);
+            process::exit(1);
+        }
     };
 
     let program = match parser::parse(tokens) {
         Ok(p) => p,
-        Err(e) => { eprintln!("parse error: {}", e); process::exit(1); }
+        Err(e) => {
+            eprintln!("parse error: {}", e);
+            process::exit(1);
+        }
     };
     let mut core = Assembler::new();
     let mut walker = AstWalker::new(&mut core);
 
     match walker.walk(&program) {
         Ok(a) => a,
-        Err(e) => { eprintln!("assembler error: {}", e); process::exit(1); }
+        Err(e) => {
+            eprintln!("assembler error: {}", e);
+            process::exit(1);
+        }
     };
 
     let binary = match core.finalize(script_name) {
         Ok(b) => b,
-        Err(e) => { eprintln!("binary error: {}", e); process::exit(1); }
+        Err(e) => {
+            eprintln!("binary error: {}", e);
+            process::exit(1);
+        }
     };
 
     let bytes = match binary.serialize() {
         Ok(b) => b,
-        Err(e) => { eprintln!("serialize error: {}", e); process::exit(1); }
+        Err(e) => {
+            eprintln!("serialize error: {}", e);
+            process::exit(1);
+        }
     };
 
     write(output, bytes).expect("failed to write output file");
-
 }
