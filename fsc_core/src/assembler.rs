@@ -41,6 +41,7 @@ pub enum AluOp {
     Mod = 4,
     And = 5,
     Or = 6,
+    Xor = 7,
     Eq0 = 9
 }
 
@@ -219,6 +220,11 @@ impl Assembler {
 
     pub fn emit_or(&mut self) {
         self.emit(encode(AluOp::Or as i16, 0, Opcode::Alu as u8));
+
+    }
+
+    pub fn emit_xor(&mut self) {
+        self.emit(encode(AluOp::Xor as i16, 0, Opcode::Alu as u8));
 
     }
 
@@ -495,6 +501,14 @@ mod emit_tests {
         asm.emit_or();
 
         assert_eq!(last_bytes(&asm), [0x00, 0x06, 0x00, 0x14]);
+    }
+
+    #[test]
+    fn emit_xor() {
+        let mut asm = assembler_in_function();
+        asm.emit_xor();
+
+        assert_eq!(last_bytes(&asm), [0x00, 0x07, 0x00, 0x14]);
     }
 
     // --- push ---

@@ -32,6 +32,7 @@ pub enum Instruction {
     Mod,
     And,
     Or,
+    Xor,
     Push(i16),
     PushImm(i32),
     PushResult,
