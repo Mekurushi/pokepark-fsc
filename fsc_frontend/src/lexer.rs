@@ -177,6 +177,9 @@ pub enum Token {
     #[token("sl")]
     Sl,
 
+    #[token("srm")]
+    Srm,
+
     #[token("push_result")]
     PushResult,
 

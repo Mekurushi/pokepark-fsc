@@ -449,6 +449,10 @@ fn parse_instruction(ts: &mut TokenStream) -> ParseResult<Instruction> {
             ts.advance();
             Ok(Instruction::Sl)
         }
+        Some(Token::Srm) => {
+            ts.advance();
+            Ok(Instruction::Srm)
+        }
         Some(Token::Retv) => {
             ts.advance();
             Ok(Instruction::Retv(ts.expect_int()?))
