@@ -38,6 +38,7 @@ pub enum AluOp {
     Sub = 1,
     Mul = 2,
     Div = 3,
+    Mod = 4,
     Eq0 = 9
 }
 
@@ -201,6 +202,11 @@ impl Assembler {
 
     pub fn emit_div(&mut self) {
         self.emit(encode(AluOp::Div as i16, 0, Opcode::Alu as u8));
+
+    }
+
+    pub fn emit_mod(&mut self) {
+        self.emit(encode(AluOp::Mod as i16, 0, Opcode::Alu as u8));
 
     }
 
@@ -454,6 +460,13 @@ mod emit_tests {
         asm.emit_div();
 
         assert_eq!(last_bytes(&asm), [0x00, 0x03, 0x00, 0x14]);
+    }
+    #[test]
+    fn emit_mod() {
+        let mut asm = assembler_in_function();
+        asm.emit_mod();
+
+        assert_eq!(last_bytes(&asm), [0x00, 0x04, 0x00, 0x14]);
     }
 
     // --- push ---

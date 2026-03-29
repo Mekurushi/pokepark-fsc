@@ -63,8 +63,12 @@ pub enum Token {
     #[token("div")]
     Div,
 
+    #[token("mod")]
+    Mod,
+
     #[token("push")]
     Push,
+
     #[token("push_imm")]
     PushImm,
 

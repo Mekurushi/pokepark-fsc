@@ -57,6 +57,7 @@ impl<'a> AstWalker<'a> {
             ast::Instruction::Sub          => Ok(self.core.emit_sub()),
             ast::Instruction::Mul          => Ok(self.core.emit_mul()),
             ast::Instruction::Div          => Ok(self.core.emit_div()),
+            ast::Instruction::Mod          => Ok(self.core.emit_mod()),
             ast::Instruction::LStr(s)      => self.core.emit_lstr(s),
             ast::Instruction::DelayLoad     => Ok(self.core.emit_delay_load()),
             ast::Instruction::DelayNeq0     => Ok(self.core.emit_delay_neq0()),
