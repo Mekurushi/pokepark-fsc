@@ -256,6 +256,10 @@ impl Assembler {
         self.emit(encode(ShiftOp::Srm as i16, 0, Opcode::Shift as u8));
     }
 
+    pub fn emit_sr(&mut self) {
+        self.emit(encode(ShiftOp::Sr as i16, 0, Opcode::Shift as u8));
+    }
+
     pub fn emit_add(&mut self) {
         self.emit(encode(AluOp::Add as i16, 0, Opcode::Alu as u8));
     }
@@ -919,6 +923,13 @@ mod emit_tests {
         let mut asm = assembler_in_function();
         asm.emit_srm();
         assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x00, 0x18]);
+    }
+
+    #[test]
+    fn emit_sr() {
+        let mut asm = assembler_in_function();
+        asm.emit_sr();
+        assert_eq!(last_bytes(&asm), [0x00, 0x02, 0x00, 0x18]);
     }
 
     // --- jmp ---

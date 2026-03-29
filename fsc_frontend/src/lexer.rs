@@ -180,6 +180,9 @@ pub enum Token {
     #[token("srm")]
     Srm,
 
+    #[token("sr")]
+    Sr,
+
     #[token("push_result")]
     PushResult,
 
