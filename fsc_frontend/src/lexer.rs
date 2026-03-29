@@ -90,6 +90,9 @@ pub enum Token {
     #[token("fmul")]
     Fmul,
 
+    #[token("fdiv")]
+    Fdiv,
+
     #[token("push")]
     Push,
 
