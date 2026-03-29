@@ -88,6 +88,7 @@ impl<'a> AstWalker<'a> {
             ast::Instruction::Eq0   => Ok(self.core.emit_eq0()),
             ast::Instruction::Eq   => Ok(self.core.emit_eq()),
             ast::Instruction::Neq   => Ok(self.core.emit_neq()),
+            ast::Instruction::Lt   => Ok(self.core.emit_lt()),
             ast::Instruction::Ret(n)       => Ok(self.core.emit_ret(*n)),
             ast::Instruction::Retv(n)      => Ok(self.core.emit_retv(*n)),
         }

@@ -144,6 +144,9 @@ pub enum Token {
     #[token("neq")]
     Neq,
 
+    #[token("lt")]
+    Lt,
+
     #[token("push_result")]
     PushResult,
 
