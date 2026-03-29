@@ -359,8 +359,14 @@ impl Assembler {
         );
     }
 
-    pub fn emit_shrink_stack(&mut self, n: i16) {
-        self.emit(encode(n, 0, Opcode::ShrinkStack as u8));
+    // --- shrink_stack ---
+
+    pub fn emit_shrink_stack(&mut self, operand: i16) {
+        self.emit(
+            InsnWord::new(Opcode::ShrinkStack as u8)
+                .operand(operand)
+                .build(),
+        );
     }
 
     pub fn emit_push(&mut self, n: i16) {
@@ -1191,6 +1197,15 @@ mod emit_tests {
         assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x02, 0x0c]);
     }
 
+    // --- shrink_stack ---
+
+    #[test]
+    fn emit_shrink_stack() {
+        let mut asm = assembler_in_function();
+        asm.emit_shrink_stack(1);
+        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x00, 0x0f]);
+    }
+
     // --- alu ---
 
     #[test]
@@ -1388,15 +1403,6 @@ mod emit_tests {
         // word 2: 0x3f808000
         assert_eq!(&asm.code[0..4], &[0x00, 0x00, 0x00, 0x11]);
         assert_eq!(&asm.code[4..8], &[0x3f, 0x80, 0x80, 0x00]);
-    }
-
-    // --- stack ---
-
-    #[test]
-    fn emit_shrink_stack() {
-        let mut asm = assembler_in_function();
-        asm.emit_shrink_stack(1);
-        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x00, 0x0f]);
     }
 
     // --- push_result ---
