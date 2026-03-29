@@ -84,6 +84,9 @@ pub enum Token {
     #[token("fadd")]
     Fadd,
 
+    #[token("fsub")]
+    Fsub,
+
 
     #[token("push")]
     Push,
