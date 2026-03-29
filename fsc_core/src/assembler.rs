@@ -41,7 +41,8 @@ pub enum FaluOp {
 pub enum EqOp {
     Eq = 0xb,
     Neq = 0xc,
-    Lt = 0xd
+    Lt = 0xd,
+    Gt = 0xe,
 }
 
 #[repr(u16)]
@@ -212,6 +213,11 @@ impl Assembler {
     pub fn emit_lt(&mut self) {
         self.emit(encode(EqOp::Lt as i16, 0, Opcode::Eq as u8));
     }
+
+    pub fn emit_gt(&mut self) {
+        self.emit(encode(EqOp::Gt as i16, 0, Opcode::Eq as u8));
+    }
+
     pub fn emit_add(&mut self) {
         self.emit(encode(AluOp::Add as i16, 0, Opcode::Alu as u8));
 
@@ -787,6 +793,13 @@ mod emit_tests {
         let mut asm = assembler_in_function();
         asm.emit_lt();
         assert_eq!(last_bytes(&asm), [0x00, 0x0d, 0x00, 0x16]);
+    }
+
+    #[test]
+    fn emit_gt() {
+        let mut asm = assembler_in_function();
+        asm.emit_gt();
+        assert_eq!(last_bytes(&asm), [0x00, 0x0e, 0x00, 0x16]);
     }
 
     // --- jmp ---
