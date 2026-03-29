@@ -93,18 +93,58 @@ impl<'a> AstWalker<'a> {
             ast::Instruction::Jz(label) => self.core.emit_jz(label),
             ast::Instruction::Jeq(label) => self.core.emit_jeq(label),
             ast::Instruction::JeqImm { imm, label } => self.core.emit_jeq_imm(*imm, label),
-            ast::Instruction::Eq0 => Ok(self.core.emit_eq0()),
-            ast::Instruction::Eq => Ok(self.core.emit_eq()),
-            ast::Instruction::Neq => Ok(self.core.emit_neq()),
-            ast::Instruction::Lt => Ok(self.core.emit_lt()),
-            ast::Instruction::Gt => Ok(self.core.emit_gt()),
-            ast::Instruction::Le => Ok(self.core.emit_le()),
-            ast::Instruction::Ge => Ok(self.core.emit_ge()),
-            ast::Instruction::Sl => Ok(self.core.emit_sl()),
-            ast::Instruction::Srm => Ok(self.core.emit_srm()),
-            ast::Instruction::Sr => Ok(self.core.emit_sr()),
-            ast::Instruction::Ret(n) => Ok(self.core.emit_ret(*n)),
-            ast::Instruction::Retv(n) => Ok(self.core.emit_retv(*n)),
+            ast::Instruction::Eq0 => {
+                self.core.emit_eq0();
+                Ok(())
+            }
+            ast::Instruction::Eq => {
+                self.core.emit_eq();
+                Ok(())
+            }
+            ast::Instruction::Neq => {
+                self.core.emit_neq();
+                Ok(())
+            }
+            ast::Instruction::Lt => {
+                self.core.emit_lt();
+                Ok(())
+            }
+            ast::Instruction::Gt => {
+                self.core.emit_gt();
+                Ok(())
+            }
+            ast::Instruction::Le => {
+                self.core.emit_le();
+                Ok(())
+            }
+            ast::Instruction::Ge => {
+                self.core.emit_ge();
+                Ok(())
+            }
+            ast::Instruction::Sl => {
+                self.core.emit_sl();
+                Ok(())
+            }
+            ast::Instruction::Srm => {
+                self.core.emit_srm();
+                Ok(())
+            }
+            ast::Instruction::Sr => {
+                self.core.emit_sr();
+                Ok(())
+            }
+            ast::Instruction::Lea(symbol) => {
+                self.core.emit_lea(symbol);
+                Ok(())
+            }
+            ast::Instruction::Ret(n) => {
+                self.core.emit_ret(*n);
+                Ok(())
+            }
+            ast::Instruction::Retv(n) => {
+                self.core.emit_retv(*n);
+                Ok(())
+            }
         }
     }
 }

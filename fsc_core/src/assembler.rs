@@ -27,6 +27,7 @@ pub enum Opcode {
     Eq = 0x16,
     Feq = 0x17,
     Shift = 0x18,
+    Lea = 0x19,
 }
 
 #[repr(u16)]
@@ -258,6 +259,15 @@ impl Assembler {
 
     pub fn emit_sr(&mut self) {
         self.emit(encode(ShiftOp::Sr as i16, 0, Opcode::Shift as u8));
+    }
+
+    pub fn emit_lea(&mut self, symbol: &str) {
+        self.relocations.push(Relocation {
+            code_offset: self.program_counter,
+            symbol: symbol.to_string(),
+            kind: RelocationKind::Global,
+        });
+        self.emit(encode(0, 0, Opcode::Lea as u8));
     }
 
     pub fn emit_add(&mut self) {
@@ -930,6 +940,34 @@ mod emit_tests {
         let mut asm = assembler_in_function();
         asm.emit_sr();
         assert_eq!(last_bytes(&asm), [0x00, 0x02, 0x00, 0x18]);
+    }
+
+    // --- lea ---
+    // TODO: clean implementation of lea; rethinking label symbol usage
+    #[test]
+    fn emit_lea() {
+        let mut asm = Assembler::new();
+        asm.define_function("target", false).unwrap();
+        asm.emit_push(1);
+        asm.emit_lea("target");
+
+        let binary = asm.finalize("test".to_string()).unwrap();
+
+        assert_eq!(&binary.code[4..8], &[0xff, 0xfe, 0x00, 0x19]);
+    }
+
+    #[test]
+    fn emit_lea_resolves_global_forward() {
+        let mut asm = Assembler::new();
+        asm.define_function("main", false).unwrap();
+        asm.emit_lea("data");
+        asm.emit_ret(0);
+
+        asm.define_function("data", false).unwrap();
+        asm.emit_ret(0);
+
+        let binary = asm.finalize("test".to_string()).unwrap();
+        assert_eq!(&binary.code[0..4], &[0x00, 0x01, 0x00, 0x19]);
     }
 
     // --- jmp ---
