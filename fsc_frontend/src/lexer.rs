@@ -15,6 +15,9 @@ pub enum Token {
     #[token("grow_stack")]
     GrowStack,
 
+    #[token("shrink_stack")]
+    ShrinkStack,
+
     #[token("load_arg")]
     LoadArg,
 

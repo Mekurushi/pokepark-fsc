@@ -172,6 +172,8 @@ fn parse_instruction(ts: &mut TokenStream) -> ParseResult<Instruction> {
     let offset = ts.offset();
     match ts.peek() {
         Some(Token::GrowStack) => { ts.advance(); Ok(Instruction::GrowStack(ts.expect_int()?)) }
+        Some(Token::ShrinkStack) => { ts.advance(); Ok(Instruction::ShrinkStack(ts.expect_int()
+            ?)) }
         Some(Token::LoadArg)   => { ts.advance(); Ok(Instruction::LoadArg(ts.expect_int()?)) }
         Some(Token::StoreArg)   => { ts.advance(); Ok(Instruction::StoreArg(ts.expect_int()?)) }
         Some(Token::ArgAddi)   => { ts.advance(); Ok(Instruction::ArgAddi(ts.expect_int()?)) }

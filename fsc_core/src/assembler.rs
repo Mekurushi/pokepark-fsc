@@ -17,6 +17,7 @@ pub enum Opcode {
     JeqImm = 0xa,
     LoadArg = 0x0b,
     ArgAlu = 0x0c,
+    ShrinkStack = 0xf,
     Push = 0x10,
     PushImm = 0x11,
     PushResult = 0x12,
@@ -133,6 +134,10 @@ impl Assembler {
 
     pub fn emit_grow_stack(&mut self, n: i16) {
         self.emit(encode(n, 0, Opcode::GrowStack as u8));
+    }
+
+    pub fn emit_shrink_stack(&mut self, n: i16) {
+        self.emit(encode(n, 0, Opcode::ShrinkStack as u8));
     }
     pub fn emit_load_arg(&mut self, n: i16) {
         self.emit(encode(n, 0, Opcode::LoadArg as u8));
@@ -443,6 +448,21 @@ mod emit_tests {
         asm.emit_syscall(3, 0x0, 0x15);
         // SC3 0x0:0x15
         assert_eq!(last_bytes(&asm), [0x00, 0x15, 0x03, 0x01]);
+    }
+
+    // --- stack ---
+    #[test]
+    fn emit_grow_stack() {
+        let mut asm = assembler_in_function();
+        asm.emit_grow_stack(1);
+        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x00, 0x07]);
+    }
+
+    #[test]
+    fn emit_shrink_stack() {
+        let mut asm = assembler_in_function();
+        asm.emit_shrink_stack(1);
+        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x00, 0x0f]);
     }
 
     // --- push_result ---

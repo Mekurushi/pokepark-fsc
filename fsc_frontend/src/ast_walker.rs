@@ -45,6 +45,7 @@ impl<'a> AstWalker<'a> {
             ast::Instruction::SysCall{argc, page, func} => Ok(self.core.emit_syscall(*argc,
                                                                                      *page, *func)),
             ast::Instruction::GrowStack(n) => Ok(self.core.emit_grow_stack(*n)),
+            ast::Instruction::ShrinkStack(n) => Ok(self.core.emit_shrink_stack(*n)),
             ast::Instruction::LoadArg(n)   => Ok(self.core.emit_load_arg(*n)),
             ast::Instruction::StoreArg(n)   => Ok(self.core.emit_store_arg(*n)),
             ast::Instruction::ArgAddi(n)   => Ok(self.core.emit_arg_addi(*n)),
