@@ -384,6 +384,14 @@ impl Assembler {
     pub fn emit_push_result(&mut self) {
         self.emit(InsnWord::new(Opcode::PushResult as u8).build());
     }
+
+    // --- lstr ---
+    pub fn emit_lstr(&mut self, s: &str) -> AssemblerResult<()> {
+        let str_offset = self.string_table.intern(s)?;
+        self.emit(InsnWord::new(Opcode::LStr as u8).imm(str_offset).build());
+
+        Ok(())
+    }
     pub fn emit_eq0(&mut self) {
         self.emit(encode(AluOp::Eq0 as i16, 0, Opcode::Alu as u8));
     }
@@ -513,12 +521,6 @@ impl Assembler {
 
     pub fn emit_fge(&mut self) {
         self.emit(encode(FeqOp::Fge as i16, 0, Opcode::Feq as u8));
-    }
-
-    pub fn emit_lstr(&mut self, s: &str) -> AssemblerResult<()> {
-        let str_offset = self.string_table.intern(s)?;
-        self.emit(encode(0, str_offset as u8, Opcode::LStr as u8));
-        Ok(())
     }
 
     fn emit(&mut self, word: u32) {
@@ -1253,6 +1255,43 @@ mod emit_tests {
         let mut asm = assembler_in_function();
         asm.emit_push_result();
         assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x00, 0x12]);
+    }
+
+    // --- lstr ---
+
+    #[test]
+    fn emit_lstr_first_string() {
+        let mut asm = assembler_in_function();
+        asm.emit_lstr("hello").unwrap();
+        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x00, 0x13]);
+    }
+
+    #[test]
+    fn emit_lstr_second_string() {
+        let mut asm = assembler_in_function();
+        asm.emit_lstr("hello").unwrap(); // 5 bytes + null terminator
+        asm.emit_lstr("hello2").unwrap();
+        let binary = asm.finalize("test".to_string()).unwrap();
+        assert_eq!(insn_at(&binary, 1), [0x00, 0x00, 0x06, 0x13]);
+    }
+
+    #[test]
+    fn emit_lstr_same_string_returns_same_imm() {
+        let mut asm = assembler_in_function();
+        asm.emit_lstr("hello").unwrap(); // 5 bytes + null terminator
+        asm.emit_lstr("hello").unwrap();
+        let binary = asm.finalize("test".to_string()).unwrap();
+        assert_eq!(insn_at(&binary, 1), [0x00, 0x00, 0x00, 0x13]);
+    }
+
+    #[test]
+    fn emit_lstr_third_string() {
+        let mut asm = assembler_in_function();
+        asm.emit_lstr("hello").unwrap(); // 5 bytes + null terminator
+        asm.emit_lstr("hello2").unwrap();
+        asm.emit_lstr("hello3").unwrap();
+        let binary = asm.finalize("test".to_string()).unwrap();
+        assert_eq!(insn_at(&binary, 2), [0x00, 0x00, 0x0d, 0x13]);
     }
 
     // --- alu ---
