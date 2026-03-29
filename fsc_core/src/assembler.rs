@@ -259,6 +259,11 @@ impl Assembler {
 
     }
 
+    pub fn emit_fmul(&mut self) {
+        self.emit(encode(FaluOp::Fmul as i16, 0, Opcode::Falu as u8));
+
+    }
+
     pub fn emit_lstr(&mut self, s: &str) -> AssemblerResult<()> {
         let str_offset = self.string_table.intern(s)?;
         self.emit(encode(0, str_offset as u8, Opcode::LStr as u8));
@@ -574,6 +579,15 @@ mod emit_tests {
 
         assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x00, 0x15]);
     }
+
+    #[test]
+    fn emit_fmul() {
+        let mut asm = assembler_in_function();
+        asm.emit_fmul();
+
+        assert_eq!(last_bytes(&asm), [0x00, 0x02, 0x00, 0x15]);
+    }
+
 
     // --- push ---
 
