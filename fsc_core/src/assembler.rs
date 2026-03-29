@@ -42,6 +42,7 @@ pub enum AluOp {
     And = 5,
     Or = 6,
     Xor = 7,
+    Not = 8,
     Eq0 = 9
 }
 
@@ -225,6 +226,11 @@ impl Assembler {
 
     pub fn emit_xor(&mut self) {
         self.emit(encode(AluOp::Xor as i16, 0, Opcode::Alu as u8));
+
+    }
+
+    pub fn emit_not(&mut self) {
+        self.emit(encode(AluOp::Not as i16, 0, Opcode::Alu as u8));
 
     }
 
@@ -510,6 +516,15 @@ mod emit_tests {
 
         assert_eq!(last_bytes(&asm), [0x00, 0x07, 0x00, 0x14]);
     }
+
+    #[test]
+    fn emit_not() {
+        let mut asm = assembler_in_function();
+        asm.emit_not();
+
+        assert_eq!(last_bytes(&asm), [0x00, 0x08, 0x00, 0x14]);
+    }
+
 
     // --- push ---
 

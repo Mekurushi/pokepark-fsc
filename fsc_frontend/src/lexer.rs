@@ -75,6 +75,9 @@ pub enum Token {
     #[token("xor")]
     Xor,
 
+    #[token("not")]
+    Not,
+
     #[token("push")]
     Push,
 

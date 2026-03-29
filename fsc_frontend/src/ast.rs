@@ -33,6 +33,7 @@ pub enum Instruction {
     And,
     Or,
     Xor,
+    Not,
     Push(i16),
     PushImm(i32),
     PushResult,
