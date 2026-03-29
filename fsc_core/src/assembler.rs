@@ -323,12 +323,19 @@ impl Assembler {
         Ok(())
     }
 
+    // --- load_arg ---
+    pub fn emit_load_arg(&mut self, operand: i16) {
+        self.emit(
+            InsnWord::new(Opcode::LoadArg as u8)
+                .operand(operand)
+                .build(),
+        );
+    }
+
     pub fn emit_shrink_stack(&mut self, n: i16) {
         self.emit(encode(n, 0, Opcode::ShrinkStack as u8));
     }
-    pub fn emit_load_arg(&mut self, n: i16) {
-        self.emit(encode(n, 0, Opcode::LoadArg as u8));
-    }
+
     pub fn emit_store_arg(&mut self, n: i16) {
         self.emit(encode(n, ArgType::StoreArg as u8, Opcode::ArgAlu as u8));
     }
@@ -1128,6 +1135,21 @@ mod emit_tests {
         asm.emit_jeq_imm(0x2, "nonexistent").unwrap();
         asm.emit_ret(0);
         assert!(asm.finalize("test".to_string()).is_err());
+    }
+
+    // --- load_arg ---
+    #[test]
+    fn emit_load_arg_with_operand() {
+        let mut asm = assembler_in_function();
+        asm.emit_load_arg(1);
+        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x00, 0x0b]);
+    }
+
+    #[test]
+    fn emit_load_arg_without_operand() {
+        let mut asm = assembler_in_function();
+        asm.emit_load_arg(0);
+        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x00, 0x0b]);
     }
 
     // --- alu ---
