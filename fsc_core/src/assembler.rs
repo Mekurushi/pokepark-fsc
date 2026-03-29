@@ -103,6 +103,7 @@ pub enum JmpType {
 
 #[repr(u8)]
 pub enum DelayType {
+    Delay = 0,
     Exit1 = 1,
     Exit2 = 2,
     DelayLoad = 3,
@@ -185,6 +186,15 @@ impl Assembler {
                 .subtype(subtype)
                 .syscall_page(page)
                 .syscall_func(func)
+                .build(),
+        );
+    }
+
+    pub fn emit_delay(&mut self, operand: i16) {
+        self.emit(
+            InsnWord::new(Opcode::Delay as u8)
+                .subtype(DelayType::Delay as u8)
+                .operand(operand)
                 .build(),
         );
     }

@@ -172,6 +172,10 @@ impl<'a> AstWalker<'a> {
                 Ok(())
             }
             ast::Instruction::LStr(s) => self.core.emit_lstr(s),
+            ast::Instruction::Delay(operand) => {
+                self.core.emit_delay(*operand);
+                Ok(())
+            }
             ast::Instruction::DelayLoad => {
                 self.core.emit_delay_load();
                 Ok(())

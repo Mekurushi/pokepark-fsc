@@ -475,6 +475,10 @@ fn parse_instruction(ts: &mut TokenStream) -> ParseResult<Instruction> {
             ts.advance();
             Ok(Instruction::LStr(ts.expect_string()?))
         }
+        Some(Token::Delay) => {
+            ts.advance();
+            Ok(Instruction::Delay(ts.expect_int()?))
+        }
         Some(Token::DelayLoad) => {
             ts.advance();
             Ok(Instruction::DelayLoad)

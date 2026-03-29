@@ -50,6 +50,7 @@ pub enum Instruction {
     Push(i16),
     PushImm(i32),
     PushResult,
+    Delay(i16),
     DelayLoad,
     DelayNeq0,
     Exit1,
