@@ -92,6 +92,19 @@ impl TokenStream {
         Err(ParseError::UnexpectedToken { got, expected: "integer", offset: self.offset() })
     }
 
+    fn expect_int8(&mut self) -> ParseResult<i8> {
+        if let Some(Token::Int(n)) = self.peek() {
+            let n = *n;
+            self.advance();
+            return i8::try_from(n).map_err(|_| ParseError::IntOutOfRange {
+                value: n as i32,
+                offset: self.offset(),
+            });
+        }
+        let got = self.peek().map(|t| format!("{t:?}")).unwrap_or("EOF".into());
+        Err(ParseError::UnexpectedToken { got, expected: "int8", offset: self.offset() })
+    }
+
     fn expect_string(&mut self) -> ParseResult<String> {
         if let Some(Token::StringLiteral(_)) = self.peek() {
             if let Some(Token::StringLiteral(s)) = self.advance() {
@@ -175,6 +188,10 @@ fn parse_instruction(ts: &mut TokenStream) -> ParseResult<Instruction> {
         Some(Token::JzPause) => {ts.advance(); Ok(Instruction::JzPause(ts.expect_ident()?))}
         Some(Token::Jz) => {ts.advance(); Ok(Instruction::Jz(ts.expect_ident()?))}
         Some(Token::Jeq) => {ts.advance(); Ok(Instruction::Jeq(ts.expect_ident()?))}
+        Some(Token::JeqImm) => {ts.advance();     ts.advance();
+            let imm = ts.expect_int8()?;
+            let label = ts.expect_ident()?;
+            Ok(Instruction::JeqImm { imm, label })}
         Some(Token::Eq0) => {ts.advance(); Ok(Instruction::Eq0)}
         Some(Token::Eq) => {ts.advance(); Ok(Instruction::Eq)}
         Some(Token::Retv)      => { ts.advance(); Ok(Instruction::Retv(ts.expect_int()?)) }

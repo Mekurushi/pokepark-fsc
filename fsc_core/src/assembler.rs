@@ -14,6 +14,7 @@ pub enum Opcode {
     Ret = 0x06,
     GrowStack = 0x07,
     Jmp = 0x8,
+    JeqImm = 0xa,
     LoadArg = 0x0b,
     StoreArg = 0x0c,
     Push = 0x10,
@@ -225,6 +226,23 @@ impl Assembler {
         self.emit(encode(0, JmpType::Jeq as u8, Opcode::Jmp as u8));
         Ok(())
     }
+
+    // TODO: integrate jeq_imm cleanly, don't like current impl at all; also get integer handling
+    // straight
+    pub fn emit_jeq_imm(&mut self, imm: i8, label: &str) -> AssemblerResult<()>  {
+        let function = match self.state {
+            EmitState::InFunction(ref function) => function,
+            EmitState::Idle => Err(AssemblerError::LabelOutsideFunction(label.to_string()))?
+        };
+        self.relocations.push(Relocation {
+            code_offset: self.program_counter,
+            symbol: label.to_string(),
+            kind: RelocationKind::Local(function.to_string()),
+        });
+        self.emit(encode(0, imm as u8, Opcode::JeqImm as u8));
+        Ok(())
+    }
+
     pub fn emit_jnz(&mut self, label: &str) -> AssemblerResult<()>  {
         let function = match self.state {
             EmitState::InFunction(ref function) => function,
@@ -552,6 +570,15 @@ mod emit_tests {
         asm.emit_jeq("target").unwrap();
         // [operand: 0x0000][JmpType::Jeq = 0x07][Opcode::Jmp = 0x08]
         assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x07, 0x08]);
+    }
+
+    #[test]
+    fn emit_jeq_imm_bytes() {
+        let mut asm = assembler_in_function();
+        asm.define_label("target").unwrap();
+        asm.emit_jeq_imm(0x2,"target").unwrap();
+        // [operand: 0x0000][imm = 0x02][Opcode::JeqImm = 0x0a]
+        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x02, 0x0a]);
     }
 
 

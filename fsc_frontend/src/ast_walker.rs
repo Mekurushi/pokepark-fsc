@@ -67,6 +67,7 @@ impl<'a> AstWalker<'a> {
             ast::Instruction::JzPause(label)   => self.core.emit_jz_pause(label),
             ast::Instruction::Jz(label)   => self.core.emit_jz(label),
             ast::Instruction::Jeq(label)   => self.core.emit_jeq(label),
+            ast::Instruction::JeqImm{imm, label}   => self.core.emit_jeq_imm(*imm, label),
             ast::Instruction::Eq0   => Ok(self.core.emit_eq0()),
             ast::Instruction::Eq   => Ok(self.core.emit_eq()),
             ast::Instruction::Ret(n)       => Ok(self.core.emit_ret(*n)),

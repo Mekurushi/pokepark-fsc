@@ -4,6 +4,7 @@ pub enum ParseError {
     UnexpectedToken { got: String, expected: &'static str, offset: usize },
     UnexpectedEof   { expected: &'static str },
     LexError        { offset: usize },
+    IntOutOfRange { value: i32, offset: usize },
 }
 
 impl std::fmt::Display for ParseError {
@@ -15,6 +16,8 @@ impl std::fmt::Display for ParseError {
                 write!(f, "unexpected end of file, expected {expected}"),
             Self::LexError { offset } =>
                 write!(f, "unrecognised token at offset {offset}"),
+            Self::IntOutOfRange { offset, value } =>
+                write!(f, "unexpected int value `{value}` at offset {offset}"),
         }
     }
 }

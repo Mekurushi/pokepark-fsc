@@ -80,6 +80,9 @@ pub enum Token {
     #[token("jeq")]
     Jeq,
 
+    #[token("jeq_imm")]
+    JeqImm,
+
     #[token("eq0")]
     Eq0,
 
@@ -136,8 +139,6 @@ pub enum Token {
     i32::from_str_radix(&lex.slice()[2..], 16).ok()
 })]
     Int32(i32),
-
-
     #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*", |lex| lex.slice().to_string())]
     Ident(String)
 

@@ -41,6 +41,7 @@ pub enum Instruction {
     JzPause(String),
     Jz(String),
     Jeq(String),
+    JeqImm{ imm: i8, label: String },
     Eq0,
     Eq,
     LStr(String),
