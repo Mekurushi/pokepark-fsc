@@ -24,7 +24,7 @@ pub enum Opcode {
     LStr = 0x13,
     Alu = 0x14,
     FAlu = 0x15,
-    Eq = 0x16,
+    Cmp = 0x16,
     Feq = 0x17,
     Shift = 0x18,
     Lea = 0x19,
@@ -83,7 +83,7 @@ pub enum FaluOp {
 }
 
 #[repr(u16)]
-pub enum EqOp {
+pub enum CmpOp {
     Eq = 0xb,
     Neq = 0xc,
     Lt = 0xd,
@@ -528,27 +528,53 @@ impl Assembler {
                 .build(),
         );
     }
-    pub fn emit_neq(&mut self) {
-        self.emit(encode(EqOp::Neq as i16, 0, Opcode::Eq as u8));
-    }
+
+    // --- eq ---
     pub fn emit_eq(&mut self) {
-        self.emit(encode(EqOp::Eq as i16, 0, Opcode::Eq as u8));
+        self.emit(
+            InsnWord::new(Opcode::Cmp as u8)
+                .operand(CmpOp::Eq as i16)
+                .build(),
+        );
+    }
+    pub fn emit_neq(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::Cmp as u8)
+                .operand(CmpOp::Neq as i16)
+                .build(),
+        );
     }
 
     pub fn emit_lt(&mut self) {
-        self.emit(encode(EqOp::Lt as i16, 0, Opcode::Eq as u8));
+        self.emit(
+            InsnWord::new(Opcode::Cmp as u8)
+                .operand(CmpOp::Lt as i16)
+                .build(),
+        );
     }
 
     pub fn emit_gt(&mut self) {
-        self.emit(encode(EqOp::Gt as i16, 0, Opcode::Eq as u8));
+        self.emit(
+            InsnWord::new(Opcode::Cmp as u8)
+                .operand(CmpOp::Gt as i16)
+                .build(),
+        );
     }
 
     pub fn emit_le(&mut self) {
-        self.emit(encode(EqOp::Le as i16, 0, Opcode::Eq as u8));
+        self.emit(
+            InsnWord::new(Opcode::Cmp as u8)
+                .operand(CmpOp::Le as i16)
+                .build(),
+        );
     }
 
     pub fn emit_ge(&mut self) {
-        self.emit(encode(EqOp::Ge as i16, 0, Opcode::Eq as u8));
+        self.emit(
+            InsnWord::new(Opcode::Cmp as u8)
+                .operand(CmpOp::Ge as i16)
+                .build(),
+        );
     }
 
     pub fn emit_sl(&mut self) {
