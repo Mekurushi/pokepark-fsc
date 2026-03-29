@@ -23,9 +23,19 @@ pub enum Opcode {
     PushResult = 0x12,
     LStr = 0x13,
     Alu = 0x14,
+    Falu = 0x15,
     Eq = 0x16,
 }
 
+#[repr(u16)]
+pub enum FaluOp {
+    Fadd = 0,
+    Fsub = 1,
+    Fmul = 2,
+    Fdiv = 3,
+    Feq0 = 9,
+    Fneg = 10
+}
 
 #[repr(u16)]
 pub enum EqOp {
@@ -237,6 +247,11 @@ impl Assembler {
 
     pub fn emit_neg(&mut self) {
         self.emit(encode(AluOp::Neg as i16, 0, Opcode::Alu as u8));
+
+    }
+
+    pub fn emit_fadd(&mut self) {
+        self.emit(encode(FaluOp::Fadd as i16, 0, Opcode::Falu as u8));
 
     }
 
@@ -539,6 +554,14 @@ mod emit_tests {
         assert_eq!(last_bytes(&asm), [0x00, 0x0a, 0x00, 0x14]);
     }
 
+    // --- falu ---
+    #[test]
+    fn emit_fadd() {
+        let mut asm = assembler_in_function();
+        asm.emit_fadd();
+
+        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x00, 0x15]);
+    }
 
     // --- push ---
 

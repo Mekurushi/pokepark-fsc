@@ -35,6 +35,7 @@ pub enum Instruction {
     Xor,
     Not,
     Neg,
+    Fadd,
     Push(i16),
     PushImm(i32),
     PushResult,

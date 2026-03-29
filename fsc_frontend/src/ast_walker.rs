@@ -63,6 +63,7 @@ impl<'a> AstWalker<'a> {
             ast::Instruction::Xor          => Ok(self.core.emit_xor()),
             ast::Instruction::Not          => Ok(self.core.emit_not()),
             ast::Instruction::Neg          => Ok(self.core.emit_neg()),
+            ast::Instruction::Fadd          => Ok(self.core.emit_fadd()),
             ast::Instruction::LStr(s)      => self.core.emit_lstr(s),
             ast::Instruction::DelayLoad     => Ok(self.core.emit_delay_load()),
             ast::Instruction::DelayNeq0     => Ok(self.core.emit_delay_neq0()),

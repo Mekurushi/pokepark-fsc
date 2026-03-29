@@ -81,6 +81,9 @@ pub enum Token {
     #[token("neg")]
     Neg,
 
+    #[token("fadd")]
+    Fadd,
+
 
     #[token("push")]
     Push,
