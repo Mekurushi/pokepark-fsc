@@ -1,6 +1,6 @@
-use crate::binary::FscriptBinary;
 use crate::binary::symbol_table::BinarySymbolTable;
-use crate::encoding::{InsnWord, calculate_call_operand, encode};
+use crate::binary::FscriptBinary;
+use crate::encoding::{calculate_call_operand, encode, InsnWord};
 use crate::error::{AssemblerError, AssemblerResult};
 use crate::string_table::StringTable;
 use crate::symbol_table::{Scope, SymbolTable};
@@ -268,9 +268,14 @@ impl Assembler {
                 .build(),
         );
     }
+    // --- grow_stack (0x7) ---
 
-    pub fn emit_grow_stack(&mut self, n: i16) {
-        self.emit(encode(n, 0, Opcode::GrowStack as u8));
+    pub fn emit_grow_stack(&mut self, operand: i16) {
+        self.emit(
+            InsnWord::new(Opcode::GrowStack as u8)
+                .operand(operand)
+                .build(),
+        );
     }
 
     pub fn emit_shrink_stack(&mut self, n: i16) {
@@ -823,6 +828,14 @@ mod emit_tests {
 
         assert_eq!(last_bytes(&asm), [0x00, 0x02, 0x01, 0x06]);
     }
+    // --- grow_stack ---
+    #[test]
+    fn emit_grow_stack() {
+        let mut asm = assembler_in_function();
+        asm.emit_grow_stack(1);
+        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x00, 0x07]);
+    }
+
     // --- alu ---
 
     #[test]
@@ -1023,12 +1036,6 @@ mod emit_tests {
     }
 
     // --- stack ---
-    #[test]
-    fn emit_grow_stack() {
-        let mut asm = assembler_in_function();
-        asm.emit_grow_stack(1);
-        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x00, 0x07]);
-    }
 
     #[test]
     fn emit_shrink_stack() {
