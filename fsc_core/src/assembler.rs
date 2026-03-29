@@ -26,6 +26,14 @@ pub enum Opcode {
     Falu = 0x15,
     Eq = 0x16,
     Feq = 0x17,
+    Shift = 0x18,
+}
+
+#[repr(u16)]
+pub enum ShiftOp {
+    Sl = 0,
+    Srm = 1,
+    Sr = 2,
 }
 
 #[repr(u16)]
@@ -238,6 +246,10 @@ impl Assembler {
 
     pub fn emit_ge(&mut self) {
         self.emit(encode(EqOp::Ge as i16, 0, Opcode::Eq as u8));
+    }
+
+    pub fn emit_sl(&mut self) {
+        self.emit(encode(ShiftOp::Sl as i16, 0, Opcode::Shift as u8));
     }
 
     pub fn emit_add(&mut self) {
@@ -888,6 +900,14 @@ mod emit_tests {
         let mut asm = assembler_in_function();
         asm.emit_ge();
         assert_eq!(last_bytes(&asm), [0x00, 0x10, 0x00, 0x16]);
+    }
+
+    // --- Shift ---
+    #[test]
+    fn emit_sl() {
+        let mut asm = assembler_in_function();
+        asm.emit_sl();
+        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x00, 0x18]);
     }
 
     // --- jmp ---

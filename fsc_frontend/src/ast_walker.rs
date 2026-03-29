@@ -100,6 +100,7 @@ impl<'a> AstWalker<'a> {
             ast::Instruction::Gt => Ok(self.core.emit_gt()),
             ast::Instruction::Le => Ok(self.core.emit_le()),
             ast::Instruction::Ge => Ok(self.core.emit_ge()),
+            ast::Instruction::Sl => Ok(self.core.emit_sl()),
             ast::Instruction::Ret(n) => Ok(self.core.emit_ret(*n)),
             ast::Instruction::Retv(n) => Ok(self.core.emit_retv(*n)),
         }
