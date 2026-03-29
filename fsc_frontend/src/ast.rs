@@ -23,6 +23,7 @@ pub enum Instruction {
     LoadArg(i16),     // load_arg 0x0
     StoreArg(i16),
     ArgAddi(i16),
+    ArgSubi(i16),
     Add,              // add
     Sub,                // sub
     Push(i16),               // push

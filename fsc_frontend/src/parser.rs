@@ -175,6 +175,7 @@ fn parse_instruction(ts: &mut TokenStream) -> ParseResult<Instruction> {
         Some(Token::LoadArg)   => { ts.advance(); Ok(Instruction::LoadArg(ts.expect_int()?)) }
         Some(Token::StoreArg)   => { ts.advance(); Ok(Instruction::StoreArg(ts.expect_int()?)) }
         Some(Token::ArgAddi)   => { ts.advance(); Ok(Instruction::ArgAddi(ts.expect_int()?)) }
+        Some(Token::ArgSubi)   => { ts.advance(); Ok(Instruction::ArgSubi(ts.expect_int()?)) }
         Some(Token::Add)       => { ts.advance(); Ok(Instruction::Add) }
         Some(Token::Sub)       => { ts.advance(); Ok(Instruction::Sub) }
         Some(Token::Push)       => { ts.advance(); Ok(Instruction::Push(ts.expect_int()?)) }

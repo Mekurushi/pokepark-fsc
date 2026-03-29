@@ -41,7 +41,8 @@ pub enum AluOp {
 #[repr(u8)]
 pub enum ArgType {
     StoreArg = 0,
-    ArgAddi = 1
+    ArgAddi = 1,
+    ArgSubi = 2
 
 }
 
@@ -141,6 +142,9 @@ impl Assembler {
     }
     pub fn emit_arg_addi(&mut self, n: i16) {
         self.emit(encode(n, ArgType::ArgAddi as u8, Opcode::ArgAlu as u8));
+    }
+    pub fn emit_arg_subi(&mut self, n: i16) {
+        self.emit(encode(n, ArgType::ArgSubi as u8, Opcode::ArgAlu as u8));
     }
     pub fn emit_delay_load(&mut self, ) {
         self.emit(encode(0, DelayType::DelayLoad as u8, Opcode::Delay as u8));
@@ -463,6 +467,13 @@ mod emit_tests {
         let mut asm = assembler_in_function();
         asm.emit_arg_addi(1);
         assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x01, 0x0c]);
+    }
+
+    #[test]
+    fn emit_arg_subi() {
+        let mut asm = assembler_in_function();
+        asm.emit_arg_subi(1);
+        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x02, 0x0c]);
     }
 
     // --- delay_load ---

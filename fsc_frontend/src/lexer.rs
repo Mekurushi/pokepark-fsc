@@ -24,6 +24,9 @@ pub enum Token {
     #[token("arg_addi")]
     ArgAddi,
 
+    #[token("arg_subi")]
+    ArgSubi,
+
     #[token("retv")]
     Retv,
 

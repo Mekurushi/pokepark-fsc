@@ -48,6 +48,7 @@ impl<'a> AstWalker<'a> {
             ast::Instruction::LoadArg(n)   => Ok(self.core.emit_load_arg(*n)),
             ast::Instruction::StoreArg(n)   => Ok(self.core.emit_store_arg(*n)),
             ast::Instruction::ArgAddi(n)   => Ok(self.core.emit_arg_addi(*n)),
+            ast::Instruction::ArgSubi(n)   => Ok(self.core.emit_arg_subi(*n)),
             ast::Instruction::Push(n)      => Ok(self.core.emit_push(*n)),
             ast::Instruction::PushImm(n)      => Ok(self.core.emit_push_imm(*n)),
             ast::Instruction::PushResult      => Ok(self.core.emit_push_result()),
