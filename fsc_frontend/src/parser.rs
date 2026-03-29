@@ -192,6 +192,7 @@ fn parse_instruction(ts: &mut TokenStream) -> ParseResult<Instruction> {
         Some(Token::Fsub)       => { ts.advance(); Ok(Instruction::Fsub) }
         Some(Token::Fmul)       => { ts.advance(); Ok(Instruction::Fmul) }
         Some(Token::Fdiv)       => { ts.advance(); Ok(Instruction::Fdiv) }
+        Some(Token::Feq0)       => { ts.advance(); Ok(Instruction::Feq0) }
         Some(Token::Push)       => { ts.advance(); Ok(Instruction::Push(ts.expect_int()?)) }
         Some(Token::PushImm)       => { ts.advance(); Ok(Instruction::PushImm(ts.expect_int32()?)) }
         Some(Token::PushResult)       => { ts.advance(); Ok(Instruction::PushResult) }
