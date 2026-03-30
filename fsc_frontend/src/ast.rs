@@ -100,6 +100,8 @@ pub enum Instruction {
     SwiAdd,
     SwSub,
     SwiSub,
+    ItoF(i16),
+    FtoI(i16),
     Retv(i16), // retv -0x2
     Ret(i16),  // ret -0x2
 }

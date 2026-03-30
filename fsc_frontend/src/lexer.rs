@@ -235,6 +235,12 @@ pub enum Token {
     #[token("swisub")]
     SwiSub,
 
+    #[token("itof")]
+    ItoF,
+
+    #[token("ftoi")]
+    FtoI,
+
     #[token("push_result")]
     PushResult,
 

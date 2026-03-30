@@ -1,6 +1,6 @@
 use crate::ast;
-use fsc_core::Assembler;
 use fsc_core::error::AssemblerResult;
+use fsc_core::Assembler;
 
 pub struct AstWalker<'a> {
     core: &'a mut Assembler,
@@ -341,6 +341,15 @@ impl<'a> AstWalker<'a> {
             }
             ast::Instruction::SwiSub => {
                 self.core.emit_swisub();
+                Ok(())
+            }
+
+            ast::Instruction::ItoF(operand) => {
+                self.core.emit_itof(*operand);
+                Ok(())
+            }
+            ast::Instruction::FtoI(operand) => {
+                self.core.emit_ftoi(*operand);
                 Ok(())
             }
         }

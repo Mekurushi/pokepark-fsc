@@ -562,6 +562,16 @@ fn parse_instruction(ts: &mut TokenStream) -> ParseResult<Instruction> {
             Ok(Instruction::SwiSub)
         }
 
+        Some(Token::ItoF) => {
+            ts.advance();
+            Ok(Instruction::ItoF(ts.expect_int()?))
+        }
+
+        Some(Token::FtoI) => {
+            ts.advance();
+            Ok(Instruction::FtoI(ts.expect_int()?))
+        }
+
         Some(Token::SysCall(argc)) => {
             let argc = *argc;
             ts.advance();

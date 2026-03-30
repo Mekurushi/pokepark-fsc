@@ -1,6 +1,6 @@
-use crate::binary::FscriptBinary;
 use crate::binary::symbol_table::BinarySymbolTable;
-use crate::encoding::{InsnWord, calculate_call_operand};
+use crate::binary::FscriptBinary;
+use crate::encoding::{calculate_call_operand, InsnWord};
 use crate::error::{AssemblerError, AssemblerResult};
 use crate::string_table::StringTable;
 use crate::symbol_table::{Scope, SymbolTable};
@@ -30,6 +30,7 @@ pub enum Opcode {
     Lea = 0x19,
     Load = 0x1A,
     Store = 0x1B,
+    Conv = 0x1C,
 }
 
 #[repr(u8)]
@@ -131,6 +132,12 @@ pub enum LoadStoreSize {
     Byte = 1,
     Short = 2,
     Word = 4,
+}
+
+#[repr(u8)]
+pub enum ConvSubtype {
+    ItoF = 0,
+    FtoI = 1,
 }
 
 enum RelocationKind {
@@ -875,6 +882,24 @@ impl Assembler {
         );
     }
 
+    // --- Conv (0x1c) ---
+    pub fn emit_itof(&mut self, operand: i16) {
+        self.emit(
+            InsnWord::new(Opcode::Conv as u8)
+                .operand(operand)
+                .subtype(ConvSubtype::ItoF as u8)
+                .build(),
+        );
+    }
+
+    pub fn emit_ftoi(&mut self, operand: i16) {
+        self.emit(
+            InsnWord::new(Opcode::Conv as u8)
+                .operand(operand)
+                .subtype(ConvSubtype::FtoI as u8)
+                .build(),
+        );
+    }
     // --- helpers ---
 
     fn emit(&mut self, word: u32) {
@@ -2092,5 +2117,35 @@ mod emit_tests {
         let mut asm = assembler_in_function();
         asm.emit_swisub();
         assert_eq!(last_bytes(&asm), [0x00, 0x04, 0x12, 0x1b]);
+    }
+
+    // --- Conv ---
+
+    #[test]
+    fn emit_itof_1() {
+        let mut asm = assembler_in_function();
+        asm.emit_itof(1);
+        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x00, 0x1c]);
+    }
+
+    #[test]
+    fn emit_itof_0() {
+        let mut asm = assembler_in_function();
+        asm.emit_itof(0);
+        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x00, 0x1c]);
+    }
+
+    #[test]
+    fn emit_ftoi_1() {
+        let mut asm = assembler_in_function();
+        asm.emit_ftoi(1);
+        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x01, 0x1c]);
+    }
+
+    #[test]
+    fn emit_ftoi_0() {
+        let mut asm = assembler_in_function();
+        asm.emit_ftoi(0);
+        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x01, 0x1c]);
     }
 }
