@@ -477,6 +477,31 @@ fn parse_instruction(ts: &mut TokenStream) -> ParseResult<Instruction> {
             ts.advance();
             Ok(Instruction::SetArgMode)
         }
+        Some(Token::Lb) => {
+            ts.advance();
+            Ok(Instruction::Lb)
+        }
+        Some(Token::Ls) => {
+            ts.advance();
+            Ok(Instruction::Ls)
+        }
+        Some(Token::Lw) => {
+            ts.advance();
+            Ok(Instruction::Lw)
+        }
+        Some(Token::Lbi) => {
+            ts.advance();
+            Ok(Instruction::Lbi)
+        }
+        Some(Token::Lsi) => {
+            ts.advance();
+            Ok(Instruction::Lsi)
+        }
+        Some(Token::Lwi) => {
+            ts.advance();
+            Ok(Instruction::Lwi)
+        }
+
         Some(Token::SysCall(argc)) => {
             let argc = *argc;
             ts.advance();

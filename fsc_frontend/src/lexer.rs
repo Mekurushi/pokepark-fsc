@@ -189,6 +189,19 @@ pub enum Token {
     #[token("lea")]
     Lea,
 
+    #[token("lbi")]
+    Lbi,
+    #[token("lsi")]
+    Lsi,
+    #[token("lwi")]
+    Lwi,
+    #[token("lb")]
+    Lb,
+    #[token("ls")]
+    Ls,
+    #[token("lw")]
+    Lw,
+
     #[token("push_result")]
     PushResult,
 

@@ -28,6 +28,7 @@ pub enum Opcode {
     FCmp = 0x17,
     Shift = 0x18,
     Lea = 0x19,
+    Load = 0x1A,
 }
 
 #[repr(u8)]
@@ -659,6 +660,42 @@ impl Assembler {
             kind: RelocationKind::Global,
         });
         self.emit(InsnWord::new(Opcode::Lea as u8).build());
+    }
+
+    // --- Load (0x1a) ---
+
+    pub fn emit_lb(&mut self) {
+        self.emit(InsnWord::new(Opcode::Load as u8).operand(1).build());
+    }
+    pub fn emit_ls(&mut self) {
+        self.emit(InsnWord::new(Opcode::Load as u8).operand(2).build());
+    }
+    pub fn emit_lw(&mut self) {
+        self.emit(InsnWord::new(Opcode::Load as u8).operand(4).build());
+    }
+    pub fn emit_lbi(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::Load as u8)
+                .operand(1)
+                .indirect_load(true)
+                .build(),
+        );
+    }
+    pub fn emit_lsi(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::Load as u8)
+                .operand(2)
+                .indirect_load(true)
+                .build(),
+        );
+    }
+    pub fn emit_lwi(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::Load as u8)
+                .operand(4)
+                .indirect_load(true)
+                .build(),
+        );
     }
 
     // --- helpers ---
@@ -1714,5 +1751,48 @@ mod emit_tests {
 
         let binary = asm.finalize("test".to_string()).unwrap();
         assert_eq!(&binary.code[0..4], &[0x00, 0x01, 0x00, 0x19]);
+    }
+
+    // --- Load ---
+
+    #[test]
+    fn emit_lb() {
+        let mut asm = assembler_in_function();
+        asm.emit_lb();
+        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x00, 0x1a]);
+    }
+    #[test]
+    fn emit_ls() {
+        let mut asm = assembler_in_function();
+        asm.emit_ls();
+        assert_eq!(last_bytes(&asm), [0x00, 0x02, 0x00, 0x1a]);
+    }
+
+    #[test]
+    fn emit_lw() {
+        let mut asm = assembler_in_function();
+        asm.emit_lw();
+        assert_eq!(last_bytes(&asm), [0x00, 0x04, 0x00, 0x1a]);
+    }
+
+    #[test]
+    fn emit_lbi_bytes() {
+        let mut asm = assembler_in_function();
+        asm.emit_lbi();
+        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x10, 0x1a]);
+    }
+
+    #[test]
+    fn emit_lsi_bytes() {
+        let mut asm = assembler_in_function();
+        asm.emit_lsi();
+        assert_eq!(last_bytes(&asm), [0x00, 0x02, 0x10, 0x1a]);
+    }
+
+    #[test]
+    fn emit_lwi_bytes() {
+        let mut asm = assembler_in_function();
+        asm.emit_lwi();
+        assert_eq!(last_bytes(&asm), [0x00, 0x04, 0x10, 0x1a]);
     }
 }

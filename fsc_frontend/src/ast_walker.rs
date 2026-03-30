@@ -258,6 +258,30 @@ impl<'a> AstWalker<'a> {
                 self.core.emit_retv(*n);
                 Ok(())
             }
+            ast::Instruction::Lb => {
+                self.core.emit_lb();
+                Ok(())
+            }
+            ast::Instruction::Ls => {
+                self.core.emit_ls();
+                Ok(())
+            }
+            ast::Instruction::Lw => {
+                self.core.emit_lw();
+                Ok(())
+            }
+            ast::Instruction::Lbi => {
+                self.core.emit_lbi();
+                Ok(())
+            }
+            ast::Instruction::Lsi => {
+                self.core.emit_lsi();
+                Ok(())
+            }
+            ast::Instruction::Lwi => {
+                self.core.emit_lwi();
+                Ok(())
+            }
         }
     }
 }

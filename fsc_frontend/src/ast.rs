@@ -78,6 +78,12 @@ pub enum Instruction {
     Sr,
     Lea(String),
     LStr(String),
+    Lb,
+    Ls,
+    Lw,
+    Lbi,
+    Lsi,
+    Lwi,
     Retv(i16), // retv -0x2
     Ret(i16),  // ret -0x2
 }
