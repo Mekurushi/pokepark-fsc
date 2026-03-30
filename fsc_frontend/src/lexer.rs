@@ -249,7 +249,7 @@ pub fn tokenize(src: &str) -> ParseResult<Vec<(Token, std::ops::Range<usize>)>> 
         let span = lex.span();
         match result {
             Ok(tok) => tokens.push((tok, span)),
-            Err(_) => return Err(ParseError::LexError { offset: span.start }),
+            Err(()) => return Err(ParseError::LexError { offset: span.start }),
         }
     }
     Ok(tokens)

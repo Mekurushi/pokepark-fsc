@@ -1,4 +1,5 @@
 use crate::error::{AssemblerError, AssemblerResult};
+use std::string::FromUtf8Error;
 const B40_ALPHABET: &[u8; 40] = b" 0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_-/";
 
 fn encode_b40_uint(s: &[u8]) -> AssemblerResult<u32> {
@@ -10,7 +11,9 @@ fn encode_b40_uint(s: &[u8]) -> AssemblerResult<u32> {
             .iter()
             .position(|&c| c == upper)
             .ok_or(AssemblerError::InvalidB40Char(upper as char))?;
-        result = result * 40 + idx as u32;
+        let idx =
+            u32::try_from(idx).map_err(|_foo| AssemblerError::InvalidB40Char(upper as char))?;
+        result = result * 40 + idx;
     }
     for _ in s.len()..6 {
         result *= 40;
@@ -31,23 +34,25 @@ pub fn encode_b40(name: &str) -> AssemblerResult<[u8; 8]> {
     out[4..8].copy_from_slice(&second.to_be_bytes());
     Ok(out)
 }
-fn _decode_b40_uint(mut val: u32) -> String {
+fn decode_b40_uint(mut val: u32) -> Result<String, FromUtf8Error> {
     let mut chars = [0u8; 6];
     for i in (0..6).rev() {
         let idx = (val % 40) as usize;
         chars[i] = B40_ALPHABET[idx];
         val /= 40;
     }
-    unsafe { String::from_utf8_unchecked(chars.to_vec()) }
+    String::from_utf8(chars.to_vec())
 }
-pub fn _decode_b40(bytes: &[u8; 8]) -> String {
-    let a = u32::from_be_bytes(bytes[0..4].try_into().unwrap());
-    let b = u32::from_be_bytes(bytes[4..8].try_into().unwrap());
-    (_decode_b40_uint(a) + &_decode_b40_uint(b))
-        .trim_end()
-        .to_string()
+#[allow(unused)]
+pub fn decode_b40(bytes: [u8; 8]) -> Result<String, FromUtf8Error> {
+    let a = u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+    let b = u32::from_be_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
+    let mut result = decode_b40_uint(a)?;
+    result.push_str(&decode_b40_uint(b)?);
+    Ok(result.trim_end().to_string())
 }
-pub fn _validate_b40_chars(name: &str) -> AssemblerResult<()> {
+#[allow(unused)]
+pub fn validate_b40_chars(name: &str) -> AssemblerResult<()> {
     for byte in name.bytes() {
         let upper = byte.to_ascii_uppercase();
         if !B40_ALPHABET.contains(&upper) {
@@ -59,6 +64,9 @@ pub fn _validate_b40_chars(name: &str) -> AssemblerResult<()> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
+    #![allow(clippy::expect_used)]
+    #![allow(clippy::panic)]
     use super::*;
 
     #[test]
@@ -69,7 +77,7 @@ mod tests {
 
     #[test]
     fn test_b40_decode() {
-        let decoded = _decode_b40(&[0x60, 0x7a, 0xed, 0x2a, 0xdf, 0x64, 0x8c, 0x60]);
+        let decoded = decode_b40([0x60, 0x7a, 0xed, 0x2a, 0xdf, 0x64, 0x8c, 0x60]).unwrap();
         assert_eq!(decoded, "EVAR01ZN01_N");
     }
 
@@ -77,14 +85,14 @@ mod tests {
     fn test_b40_roundtrip() {
         let name = "ADD";
         let encoded = encode_b40(name).unwrap();
-        let decoded = _decode_b40(&encoded);
+        let decoded = decode_b40(encoded).unwrap();
         assert_eq!(decoded, name);
     }
     #[test]
     fn test_b40_roundtrip_full_len() {
         let name = "EVAR01ZN01_N";
         let encoded = encode_b40(name).unwrap();
-        let decoded = _decode_b40(&encoded);
+        let decoded = decode_b40(encoded).unwrap();
         assert_eq!(decoded, name);
     }
 
@@ -96,12 +104,12 @@ mod tests {
 
     #[test]
     fn test_validate_b40_chars() {
-        let invalid_result = _validate_b40_chars("INVALID!");
+        let invalid_result = validate_b40_chars("INVALID!");
         assert!(matches!(
             invalid_result,
             Err(AssemblerError::InvalidB40Char('!'))
         ));
-        let valid_result = _validate_b40_chars("VALID");
+        let valid_result = validate_b40_chars("VALID");
         assert!(matches!(valid_result, Ok(..)));
     }
 }

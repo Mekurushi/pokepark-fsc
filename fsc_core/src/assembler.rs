@@ -1,6 +1,6 @@
-use crate::binary::symbol_table::BinarySymbolTable;
 use crate::binary::FscriptBinary;
-use crate::encoding::{calculate_call_operand, InsnWord};
+use crate::binary::symbol_table::BinarySymbolTable;
+use crate::encoding::{InsnWord, calculate_call_operand};
 use crate::error::{AssemblerError, AssemblerResult};
 use crate::string_table::StringTable;
 use crate::symbol_table::{Scope, SymbolTable};
@@ -251,7 +251,7 @@ impl Assembler {
     // --- Return (0x6) ---
     pub fn emit_ret(&mut self, n: i16) {
         // TODO: define explicit usage of operand; Ghidra visualizes as neagtive but actual operand is positive
-        let operand = n.unsigned_abs() as i16;
+        let operand = n.unsigned_abs().cast_signed();
         self.emit(
             InsnWord::new(Opcode::Return as u8)
                 .subtype(ReturnSubtype::Ret as u8)
@@ -260,7 +260,7 @@ impl Assembler {
         );
     }
     pub fn emit_retv(&mut self, n: i16) {
-        let operand = n.unsigned_abs() as i16;
+        let operand = n.unsigned_abs().cast_signed();
         self.emit(
             InsnWord::new(Opcode::Return as u8)
                 .subtype(ReturnSubtype::Retv as u8)
@@ -314,10 +314,10 @@ impl Assembler {
     // straight
     pub fn emit_jeq_imm(&mut self, imm: i8, label: &str) -> AssemblerResult<()> {
         let function_name = self.current_function(label)?;
-        self.push_relocation(label, RelocationKind::Local(function_name.to_string()));
+        self.push_relocation(label, RelocationKind::Local(function_name.clone()));
         self.emit(
             InsnWord::new(Opcode::JeqImm as u8)
-                .subtype(imm as u8)
+                .subtype(imm.cast_unsigned())
                 .build(),
         );
         Ok(())
@@ -685,7 +685,7 @@ impl Assembler {
 
     fn emit_jump(&mut self, subtype: JumpSubtype, label: &str) -> AssemblerResult<()> {
         let function_name = self.current_function(label)?;
-        self.push_relocation(label, RelocationKind::Local(function_name.to_string()));
+        self.push_relocation(label, RelocationKind::Local(function_name.clone()));
         self.emit(
             InsnWord::new(Opcode::Jump as u8)
                 .subtype(subtype as u8)
@@ -707,7 +707,7 @@ impl Assembler {
         ))
     }
     fn apply_relocations(&mut self) -> AssemblerResult<()> {
-        for relocation in self.relocations.iter_mut() {
+        for relocation in &mut self.relocations {
             let target = match &relocation.kind {
                 RelocationKind::Global => self.symbol_table.resolve_global(&relocation.symbol)?,
                 RelocationKind::Local(function) => self
@@ -734,6 +734,9 @@ impl Assembler {
 
 #[cfg(test)]
 mod emit_tests {
+    #![allow(clippy::unwrap_used)]
+    #![allow(clippy::expect_used)]
+    #![allow(clippy::panic)]
     use crate::assembler::Assembler;
     use crate::binary::FscriptBinary;
 
@@ -1383,7 +1386,7 @@ mod emit_tests {
     #[test]
     fn emit_push_imm() {
         let mut asm = assembler_in_function();
-        asm.emit_push_imm(0x3f808000u32);
+        asm.emit_push_imm(0x3f80_8000_u32);
         assert_eq!(&asm.code[0..4], &[0x00, 0x00, 0x00, 0x11]);
         assert_eq!(&asm.code[4..8], &[0x3f, 0x80, 0x80, 0x00]);
     }

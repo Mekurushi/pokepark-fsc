@@ -5,7 +5,7 @@ use std::fs::{read_to_string, write};
 use std::path::PathBuf;
 use std::process;
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
 
     if args.len() < 2 {
@@ -51,7 +51,7 @@ fn main() {
     let source = match read_to_string(&input) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("error reading file: {}", e);
+            eprintln!("error reading file: {e}");
             process::exit(1);
         }
     };
@@ -59,7 +59,7 @@ fn main() {
     let tokens = match lexer::tokenize(&source) {
         Ok(t) => t,
         Err(e) => {
-            eprintln!("lex error: {}", e);
+            eprintln!("lex error: {e}");
             process::exit(1);
         }
     };
@@ -67,7 +67,7 @@ fn main() {
     let program = match parser::parse(tokens) {
         Ok(p) => p,
         Err(e) => {
-            eprintln!("parse error: {}", e);
+            eprintln!("parse error: {e}");
             process::exit(1);
         }
     };
@@ -77,15 +77,15 @@ fn main() {
     match walker.walk(&program) {
         Ok(a) => a,
         Err(e) => {
-            eprintln!("assembler error: {}", e);
+            eprintln!("assembler error: {e}");
             process::exit(1);
         }
-    };
+    }
 
     let binary = match core.finalize(script_name) {
         Ok(b) => b,
         Err(e) => {
-            eprintln!("binary error: {}", e);
+            eprintln!("binary error: {e}");
             process::exit(1);
         }
     };
@@ -93,10 +93,11 @@ fn main() {
     let bytes = match binary.serialize() {
         Ok(b) => b,
         Err(e) => {
-            eprintln!("serialize error: {}", e);
+            eprintln!("serialize error: {e}");
             process::exit(1);
         }
     };
 
-    write(output, bytes).expect("failed to write output file");
+    write(output, bytes)?;
+    Ok(())
 }

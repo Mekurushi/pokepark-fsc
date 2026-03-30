@@ -1,7 +1,7 @@
 use crate::binary::header::{FscriptHeader, HEADER_SIZE};
 use crate::binary::string_table::BinaryStringTable;
 use crate::binary::symbol_table::BinarySymbolTable;
-use crate::error::AssemblerResult;
+use crate::error::{AssemblerError, AssemblerResult};
 
 mod b40string;
 mod header;
@@ -32,8 +32,10 @@ impl FscriptBinary {
 
     pub fn serialize(&self) -> AssemblerResult<Vec<u8>> {
         let code_ptr = HEADER_SIZE;
-        let symbol_table_ptr = code_ptr + self.code.len() as u32;
-        let string_table_ptr = symbol_table_ptr + self.symbol_table.byte_len();
+        let symbol_table_ptr = code_ptr
+            + u32::try_from(self.code.len())
+                .map_err(|_err| AssemblerError::SectionTooLarge("code"))?;
+        let string_table_ptr = symbol_table_ptr + self.symbol_table.byte_len()?;
         let header = FscriptHeader::new(
             self.script_name.clone(),
             code_ptr,

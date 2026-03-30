@@ -35,7 +35,7 @@ impl FscriptHeader {
         buf[0x0c..0x10].copy_from_slice(&self.string_table_ptr.to_be_bytes());
         buf[0x10..0x14].copy_from_slice(&0u32.to_be_bytes()); // unused2
         buf[0x14..0x1c].copy_from_slice(&encode_b40(&self.script_name)?);
-        buf[0x1c..0x20].copy_from_slice(&0x01000000u32.to_be_bytes()); // unused3
+        buf[0x1c..0x20].copy_from_slice(&0x0100_0000_u32.to_be_bytes()); // unused3
         Ok(buf)
     }
 }

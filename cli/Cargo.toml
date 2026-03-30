@@ -8,5 +8,8 @@ name = "fsc"
 path = "src/main.rs"
 
 [dependencies]
-fsc_core     = { path = "../fsc_core" }
+fsc_core = { path = "../fsc_core" }
 fsc_frontend = { path = "../fsc_frontend" }
+
+[lints]
+workspace = true

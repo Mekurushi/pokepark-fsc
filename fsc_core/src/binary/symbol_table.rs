@@ -1,5 +1,5 @@
 use crate::binary::b40string::encode_b40;
-use crate::error::AssemblerResult;
+use crate::error::{AssemblerError, AssemblerResult};
 const SYMBOL_ENTRY_SIZE: u32 = 12;
 
 pub struct BinarySymbolTable {
@@ -47,7 +47,9 @@ impl BinarySymbolTable {
         Ok(buf)
     }
 
-    pub fn byte_len(&self) -> u32 {
-        self.entries.len() as u32 * SYMBOL_ENTRY_SIZE
+    pub fn byte_len(&self) -> AssemblerResult<u32> {
+        Ok(u32::try_from(self.entries.len())
+            .map_err(|_err| AssemblerError::SectionTooLarge("Symbol_Table"))?
+            * SYMBOL_ENTRY_SIZE)
     }
 }

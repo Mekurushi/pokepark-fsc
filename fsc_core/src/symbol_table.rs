@@ -46,7 +46,7 @@ impl SymbolTable {
     }
 
     pub fn define_local(&mut self, function: &str, label: String, offset: u32) {
-        let key = format!("{}.{}", function, label);
+        let key = format!("{function}.{label}");
         self.symbols.insert(
             key,
             Symbol {
@@ -62,7 +62,7 @@ impl SymbolTable {
     }
 
     pub fn lookup_local(&self, function: &str, label: &str) -> Option<&Symbol> {
-        self.symbols.get(&format!("{}.{}", function, label))
+        self.symbols.get(&format!("{function}.{label}"))
     }
 
     pub fn resolve_global(&self, name: &str) -> AssemblerResult<&Symbol> {

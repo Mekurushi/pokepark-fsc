@@ -18,8 +18,7 @@ impl TokenStream {
     fn offset(&self) -> usize {
         self.tokens
             .get(self.cursor)
-            .map(|(_, s)| s.start)
-            .unwrap_or(usize::MAX)
+            .map_or(usize::MAX, |(_, s)| s.start)
     }
 
     fn peek(&self) -> Option<&Token> {
@@ -45,10 +44,7 @@ impl TokenStream {
         if self.eat(expected) {
             return Ok(());
         }
-        let got = self
-            .peek()
-            .map(|t| format!("{t:?}"))
-            .unwrap_or("EOF".into());
+        let got = self.peek().map_or("EOF".into(), |t| format!("{t:?}"));
         Err(ParseError::UnexpectedToken {
             got,
             expected: label,
@@ -65,10 +61,7 @@ impl TokenStream {
     }
     fn expect_ident(&mut self) -> ParseResult<String> {
         self.eat_ident().ok_or_else(|| {
-            let got = self
-                .peek()
-                .map(|t| format!("{t:?}"))
-                .unwrap_or("EOF".into());
+            let got = self.peek().map_or("EOF".into(), |t| format!("{t:?}"));
             ParseError::UnexpectedToken {
                 got,
                 expected: "identifier",
@@ -87,10 +80,7 @@ impl TokenStream {
 
     fn expect_label(&mut self) -> ParseResult<String> {
         self.eat_label().ok_or_else(|| {
-            let got = self
-                .peek()
-                .map(|t| format!("{t:?}"))
-                .unwrap_or("EOF".into());
+            let got = self.peek().map_or("EOF".into(), |t| format!("{t:?}"));
             ParseError::UnexpectedToken {
                 got,
                 expected: "label",
@@ -106,7 +96,7 @@ impl TokenStream {
                 Ok(())
             }
             other => {
-                let got = other.map(|t| format!("{t:?}")).unwrap_or("EOF".into());
+                let got = other.map_or("EOF".into(), |t| format!("{t:?}"));
                 Err(ParseError::UnexpectedToken {
                     got,
                     expected: "':'",
@@ -122,10 +112,7 @@ impl TokenStream {
                 return Ok(*n);
             }
         }
-        let got = self
-            .peek()
-            .map(|t| format!("{t:?}"))
-            .unwrap_or("EOF".into());
+        let got = self.peek().map_or("EOF".into(), |t| format!("{t:?}"));
         Err(ParseError::UnexpectedToken {
             got,
             expected: "integer",
@@ -139,10 +126,7 @@ impl TokenStream {
                 return Ok(*n);
             }
         }
-        let got = self
-            .peek()
-            .map(|t| format!("{t:?}"))
-            .unwrap_or("EOF".into());
+        let got = self.peek().map_or("EOF".into(), |t| format!("{t:?}"));
         Err(ParseError::UnexpectedToken {
             got,
             expected: "integer",
@@ -154,15 +138,12 @@ impl TokenStream {
         if let Some(Token::Int(n)) = self.peek() {
             let n = *n;
             self.advance();
-            return i8::try_from(n).map_err(|_| ParseError::IntOutOfRange {
-                value: n as i32,
+            return i8::try_from(n).map_err(|_err| ParseError::IntOutOfRange {
+                value: i32::from(n),
                 offset: self.offset(),
             });
         }
-        let got = self
-            .peek()
-            .map(|t| format!("{t:?}"))
-            .unwrap_or("EOF".into());
+        let got = self.peek().map_or("EOF".into(), |t| format!("{t:?}"));
         Err(ParseError::UnexpectedToken {
             got,
             expected: "int8",
@@ -176,10 +157,7 @@ impl TokenStream {
                 return Ok(s.clone());
             }
         }
-        let got = self
-            .peek()
-            .map(|t| format!("{t:?}"))
-            .unwrap_or("EOF".into());
+        let got = self.peek().map_or("EOF".into(), |t| format!("{t:?}"));
         Err(ParseError::UnexpectedToken {
             got,
             expected: "string literal",
@@ -210,7 +188,7 @@ fn parse_function(ts: &mut TokenStream) -> ParseResult<Function> {
     let body = parse_body(ts)?;
     Ok(Function {
         name,
-        _params: params,
+        params,
         private,
         body,
     })
@@ -231,7 +209,7 @@ fn parse_body(ts: &mut TokenStream) -> ParseResult<Vec<Statement>> {
     let mut body = Vec::new();
     loop {
         match ts.peek() {
-            None | Some(Token::Fn) | Some(Token::Private) => break,
+            None | Some(Token::Fn | Token::Private) => break,
             _ => body.push(parse_statement(ts)?),
         }
     }
@@ -367,7 +345,7 @@ fn parse_instruction(ts: &mut TokenStream) -> ParseResult<Instruction> {
         }
         Some(Token::PushImm) => {
             ts.advance();
-            Ok(Instruction::PushImm(ts.expect_int32()? as u32))
+            Ok(Instruction::PushImm(ts.expect_int32()?.cast_unsigned()))
         }
         Some(Token::PushResult) => {
             ts.advance();
@@ -502,13 +480,13 @@ fn parse_instruction(ts: &mut TokenStream) -> ParseResult<Instruction> {
         Some(Token::SysCall(argc)) => {
             let argc = *argc;
             ts.advance();
-            let page = ts.expect_int()? as u8;
+            let page = ts.expect_int8()?.cast_unsigned();
             ts.expect_colon()?;
-            let func = ts.expect_int()? as u16;
+            let func = ts.expect_int()?.cast_unsigned();
             Ok(Instruction::SysCall { argc, page, func })
         }
         other => {
-            let got = other.map(|t| format!("{t:?}")).unwrap_or("EOF".into());
+            let got = other.map_or("EOF".into(), |t| format!("{t:?}"));
             Err(ParseError::UnexpectedToken {
                 got,
                 expected: "instruction",
