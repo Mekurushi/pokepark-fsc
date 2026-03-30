@@ -29,6 +29,7 @@ pub enum Opcode {
     Shift = 0x18,
     Lea = 0x19,
     Load = 0x1A,
+    Store = 0x1B,
 }
 
 #[repr(u8)]
@@ -116,6 +117,20 @@ pub enum AluOp {
     Not = 8,
     Eq0 = 9,
     Neg = 10,
+}
+
+#[repr(u8)]
+pub enum StoreSubtype {
+    Store = 0,
+    Add = 1,
+    Sub = 2,
+}
+
+#[repr(i16)]
+pub enum LoadStoreSize {
+    Byte = 1,
+    Short = 2,
+    Word = 4,
 }
 
 enum RelocationKind {
@@ -693,6 +708,168 @@ impl Assembler {
         self.emit(
             InsnWord::new(Opcode::Load as u8)
                 .operand(4)
+                .indirect_load(true)
+                .build(),
+        );
+    }
+
+    // --- Store (0x1b) ---
+
+    pub fn emit_sb(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::Store as u8)
+                .operand(LoadStoreSize::Byte as i16)
+                .sop(StoreSubtype::Store as u8)
+                .build(),
+        );
+    }
+    pub fn emit_ss(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::Store as u8)
+                .operand(LoadStoreSize::Short as i16)
+                .sop(StoreSubtype::Store as u8)
+                .build(),
+        );
+    }
+    pub fn emit_sw(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::Store as u8)
+                .operand(LoadStoreSize::Word as i16)
+                .sop(StoreSubtype::Store as u8)
+                .build(),
+        );
+    }
+    pub fn emit_sbi(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::Store as u8)
+                .operand(LoadStoreSize::Byte as i16)
+                .sop(StoreSubtype::Store as u8)
+                .indirect_load(true)
+                .build(),
+        );
+    }
+    pub fn emit_ssi(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::Store as u8)
+                .operand(LoadStoreSize::Short as i16)
+                .sop(StoreSubtype::Store as u8)
+                .indirect_load(true)
+                .build(),
+        );
+    }
+    pub fn emit_swi(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::Store as u8)
+                .operand(LoadStoreSize::Word as i16)
+                .sop(StoreSubtype::Store as u8)
+                .indirect_load(true)
+                .build(),
+        );
+    }
+
+    pub fn emit_sbadd(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::Store as u8)
+                .operand(LoadStoreSize::Byte as i16)
+                .sop(StoreSubtype::Add as u8)
+                .build(),
+        );
+    }
+    pub fn emit_sbiadd(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::Store as u8)
+                .operand(LoadStoreSize::Byte as i16)
+                .sop(StoreSubtype::Add as u8)
+                .indirect_load(true)
+                .build(),
+        );
+    }
+
+    pub fn emit_sbsub(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::Store as u8)
+                .operand(LoadStoreSize::Byte as i16)
+                .sop(StoreSubtype::Sub as u8)
+                .build(),
+        );
+    }
+    pub fn emit_sbisub(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::Store as u8)
+                .operand(LoadStoreSize::Byte as i16)
+                .sop(StoreSubtype::Sub as u8)
+                .indirect_load(true)
+                .build(),
+        );
+    }
+
+    pub fn emit_ssadd(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::Store as u8)
+                .operand(LoadStoreSize::Short as i16)
+                .sop(StoreSubtype::Add as u8)
+                .build(),
+        );
+    }
+    pub fn emit_ssiadd(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::Store as u8)
+                .operand(LoadStoreSize::Short as i16)
+                .sop(StoreSubtype::Add as u8)
+                .indirect_load(true)
+                .build(),
+        );
+    }
+
+    pub fn emit_sssub(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::Store as u8)
+                .operand(LoadStoreSize::Short as i16)
+                .sop(StoreSubtype::Sub as u8)
+                .build(),
+        );
+    }
+    pub fn emit_ssisub(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::Store as u8)
+                .operand(LoadStoreSize::Short as i16)
+                .sop(StoreSubtype::Sub as u8)
+                .indirect_load(true)
+                .build(),
+        );
+    }
+
+    pub fn emit_swadd(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::Store as u8)
+                .operand(LoadStoreSize::Word as i16)
+                .sop(StoreSubtype::Add as u8)
+                .build(),
+        );
+    }
+    pub fn emit_swiadd(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::Store as u8)
+                .operand(LoadStoreSize::Word as i16)
+                .sop(StoreSubtype::Add as u8)
+                .indirect_load(true)
+                .build(),
+        );
+    }
+
+    pub fn emit_swsub(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::Store as u8)
+                .operand(LoadStoreSize::Word as i16)
+                .sop(StoreSubtype::Sub as u8)
+                .build(),
+        );
+    }
+    pub fn emit_swisub(&mut self) {
+        self.emit(
+            InsnWord::new(Opcode::Store as u8)
+                .operand(LoadStoreSize::Word as i16)
+                .sop(StoreSubtype::Sub as u8)
                 .indirect_load(true)
                 .build(),
         );
@@ -1794,5 +1971,126 @@ mod emit_tests {
         let mut asm = assembler_in_function();
         asm.emit_lwi();
         assert_eq!(last_bytes(&asm), [0x00, 0x04, 0x10, 0x1a]);
+    }
+
+    // --- Store ---
+
+    #[test]
+    fn emit_sb() {
+        let mut asm = assembler_in_function();
+        asm.emit_sb();
+        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x00, 0x1b]);
+    }
+    #[test]
+    fn emit_ss() {
+        let mut asm = assembler_in_function();
+        asm.emit_ss();
+        assert_eq!(last_bytes(&asm), [0x00, 0x02, 0x00, 0x1b]);
+    }
+
+    #[test]
+    fn emit_sw() {
+        let mut asm = assembler_in_function();
+        asm.emit_sw();
+        assert_eq!(last_bytes(&asm), [0x00, 0x04, 0x00, 0x1b]);
+    }
+
+    #[test]
+    fn emit_sbi() {
+        let mut asm = assembler_in_function();
+        asm.emit_sbi();
+        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x10, 0x1b]);
+    }
+
+    #[test]
+    fn emit_ssi() {
+        let mut asm = assembler_in_function();
+        asm.emit_ssi();
+        assert_eq!(last_bytes(&asm), [0x00, 0x02, 0x10, 0x1b]);
+    }
+
+    #[test]
+    fn emit_swi() {
+        let mut asm = assembler_in_function();
+        asm.emit_swi();
+        assert_eq!(last_bytes(&asm), [0x00, 0x04, 0x10, 0x1b]);
+    }
+
+    #[test]
+    fn emit_sbadd() {
+        let mut asm = assembler_in_function();
+        asm.emit_sbadd();
+        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x01, 0x1b]);
+    }
+    #[test]
+    fn emit_sbiadd() {
+        let mut asm = assembler_in_function();
+        asm.emit_sbiadd();
+        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x11, 0x1b]);
+    }
+
+    #[test]
+    fn emit_sbsub() {
+        let mut asm = assembler_in_function();
+        asm.emit_sbsub();
+        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x02, 0x1b]);
+    }
+    #[test]
+    fn emit_sbisub() {
+        let mut asm = assembler_in_function();
+        asm.emit_sbisub();
+        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x12, 0x1b]);
+    }
+
+    #[test]
+    fn emit_ssadd() {
+        let mut asm = assembler_in_function();
+        asm.emit_ssadd();
+        assert_eq!(last_bytes(&asm), [0x00, 0x02, 0x01, 0x1b]);
+    }
+    #[test]
+    fn emit_ssiadd() {
+        let mut asm = assembler_in_function();
+        asm.emit_ssiadd();
+        assert_eq!(last_bytes(&asm), [0x00, 0x02, 0x11, 0x1b]);
+    }
+
+    #[test]
+    fn emit_sssub() {
+        let mut asm = assembler_in_function();
+        asm.emit_sssub();
+        assert_eq!(last_bytes(&asm), [0x00, 0x02, 0x02, 0x1b]);
+    }
+    #[test]
+    fn emit_ssisub() {
+        let mut asm = assembler_in_function();
+        asm.emit_ssisub();
+        assert_eq!(last_bytes(&asm), [0x00, 0x02, 0x12, 0x1b]);
+    }
+
+    #[test]
+    fn emit_swadd() {
+        let mut asm = assembler_in_function();
+        asm.emit_swadd();
+        assert_eq!(last_bytes(&asm), [0x00, 0x04, 0x01, 0x1b]);
+    }
+    #[test]
+    fn emit_swiadd() {
+        let mut asm = assembler_in_function();
+        asm.emit_swiadd();
+        assert_eq!(last_bytes(&asm), [0x00, 0x04, 0x11, 0x1b]);
+    }
+
+    #[test]
+    fn emit_swsub() {
+        let mut asm = assembler_in_function();
+        asm.emit_swsub();
+        assert_eq!(last_bytes(&asm), [0x00, 0x04, 0x02, 0x1b]);
+    }
+    #[test]
+    fn emit_swisub() {
+        let mut asm = assembler_in_function();
+        asm.emit_swisub();
+        assert_eq!(last_bytes(&asm), [0x00, 0x04, 0x12, 0x1b]);
     }
 }

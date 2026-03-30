@@ -282,6 +282,67 @@ impl<'a> AstWalker<'a> {
                 self.core.emit_lwi();
                 Ok(())
             }
+            ast::Instruction::Sb => {
+                self.core.emit_sb();
+                Ok(())
+            }
+            ast::Instruction::Ss => {
+                self.core.emit_ss();
+                Ok(())
+            }
+            ast::Instruction::Sw => {
+                self.core.emit_sw();
+                Ok(())
+            }
+            ast::Instruction::SbAdd => {
+                self.core.emit_sbadd();
+                Ok(())
+            }
+            ast::Instruction::SbiAdd => {
+                self.core.emit_sbiadd();
+                Ok(())
+            }
+            ast::Instruction::SbSub => {
+                self.core.emit_sbsub();
+                Ok(())
+            }
+            ast::Instruction::SbiSub => {
+                self.core.emit_sbisub();
+                Ok(())
+            }
+            ast::Instruction::SsAdd => {
+                self.core.emit_ssadd();
+                Ok(())
+            }
+            ast::Instruction::SsiAdd => {
+                self.core.emit_ssiadd();
+                Ok(())
+            }
+            ast::Instruction::SsSub => {
+                self.core.emit_sssub();
+                Ok(())
+            }
+            ast::Instruction::SsiSub => {
+                self.core.emit_ssisub();
+                Ok(())
+            }
+
+            ast::Instruction::SwAdd => {
+                self.core.emit_swadd();
+                Ok(())
+            }
+            ast::Instruction::SwiAdd => {
+                self.core.emit_swiadd();
+                Ok(())
+            }
+            ast::Instruction::SwSub => {
+                self.core.emit_swsub();
+                Ok(())
+            }
+            ast::Instruction::SwiSub => {
+                self.core.emit_swisub();
+                Ok(())
+            }
         }
     }
 }

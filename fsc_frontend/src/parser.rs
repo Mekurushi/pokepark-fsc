@@ -501,6 +501,66 @@ fn parse_instruction(ts: &mut TokenStream) -> ParseResult<Instruction> {
             ts.advance();
             Ok(Instruction::Lwi)
         }
+        Some(Token::Sb) => {
+            ts.advance();
+            Ok(Instruction::Sb)
+        }
+        Some(Token::Ss) => {
+            ts.advance();
+            Ok(Instruction::Ss)
+        }
+        Some(Token::Sw) => {
+            ts.advance();
+            Ok(Instruction::Sw)
+        }
+        Some(Token::SbAdd) => {
+            ts.advance();
+            Ok(Instruction::SbAdd)
+        }
+        Some(Token::SbiAdd) => {
+            ts.advance();
+            Ok(Instruction::SbiAdd)
+        }
+        Some(Token::SbSub) => {
+            ts.advance();
+            Ok(Instruction::SbSub)
+        }
+        Some(Token::SbiSub) => {
+            ts.advance();
+            Ok(Instruction::SbiSub)
+        }
+        Some(Token::SsAdd) => {
+            ts.advance();
+            Ok(Instruction::SsAdd)
+        }
+        Some(Token::SsiAdd) => {
+            ts.advance();
+            Ok(Instruction::SsiAdd)
+        }
+        Some(Token::SsSub) => {
+            ts.advance();
+            Ok(Instruction::SsSub)
+        }
+        Some(Token::SsiSub) => {
+            ts.advance();
+            Ok(Instruction::SsiSub)
+        }
+        Some(Token::SwAdd) => {
+            ts.advance();
+            Ok(Instruction::SwAdd)
+        }
+        Some(Token::SwiAdd) => {
+            ts.advance();
+            Ok(Instruction::SwiAdd)
+        }
+        Some(Token::SwSub) => {
+            ts.advance();
+            Ok(Instruction::SwSub)
+        }
+        Some(Token::SwiSub) => {
+            ts.advance();
+            Ok(Instruction::SwiSub)
+        }
 
         Some(Token::SysCall(argc)) => {
             let argc = *argc;

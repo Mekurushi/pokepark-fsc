@@ -202,6 +202,39 @@ pub enum Token {
     #[token("lw")]
     Lw,
 
+    #[token("sb")]
+    Sb,
+    #[token("ss")]
+    Ss,
+    #[token("sw")]
+    Sw,
+    #[token("sbadd")]
+    SbAdd,
+    #[token("sbiadd")]
+    SbiAdd,
+    #[token("sbsub")]
+    SbSub,
+    #[token("sbisub")]
+    SbiSub,
+
+    #[token("ssadd")]
+    SsAdd,
+    #[token("ssiadd")]
+    SsiAdd,
+    #[token("sssub")]
+    SsSub,
+    #[token("ssisub")]
+    SsiSub,
+
+    #[token("swadd")]
+    SwAdd,
+    #[token("swiadd")]
+    SwiAdd,
+    #[token("swsub")]
+    SwSub,
+    #[token("swisub")]
+    SwiSub,
+
     #[token("push_result")]
     PushResult,
 

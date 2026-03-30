@@ -84,6 +84,22 @@ pub enum Instruction {
     Lbi,
     Lsi,
     Lwi,
+    Sb,
+    Ss,
+    Sw,
+    SbAdd,
+    SbiAdd,
+    SbSub,
+    SbiSub,
+    SsAdd,
+    SsiAdd,
+    SsSub,
+    SsiSub,
+
+    SwAdd,
+    SwiAdd,
+    SwSub,
+    SwiSub,
     Retv(i16), // retv -0x2
     Ret(i16),  // ret -0x2
 }
