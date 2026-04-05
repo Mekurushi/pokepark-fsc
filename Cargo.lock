@@ -18,23 +18,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
-name = "fsc"
+name = "fsc_asm"
 version = "0.1.0"
 dependencies = [
- "fsc_core",
- "fsc_frontend",
+ "fsc_assembler",
+ "logos",
 ]
 
 [[package]]
-name = "fsc_core"
+name = "fsc_assembler"
 version = "0.1.0"
 
 [[package]]
-name = "fsc_frontend"
+name = "fsc_cli"
 version = "0.1.0"
 dependencies = [
- "fsc_core",
- "logos",
+ "fsc_asm",
+ "fsc_assembler",
 ]
 
 [[package]]

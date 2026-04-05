@@ -1,9 +1,5 @@
 [workspace]
-members = [
-    "fsc_core",
-    "fsc_frontend",
-    "cli",
-]
+members = ["fsc_assembler", "fsc_asm", "fsc_cli"]
 resolver = "2"
 
 [profile.dev]

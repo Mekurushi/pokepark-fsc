@@ -1,14 +1,14 @@
 [package]
-name = "fsc_frontend"
+name = "fsc_asm"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [lib]
-name = "fsc_frontend"
+name = "fsc_asm"
 path = "src/lib.rs"
 
 [dependencies]
-fsc_core = { path = "../fsc_core" }
+fsc_assembler = { path = "../fsc_assembler" }
 logos = "0.16.1"
 
 [lints]

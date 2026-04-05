@@ -1,5 +1,5 @@
 [package]
-name = "fsc"
+name = "fsc_cli"
 version = "0.1.0"
 edition = "2024"
 
@@ -8,8 +8,8 @@ name = "fsc"
 path = "src/main.rs"
 
 [dependencies]
-fsc_core = { path = "../fsc_core" }
-fsc_frontend = { path = "../fsc_frontend" }
+fsc_assembler = { path = "../fsc_assembler" }
+fsc_asm = { path = "../fsc_asm" }
 
 [lints]
 workspace = true

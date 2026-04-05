@@ -1,6 +1,6 @@
-use fsc_core::Assembler;
-use fsc_frontend::ast_walker::AstWalker;
-use fsc_frontend::{lexer, parser};
+use fsc_asm::ast_walker::AstWalker;
+use fsc_asm::{lexer, parser};
+use fsc_assembler::Assembler;
 use std::fs::{read_to_string, write};
 use std::path::PathBuf;
 use std::process;
