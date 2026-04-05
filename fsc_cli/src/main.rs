@@ -9,20 +9,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
 
     if args.len() < 2 {
-        eprintln!("Usage: fsc <file.fsc> [output.fsb]");
+        eprintln!("Usage: fsc <file.fsa> [output.fsb]");
         process::exit(1);
     }
 
     let input = PathBuf::from(&args[1]);
 
     match input.extension().and_then(|e| e.to_str()) {
-        Some("fsc") => {}
+        Some("fsa") => {}
         Some(ext) => {
-            eprintln!("Error: expected a .fsc file, got .{ext}");
+            eprintln!("Error: expected a .fsa file, got .{ext}");
             process::exit(1);
         }
         None => {
-            eprintln!("Error: file has no extension — expected .fsc");
+            eprintln!("Error: file has no extension — expected .fsa");
             process::exit(1);
         }
     }
