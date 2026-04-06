@@ -1,0 +1,44 @@
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Ty {
+    Int,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BinOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+}
+
+#[derive(Debug, Clone)]
+pub enum Expr {
+    IntLit(i32),
+
+    Var(String),
+
+    BinOp {
+        op: BinOp,
+        lhs: Box<Expr>,
+        rhs: Box<Expr>,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub enum Stmt {
+    Return(Expr),
+}
+
+#[derive(Debug, Clone)]
+pub struct Param {
+    pub name: String,
+    pub ty: Ty,
+}
+
+#[derive(Debug, Clone)]
+pub struct FuncDef {
+    pub name: String,
+    pub params: Vec<Param>,
+    pub ret_ty: Ty,
+    pub body: Vec<Stmt>,
+    pub exported: bool,
+}
