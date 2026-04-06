@@ -10,7 +10,7 @@ pub enum BinOp {
     Div,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     IntLit(i32),
 

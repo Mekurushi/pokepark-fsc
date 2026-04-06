@@ -4,8 +4,6 @@ use crate::ast::{BinOp, Expr, FuncDef, Param, Stmt, Ty};
 use crate::lexer::token::{Span, Token, TokenKind};
 use crate::parser::error::{ParseError, ParseResult};
 
-// TODO: rethink recursive descent parsing; good enough for the prototype for now
-
 struct TokenStream {
     tokens: Vec<Token>,
     cursor: usize,
@@ -119,14 +117,18 @@ impl TokenStream {
 }
 
 // TODO: higher level
-pub fn parse(tokens: Vec<Token>, src: String) -> ParseResult<FuncDef> {
+pub fn parse(tokens: Vec<Token>, src: String) -> ParseResult<Vec<FuncDef>> {
     let mut ts = TokenStream::new(tokens, src);
-    let function = parse_function(&mut ts)?;
-    Ok(function)
+    let mut functions = Vec::new();
+
+    while !ts.is_at_end() {
+        functions.push(parse_function(&mut ts)?);
+    }
+    Ok(functions)
 }
 
 fn parse_function(ts: &mut TokenStream) -> ParseResult<FuncDef> {
-    // TODO: replace hardcoded; find syntax for exported
+    let exported = !ts.eat(&TokenKind::KwStatic); // static = private
     let ret_ty = retrieve_ty_ast(ts)?;
     // function name
     let name = ts.expect_ident()?;
@@ -143,7 +145,7 @@ fn parse_function(ts: &mut TokenStream) -> ParseResult<FuncDef> {
         params,
         ret_ty,
         body,
-        exported: true,
+        exported,
     })
 }
 
@@ -157,7 +159,6 @@ fn retrieve_ty_ast(ts: &mut TokenStream) -> ParseResult<Ty> {
 }
 
 fn parse_param_list(ts: &mut TokenStream) -> ParseResult<Vec<Param>> {
-    // TODO: correct parsing for  empty params
     let mut params: Vec<Param> = Vec::new();
 
     while !ts.eat(&TokenKind::RParen) {
@@ -184,10 +185,12 @@ fn parse_body(ts: &mut TokenStream) -> ParseResult<Vec<Stmt>> {
 }
 
 fn parse_stmt(ts: &mut TokenStream) -> ParseResult<Stmt> {
-    match ts.peek() {
+    let stmt = match ts.peek() {
         Some(TokenKind::KwReturn) => parse_return(ts),
         _ => Err(ts.unexpected("statement")),
-    }
+    };
+    ts.expect(&TokenKind::Semicolon, "`;`")?;
+    stmt
 }
 
 fn parse_return(ts: &mut TokenStream) -> ParseResult<Stmt> {
@@ -198,26 +201,27 @@ fn parse_return(ts: &mut TokenStream) -> ParseResult<Stmt> {
         return Err(ts.unexpected("expression"));
     }
 
-    let expr = parse_expr(ts)?;
-    ts.expect(&TokenKind::Semicolon, "`;`")?;
+    let expr = parse_expr(ts, 0)?;
     Ok(Stmt::Return(expr))
 }
 
-fn parse_expr(ts: &mut TokenStream) -> ParseResult<Expr> {
-    // TODO: handling for other expressions
-    parse_additive(ts)
-}
+fn parse_expr(ts: &mut TokenStream, min_bp: u8) -> ParseResult<Expr> {
+    let mut lhs = match ts.peek() {
+        Some(TokenKind::IntLit(_)) => parse_literal(ts),
+        Some(TokenKind::Ident(_)) => parse_identifier(ts),
+        Some(TokenKind::LParen) => parse_group(ts),
+        _ => Err(ts.unexpected("expression")),
+    }?;
 
-fn parse_additive(ts: &mut TokenStream) -> ParseResult<Expr> {
-    let mut lhs = parse_primary(ts)?;
-
-    loop {
-        let op = match ts.peek() {
-            Some(TokenKind::Plus) => BinOp::Add,
-            _ => break, // TODO: handle case
+    while let Some(tok) = ts.peek() {
+        let Some((bp, op)) = binding_power(tok) else {
+            break;
         };
+        if bp < min_bp {
+            break;
+        }
         ts.advance();
-        let rhs = parse_primary(ts)?;
+        let rhs = parse_expr(ts, bp + 1)?;
         lhs = Expr::BinOp {
             op,
             lhs: Box::new(lhs),
@@ -228,17 +232,143 @@ fn parse_additive(ts: &mut TokenStream) -> ParseResult<Expr> {
     Ok(lhs)
 }
 
-fn parse_primary(ts: &mut TokenStream) -> ParseResult<Expr> {
+fn binding_power(tok: &TokenKind) -> Option<(u8, BinOp)> {
+    match tok {
+        TokenKind::Plus => Some((1, BinOp::Add)),
+        TokenKind::Minus => Some((1, BinOp::Sub)),
+        TokenKind::Star => Some((2, BinOp::Mul)),
+        TokenKind::Slash => Some((2, BinOp::Div)),
+        _ => None,
+    }
+}
+
+fn parse_literal(ts: &mut TokenStream) -> ParseResult<Expr> {
+    match ts.advance() {
+        Some(TokenKind::IntLit(n)) => Ok(Expr::IntLit(*n)),
+        _ => Err(ts.unexpected("literal")),
+    }
+}
+fn parse_group(ts: &mut TokenStream) -> ParseResult<Expr> {
+    ts.advance();
+    let expr = parse_expr(ts, 0)?;
+    ts.expect(&TokenKind::RParen, "`)`")?;
+    Ok(expr)
+}
+
+fn parse_identifier(ts: &mut TokenStream) -> ParseResult<Expr> {
+    let name = ts.expect_ident()?;
     match ts.peek() {
-        Some(TokenKind::Ident(_)) => {
-            let name = ts.expect_ident()?;
-            Ok(Expr::Var(name))
+        Some(TokenKind::LParen) => {
+            todo!("function calls are not supported yet");
         }
-        Some(TokenKind::IntLit(n)) => {
-            let n = *n;
-            ts.advance();
-            Ok(Expr::IntLit(n))
-        }
-        _ => Err(ts.unexpected("expression")),
+        _ => Ok(Expr::Var(name)),
+    }
+}
+
+#[cfg(test)]
+mod parse_expr_tests {
+    #![allow(clippy::unwrap_used)]
+    #![allow(clippy::expect_used)]
+    #![allow(clippy::panic)]
+    use super::*;
+    use crate::ast::{BinOp, Expr};
+    use crate::lexer::tokenize;
+
+    fn parse(src: &str) -> Expr {
+        let lex_output = tokenize(src);
+        assert!(
+            lex_output.errors.is_empty(),
+            "lex errors: {:?}",
+            lex_output.errors
+        );
+        parse_expr(&mut TokenStream::new(lex_output.tokens, src.to_string()), 0)
+            .expect("parse error")
+    }
+    #[test]
+    fn multiplication_binds_tighter_than_addition() {
+        assert_eq!(
+            parse("1 + 2 * 3"),
+            Expr::BinOp {
+                op: BinOp::Add,
+                lhs: Box::new(Expr::IntLit(1)),
+                rhs: Box::new(Expr::BinOp {
+                    op: BinOp::Mul,
+                    lhs: Box::new(Expr::IntLit(2)),
+                    rhs: Box::new(Expr::IntLit(3)),
+                }),
+            }
+        );
+    }
+
+    #[test]
+    fn variable_in_expression() {
+        assert_eq!(
+            parse("x + 1"),
+            Expr::BinOp {
+                op: BinOp::Add,
+                lhs: Box::new(Expr::Var("x".to_string())),
+                rhs: Box::new(Expr::IntLit(1)),
+            }
+        );
+    }
+
+    #[test]
+    fn chained_mixed_precedence() {
+        assert_eq!(
+            parse("1 + 2 * 3 + 4"),
+            Expr::BinOp {
+                op: BinOp::Add,
+                lhs: Box::new(Expr::BinOp {
+                    op: BinOp::Add,
+                    lhs: Box::new(Expr::IntLit(1)),
+                    rhs: Box::new(Expr::BinOp {
+                        op: BinOp::Mul,
+                        lhs: Box::new(Expr::IntLit(2)),
+                        rhs: Box::new(Expr::IntLit(3)),
+                    }),
+                }),
+                rhs: Box::new(Expr::IntLit(4)),
+            }
+        );
+    }
+
+    #[test]
+    fn nested_groups() {
+        assert_eq!(
+            parse("((1 + 2)) * ((3 + 4))"),
+            Expr::BinOp {
+                op: BinOp::Mul,
+                lhs: Box::new(Expr::BinOp {
+                    op: BinOp::Add,
+                    lhs: Box::new(Expr::IntLit(1)),
+                    rhs: Box::new(Expr::IntLit(2)),
+                }),
+                rhs: Box::new(Expr::BinOp {
+                    op: BinOp::Add,
+                    lhs: Box::new(Expr::IntLit(3)),
+                    rhs: Box::new(Expr::IntLit(4)),
+                }),
+            }
+        );
+    }
+
+    #[test]
+    fn group_in_middle_of_chain() {
+        assert_eq!(
+            parse("1 * (2 + 3) * 4"),
+            Expr::BinOp {
+                op: BinOp::Mul,
+                lhs: Box::new(Expr::BinOp {
+                    op: BinOp::Mul,
+                    lhs: Box::new(Expr::IntLit(1)),
+                    rhs: Box::new(Expr::BinOp {
+                        op: BinOp::Add,
+                        lhs: Box::new(Expr::IntLit(2)),
+                        rhs: Box::new(Expr::IntLit(3)),
+                    }),
+                }),
+                rhs: Box::new(Expr::IntLit(4)),
+            }
+        );
     }
 }

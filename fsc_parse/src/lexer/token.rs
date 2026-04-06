@@ -16,6 +16,10 @@ pub enum TokenKind {
     #[token("return", priority = 10)]
     KwReturn,
 
+    // --- Declaration keywords ---
+    #[token("static", priority = 10)]
+    KwStatic,
+
     // --- Integer literals ---
     /// Hexadecimal integer; higher priority so it's not splitting
     #[regex(r"0[xX][0-9a-fA-F]+", |lex| {
@@ -78,6 +82,7 @@ impl TokenKind {
         match self {
             Self::KwInt => "`int`",
             Self::KwReturn => "`return`",
+            Self::KwStatic => "`static`",
             Self::IntLit(_) => "integer literal",
             Self::Ident(_) => "identifier",
             Self::Plus => "`+`",
