@@ -1,40 +1,23 @@
-// TODO: replace with real Lexer error handling
-#[derive(Debug)]
-pub enum ParseError {
-    UnexpectedToken {
-        got: String,
-        expected: &'static str,
-        offset: usize,
-    },
-    UnexpectedEof {
-        expected: &'static str,
-    },
-    LexError {
-        offset: usize,
-    },
-    IntOutOfRange {
-        value: i32,
-        offset: usize,
-    },
+use crate::diagnostic::{Diagnostic, Label};
+use crate::lexer::token::Span;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LexerError {
+    UnknownChar { ch: char, span: Span },
+    InternalError { span: Span },
 }
 
-impl std::fmt::Display for ParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::UnexpectedToken {
-                got,
-                expected,
-                offset,
-            } => write!(f, "offset {offset}: expected {expected}, got `{got}`"),
-            Self::UnexpectedEof { expected } => {
-                write!(f, "unexpected end of file, expected {expected}")
+impl From<LexerError> for Diagnostic {
+    fn from(e: LexerError) -> Self {
+        match e {
+            LexerError::UnknownChar { ch, span } => {
+                Diagnostic::error(format!("unknown character `{ch}`"))
+                    .with_label(Label::primary(span, "not a valid token"))
             }
-            Self::LexError { offset } => write!(f, "unrecognised token at offset {offset}"),
-            Self::IntOutOfRange { offset, value } => {
-                write!(f, "unexpected int value `{value}` at offset {offset}")
-            }
+            LexerError::InternalError { span } => Diagnostic::error("internal lexer error")
+                .with_label(Label::primary(span, "occurred here")),
         }
     }
 }
 
-pub type ParseResult<T> = Result<T, ParseError>;
+pub type LexerResult<T> = Result<T, LexerError>;

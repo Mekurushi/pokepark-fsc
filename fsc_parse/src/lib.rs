@@ -1,4 +1,5 @@
 mod ast;
+mod diagnostic;
 mod lexer;
 mod parser;
 
@@ -8,6 +9,8 @@ mod emit_tests {
     #![allow(clippy::expect_used)]
     #![allow(clippy::panic)]
 
+    use crate::diagnostic::render::DiagnosticRenderer;
+    use crate::diagnostic::Diagnostic;
     use crate::{lexer, parser};
     use std::fs::read_to_string;
     use std::path::PathBuf;
@@ -26,23 +29,23 @@ mod emit_tests {
                 process::exit(1);
             }
         };
+        let script_name = input
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("unknown")
+            .to_string();
 
-        let tokens = match lexer::tokenize(&source) {
-            Ok(t) => t,
-            Err(e) => {
-                eprintln!("lex error: {e}");
-                process::exit(1);
-            }
-        };
+        let lex_output = lexer::tokenize(&source);
+        let renderer = DiagnosticRenderer::new(&source, &script_name, &lex_output.line_starts);
 
-        let program = match parser::parse(tokens) {
-            Ok(p) => p,
-            Err(e) => {
-                eprintln!("parse error: {e}");
-                process::exit(1);
-            }
-        };
+        for e in lex_output.errors {
+            eprint!("{}", renderer.render(&Diagnostic::from(e)));
+        }
 
-        println!("{program:#?}");
+        let ast = parser::parse(lex_output.tokens, source.clone()).map_err(|e| {
+            eprint!("{}", renderer.render(&Diagnostic::from(e)));
+        });
+
+        println!("{ast:#?}");
     }
 }

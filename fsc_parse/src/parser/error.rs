@@ -1,36 +1,32 @@
+use crate::diagnostic::{Diagnostic, Label};
+use crate::lexer::token::Span;
+
 #[derive(Debug)]
 pub enum ParseError {
     UnexpectedToken {
         got: String,
         expected: &'static str,
-        offset: usize,
+        span: Span,
     },
     UnexpectedEof {
         expected: &'static str,
-    },
-    LexError {
-        offset: usize,
-    },
-    IntOutOfRange {
-        value: i32,
-        offset: usize,
+        span: Span,
     },
 }
 
-impl std::fmt::Display for ParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::UnexpectedToken {
+impl From<ParseError> for Diagnostic {
+    fn from(e: ParseError) -> Self {
+        match e {
+            ParseError::UnexpectedToken {
                 got,
                 expected,
-                offset,
-            } => write!(f, "offset {offset}: expected {expected}, got `{got}`"),
-            Self::UnexpectedEof { expected } => {
-                write!(f, "unexpected end of file, expected {expected}")
-            }
-            Self::LexError { offset } => write!(f, "unrecognised token at offset {offset}"),
-            Self::IntOutOfRange { offset, value } => {
-                write!(f, "unexpected int value `{value}` at offset {offset}")
+                span,
+            } => Diagnostic::error(format!("expected {expected}, found {got}"))
+                .with_label(Label::primary(span, format!("expected {expected}"))),
+
+            ParseError::UnexpectedEof { expected, span } => {
+                Diagnostic::error(format!("expected {expected}, found end of file"))
+                    .with_label(Label::primary(span, "file ends here"))
             }
         }
     }
