@@ -1,6 +1,7 @@
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Ty {
     Int,
+    Void,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BinOp {
@@ -25,7 +26,7 @@ pub enum Expr {
 
 #[derive(Debug, Clone)]
 pub enum Stmt {
-    Return(Expr),
+    Return(Option<Expr>),
 }
 
 #[derive(Debug, Clone)]

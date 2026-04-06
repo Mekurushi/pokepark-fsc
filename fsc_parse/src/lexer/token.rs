@@ -12,6 +12,9 @@ pub enum TokenKind {
     #[token("int", priority = 10)]
     KwInt,
 
+    #[token("void", priority = 10)]
+    KwVoid,
+
     // --- Control Flow ---
     #[token("return", priority = 10)]
     KwReturn,
@@ -81,6 +84,7 @@ impl TokenKind {
     pub fn description(&self) -> &'static str {
         match self {
             Self::KwInt => "`int`",
+            Self::KwVoid => "`void`",
             Self::KwReturn => "`return`",
             Self::KwStatic => "`static`",
             Self::IntLit(_) => "integer literal",

@@ -83,16 +83,6 @@ impl TokenStream {
         })
     }
 
-    fn expect_ty_keyword(&mut self) -> ParseResult<(TokenKind)> {
-        let token = self.peek();
-        match token {
-            Some(TokenKind::KwInt) => {
-                self.expect(&TokenKind::KwInt, "type keyword");
-                Ok((TokenKind::KwInt))
-            }
-            _ => Err(self.unexpected("type keyword")),
-        }
-    }
     fn eat_ident(&mut self) -> Option<String> {
         if let Some(TokenKind::Ident(_)) = self.peek() {
             if let Some(TokenKind::Ident(s)) = self.advance() {
@@ -116,7 +106,6 @@ impl TokenStream {
     }
 }
 
-// TODO: higher level
 pub fn parse(tokens: Vec<Token>, src: String) -> ParseResult<Vec<FuncDef>> {
     let mut ts = TokenStream::new(tokens, src);
     let mut functions = Vec::new();
@@ -150,10 +139,16 @@ fn parse_function(ts: &mut TokenStream) -> ParseResult<FuncDef> {
 }
 
 fn retrieve_ty_ast(ts: &mut TokenStream) -> ParseResult<Ty> {
-    // ensure it's a ty keyword
-    let token = ts.expect_ty_keyword()?;
+    let token = ts.peek();
     match token {
-        TokenKind::KwInt => Ok(Ty::Int),
+        Some(TokenKind::KwInt) => {
+            ts.expect(&TokenKind::KwInt, "int")?;
+            Ok(Ty::Int)
+        }
+        Some(TokenKind::KwVoid) => {
+            ts.expect(&TokenKind::KwVoid, "void")?;
+            Ok(Ty::Void)
+        }
         _ => Err(ts.unexpected("type keyword")),
     }
 }
@@ -162,13 +157,13 @@ fn parse_param_list(ts: &mut TokenStream) -> ParseResult<Vec<Param>> {
     let mut params: Vec<Param> = Vec::new();
 
     while !ts.eat(&TokenKind::RParen) {
-        params.push(retrieve_param_ast(ts)?);
+        params.push(parse_param(ts)?);
         ts.eat(&TokenKind::Comma);
     }
     Ok(params)
 }
 
-fn retrieve_param_ast(ts: &mut TokenStream) -> ParseResult<Param> {
+fn parse_param(ts: &mut TokenStream) -> ParseResult<Param> {
     let ty = retrieve_ty_ast(ts)?;
     let name = ts.expect_ident()?;
     Ok(Param { name, ty })
@@ -196,13 +191,12 @@ fn parse_stmt(ts: &mut TokenStream) -> ParseResult<Stmt> {
 fn parse_return(ts: &mut TokenStream) -> ParseResult<Stmt> {
     ts.expect(&TokenKind::KwReturn, "`return`")?;
 
-    if ts.eat(&TokenKind::Semicolon) {
-        // TODO: Stmt::Return(None) when Ty::Void is added
-        return Err(ts.unexpected("expression"));
+    if ts.peek() == Some(&TokenKind::Semicolon) {
+        return Ok(Stmt::Return(None));
     }
 
     let expr = parse_expr(ts, 0)?;
-    Ok(Stmt::Return(expr))
+    Ok(Stmt::Return(Option::from(expr)))
 }
 
 fn parse_expr(ts: &mut TokenStream, min_bp: u8) -> ParseResult<Expr> {
