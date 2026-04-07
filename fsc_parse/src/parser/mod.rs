@@ -22,19 +22,12 @@ impl TokenStream {
         self.cursor >= self.tokens.len()
     }
 
-    fn offset(&self) -> usize {
-        self.tokens
-            .get(self.cursor)
-            .map_or(usize::MAX, |t| t.span.start)
-    }
-
     fn error_span(&self) -> Span {
-        match self.tokens.get(self.cursor) {
-            Some(t) => t.span,
-            None => {
-                let end = self.source.len();
-                Span { start: end, end }
-            }
+        if let Some(t) = self.tokens.get(self.cursor) {
+            t.span
+        } else {
+            let end = self.source.len();
+            Span { start: end, end }
         }
     }
 
@@ -75,34 +68,20 @@ impl TokenStream {
         if self.eat(expected) {
             return Ok(());
         }
-        let got = self.peek().map_or("EOF".into(), |t| t.description().into());
-        Err(ParseError::UnexpectedToken {
-            got,
-            expected: label,
-            span: self.error_span(),
-        })
+        Err(self.unexpected(label))
     }
 
     fn eat_ident(&mut self) -> Option<String> {
-        if let Some(TokenKind::Ident(_)) = self.peek() {
-            if let Some(TokenKind::Ident(s)) = self.advance() {
-                return Some(s.clone());
-            }
+        if let Some(TokenKind::Ident(_)) = self.peek()
+            && let Some(TokenKind::Ident(s)) = self.advance()
+        {
+            return Some(s.clone());
         }
         None
     }
     fn expect_ident(&mut self) -> ParseResult<String> {
         self.eat_ident()
             .ok_or_else(|| self.unexpected("identifier"))
-    }
-
-    fn expect_int(&mut self) -> ParseResult<i32> {
-        if let Some(TokenKind::IntLit(_)) = self.peek() {
-            if let Some(TokenKind::IntLit(n)) = self.advance() {
-                return Ok(*n);
-            }
-        }
-        Err(self.unexpected("integer"))
     }
 }
 
@@ -118,7 +97,7 @@ pub fn parse(tokens: Vec<Token>, src: String) -> ParseResult<Vec<FuncDef>> {
 
 fn parse_function(ts: &mut TokenStream) -> ParseResult<FuncDef> {
     let exported = !ts.eat(&TokenKind::KwStatic); // static = private
-    let ret_ty = retrieve_ty_ast(ts)?;
+    let ret_ty = parse_type_keyword(ts)?;
     // function name
     let name = ts.expect_ident()?;
 
@@ -138,7 +117,7 @@ fn parse_function(ts: &mut TokenStream) -> ParseResult<FuncDef> {
     })
 }
 
-fn retrieve_ty_ast(ts: &mut TokenStream) -> ParseResult<Ty> {
+fn parse_type_keyword(ts: &mut TokenStream) -> ParseResult<Ty> {
     let token = ts.peek();
     match token {
         Some(TokenKind::KwInt) => {
@@ -164,7 +143,7 @@ fn parse_param_list(ts: &mut TokenStream) -> ParseResult<Vec<Param>> {
 }
 
 fn parse_param(ts: &mut TokenStream) -> ParseResult<Param> {
-    let ty = retrieve_ty_ast(ts)?;
+    let ty = parse_type_keyword(ts)?;
     let name = ts.expect_ident()?;
     Ok(Param { name, ty })
 }

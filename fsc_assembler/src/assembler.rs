@@ -1,6 +1,6 @@
-use crate::binary::symbol_table::BinarySymbolTable;
 use crate::binary::FscriptBinary;
-use crate::encoding::{calculate_call_operand, InsnWord};
+use crate::binary::symbol_table::BinarySymbolTable;
+use crate::encoding::{InsnWord, calculate_call_operand};
 use crate::error::{AssemblerError, AssemblerResult};
 use crate::string_table::StringTable;
 use crate::symbol_table::{Scope, SymbolTable};

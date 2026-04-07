@@ -20,7 +20,7 @@ pub fn tokenize(src: &str) -> LexOutput {
                     end: span.end,
                 },
             }),
-            Err(_) => match lex.slice().chars().next() {
+            Err(()) => match lex.slice().chars().next() {
                 Some(ch) => errors.push(LexerError::UnknownChar {
                     ch,
                     span: Span {

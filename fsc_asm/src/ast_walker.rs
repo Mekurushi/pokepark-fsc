@@ -1,6 +1,6 @@
 use crate::ast;
-use fsc_assembler::error::AssemblerResult;
 use fsc_assembler::Assembler;
+use fsc_assembler::error::AssemblerResult;
 
 pub struct AstWalker<'a> {
     core: &'a mut Assembler,

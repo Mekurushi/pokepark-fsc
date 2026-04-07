@@ -77,10 +77,6 @@ fn newline_callback(lex: &mut logos::Lexer<TokenKind>) -> logos::Skip {
 }
 
 impl TokenKind {
-    pub fn is_type_kw(&self) -> bool {
-        matches!(self, Self::KwInt)
-    }
-
     pub fn description(&self) -> &'static str {
         match self {
             Self::KwInt => "`int`",

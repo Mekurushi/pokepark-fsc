@@ -121,10 +121,10 @@ impl TokenStream {
     }
 
     fn expect_int32(&mut self) -> ParseResult<i32> {
-        if let Some(Token::Int32(_)) = self.peek() {
-            if let Some(Token::Int32(n)) = self.advance() {
-                return Ok(*n);
-            }
+        if let Some(Token::Int32(_)) = self.peek()
+            && let Some(Token::Int32(n)) = self.advance()
+        {
+            return Ok(*n);
         }
         let got = self.peek().map_or("EOF".into(), |t| format!("{t:?}"));
         Err(ParseError::UnexpectedToken {
@@ -152,10 +152,10 @@ impl TokenStream {
     }
 
     fn expect_string(&mut self) -> ParseResult<String> {
-        if let Some(Token::StringLiteral(_)) = self.peek() {
-            if let Some(Token::StringLiteral(s)) = self.advance() {
-                return Ok(s.clone());
-            }
+        if let Some(Token::StringLiteral(_)) = self.peek()
+            && let Some(Token::StringLiteral(s)) = self.advance()
+        {
+            return Ok(s.clone());
         }
         let got = self.peek().map_or("EOF".into(), |t| format!("{t:?}"));
         Err(ParseError::UnexpectedToken {
