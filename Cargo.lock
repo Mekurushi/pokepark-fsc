@@ -33,8 +33,17 @@ version = "0.1.0"
 name = "fsc_cli"
 version = "0.1.0"
 dependencies = [
- "fsc_asm",
  "fsc_assembler",
+ "fsc_codegen",
+ "fsc_parse",
+]
+
+[[package]]
+name = "fsc_codegen"
+version = "0.1.0"
+dependencies = [
+ "fsc_assembler",
+ "fsc_parse",
 ]
 
 [[package]]

@@ -9,7 +9,8 @@ path = "src/main.rs"
 
 [dependencies]
 fsc_assembler = { path = "../fsc_assembler" }
-fsc_asm = { path = "../fsc_asm" }
+fsc_parse = { path = "../fsc_parse" }
+fsc_codegen = { path = "../fsc_codegen" }
 
 [lints]
 workspace = true
