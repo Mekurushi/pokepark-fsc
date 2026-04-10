@@ -6,6 +6,8 @@ pub enum TypeCheckError {
 
     TypeMismatch { expected: Ty, found: Ty },
 
+    AlreadyDeclared(String),
+
     MissingReturnValue,
 
     UnexpectedReturnValue,
@@ -17,6 +19,10 @@ impl std::fmt::Display for TypeCheckError {
         match self {
             TypeCheckError::UnknownVar(name) => {
                 write!(f, "unknown variable `{name}`")
+            }
+
+            TypeCheckError::AlreadyDeclared(name) => {
+                write!(f, "variable `{name}` is already declared")
             }
 
             TypeCheckError::TypeMismatch { expected, found } => {

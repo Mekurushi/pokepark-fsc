@@ -6,17 +6,17 @@ use fsc_parse::ast::{BinOp, Expr, FuncDef, Stmt, Ty};
 pub fn lower_func(func: &FuncDef, asm: &mut Assembler) -> CodegenResult<()> {
     asm.define_function(&func.name, func.exported)
         .map_err(Into::<CodegenError>::into)?;
-    let frame = FrameLayout::from_params(&func.params); // TODO: local variable assignment
+    let mut frame = FrameLayout::from_params(&func.params); // TODO: local variable assignment
     if frame.local_count() > 0 {
         asm.emit_grow_stack(frame.local_count());
     }
     for stmt in &func.body {
-        lower_stmt(stmt, &frame, asm)?;
+        lower_stmt(stmt, &mut frame, asm)?;
     }
     Ok(())
 }
 
-pub fn lower_stmt(stmt: &Stmt, frame: &FrameLayout, asm: &mut Assembler) -> CodegenResult<()> {
+pub fn lower_stmt(stmt: &Stmt, frame: &mut FrameLayout, asm: &mut Assembler) -> CodegenResult<()> {
     match stmt {
         Stmt::Return(expr) => {
             if let Some(e) = expr {
@@ -26,15 +26,47 @@ pub fn lower_stmt(stmt: &Stmt, frame: &FrameLayout, asm: &mut Assembler) -> Code
                 Ok(())
             }
         }
+        Stmt::Assign { name, expr } => {
+            match expr {
+                Expr::IntLit(operand) => {
+                    let slot = frame.resolve(name)?;
+                    // TODO: i32 to i16
+                    asm.emit_push(*operand as i16);
+                    asm.emit_store_arg(slot.0);
+                }
+                Expr::Var(var) => {
+                    let slot = frame.resolve(name)?;
+                    let var_slot = frame.resolve(var)?;
+                    asm.emit_load_arg(var_slot.0);
+                    asm.emit_store_arg(slot.0);
+                }
+                Expr::BinOp { .. } => {
+                    lower_expr(expr, frame, asm);
+                    let slot = frame.resolve(name)?;
+                    asm.emit_store_arg(slot.0);
+                }
+            }
+            Ok(())
+        }
+        Stmt::VarDecl { name, ty, init } => {
+            let slot = frame.alloc_local(name)?;
+
+            if let Some(expr) = init {
+                lower_expr(expr, frame, asm)?;
+                asm.emit_store_arg(slot.0);
+            }
+
+            Ok(())
+        }
     }
 }
-fn lower_return(expr: &Expr, frame: &FrameLayout, asm: &mut Assembler) -> CodegenResult<()> {
+fn lower_return(expr: &Expr, frame: &mut FrameLayout, asm: &mut Assembler) -> CodegenResult<()> {
     lower_expr(expr, frame, asm)?;
     asm.emit_retv(frame.frame_size());
     Ok(())
 }
 
-pub fn lower_expr(expr: &Expr, frame: &FrameLayout, asm: &mut Assembler) -> CodegenResult<()> {
+pub fn lower_expr(expr: &Expr, frame: &mut FrameLayout, asm: &mut Assembler) -> CodegenResult<()> {
     match expr {
         Expr::IntLit(value) => {
             emit_int_lit(*value, asm);
@@ -51,6 +83,11 @@ pub fn lower_expr(expr: &Expr, frame: &FrameLayout, asm: &mut Assembler) -> Code
             lower_expr(rhs, frame, asm)?;
 
             emit_binop(op, &ty, asm);
+            let slot = frame.alloc_temp();
+            // TODO: original scripts are saving in arg and load again; check if this is really
+            // everytime necessary
+            asm.emit_store_arg(slot.0);
+            asm.emit_load_arg(slot.0);
         }
     }
     Ok(())

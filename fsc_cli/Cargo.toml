@@ -11,6 +11,7 @@ path = "src/main.rs"
 fsc_assembler = { path = "../fsc_assembler" }
 fsc_parse = { path = "../fsc_parse" }
 fsc_codegen = { path = "../fsc_codegen" }
+fsc_sema = { path = "../fsc_sema" }
 
 [lints]
 workspace = true

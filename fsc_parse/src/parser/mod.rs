@@ -161,10 +161,32 @@ fn parse_body(ts: &mut TokenStream) -> ParseResult<Vec<Stmt>> {
 fn parse_stmt(ts: &mut TokenStream) -> ParseResult<Stmt> {
     let stmt = match ts.peek() {
         Some(TokenKind::KwReturn) => parse_return(ts),
+        Some(TokenKind::Ident(_)) => parse_assign_or_expr_stmt(ts),
+        Some(TokenKind::KwInt) => parse_var_decl(ts),
         _ => Err(ts.unexpected("statement")),
     };
     ts.expect(&TokenKind::Semicolon, "`;`")?;
     stmt
+}
+fn parse_var_decl(ts: &mut TokenStream) -> ParseResult<Stmt> {
+    let ty = parse_type_keyword(ts)?;
+    let name = ts.expect_ident()?;
+    let init = if ts.eat(&TokenKind::Eq) {
+        Some(parse_expr(ts, 0)?)
+    } else {
+        None
+    };
+    Ok(Stmt::VarDecl { name, ty, init })
+}
+
+fn parse_assign_or_expr_stmt(ts: &mut TokenStream) -> ParseResult<Stmt> {
+    let name = ts.expect_ident()?;
+    if ts.eat(&TokenKind::Eq) {
+        let expr = parse_expr(ts, 0)?;
+        Ok(Stmt::Assign { name, expr })
+    } else {
+        Err(ts.unexpected("assignment or expression statement"))
+    }
 }
 
 fn parse_return(ts: &mut TokenStream) -> ParseResult<Stmt> {

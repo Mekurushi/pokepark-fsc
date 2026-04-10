@@ -27,6 +27,15 @@ pub enum Expr {
 #[derive(Debug, Clone)]
 pub enum Stmt {
     Return(Option<Expr>),
+    VarDecl {
+        name: String,
+        ty: Ty,
+        init: Option<Expr>,
+    },
+    Assign {
+        name: String,
+        expr: Expr,
+    },
 }
 
 #[derive(Debug, Clone)]

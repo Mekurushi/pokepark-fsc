@@ -25,7 +25,21 @@ impl FrameLayout {
             local_count: 0,
         }
     }
-
+    // TODO: defined how temps should actually be used
+    pub fn alloc_temp(&mut self) -> StackSlot {
+        let slot = StackSlot(-(self.local_count + 1));
+        self.slots.insert("tmp".to_string(), slot);
+        if !self.slots.contains_key("tmp") {
+            self.local_count += 1;
+        }
+        slot
+    }
+    pub fn resolve_temp(&mut self) -> CodegenResult<StackSlot> {
+        self.slots
+            .get("tmp")
+            .copied()
+            .ok_or_else(|| CodegenError::UndeclaredVariable("tmp".to_string()))
+    }
     pub fn alloc_local(&mut self, name: &str) -> CodegenResult<StackSlot> {
         if self.slots.contains_key(name) {
             return Err(CodegenError::AlreadyDeclared(name.to_string()));

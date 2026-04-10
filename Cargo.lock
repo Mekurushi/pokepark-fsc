@@ -36,6 +36,7 @@ dependencies = [
  "fsc_assembler",
  "fsc_codegen",
  "fsc_parse",
+ "fsc_sema",
 ]
 
 [[package]]
@@ -51,6 +52,13 @@ name = "fsc_parse"
 version = "0.1.0"
 dependencies = [
  "logos",
+]
+
+[[package]]
+name = "fsc_sema"
+version = "0.1.0"
+dependencies = [
+ "fsc_parse",
 ]
 
 [[package]]

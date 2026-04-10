@@ -1,0 +1,10 @@
+[package]
+name = "fsc_sema"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+fsc_parse = { path = "../fsc_parse" }
+
+[lints]
+workspace = true

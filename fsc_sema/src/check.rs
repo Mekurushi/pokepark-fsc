@@ -1,9 +1,6 @@
-mod error;
-
-use crate::check::error::{TypeCheckError, TypeCheckResult};
+use crate::error::{TypeCheckError, TypeCheckResult};
 use fsc_parse::ast::{Expr, FuncDef, Stmt, Ty};
 use std::collections::HashMap;
-
 //TODO: just a simple typecheck for prototyping right now; should be extended prob separate crate
 // later on
 
@@ -42,7 +39,7 @@ pub fn check_func(func: &FuncDef) -> TypeCheckResult<()> {
     Ok(())
 }
 
-fn check_stmt(stmt: &Stmt, cx: &mut CheckCtx) -> TypeCheckResult<()> {
+fn check_stmt<'a>(stmt: &'a Stmt, cx: &mut CheckCtx<'a>) -> TypeCheckResult<()> {
     match stmt {
         Stmt::Return(expr) => {
             match expr {
@@ -62,6 +59,44 @@ fn check_stmt(stmt: &Stmt, cx: &mut CheckCtx) -> TypeCheckResult<()> {
                     }
                 }
             }
+
+            Ok(())
+        }
+        Stmt::Assign { name, expr } => {
+            let var_ty = cx
+                .vars
+                .get(name.as_str())
+                .ok_or(TypeCheckError::UnknownVar(name.clone()))?;
+
+            let expr_ty = check_expr(expr, cx)?;
+            if expr_ty != *var_ty {
+                return Err(TypeCheckError::TypeMismatch {
+                    expected: var_ty.clone(),
+                    found: expr_ty,
+                });
+            }
+
+            Ok(())
+        }
+        Stmt::VarDecl { name, ty, init } => {
+            if cx.vars.contains_key(name.as_str()) {
+                return Err(TypeCheckError::AlreadyDeclared(name.clone()));
+            }
+
+            let initialized = if let Some(expr) = init {
+                let expr_ty = check_expr(expr, cx)?;
+                if &expr_ty != ty {
+                    return Err(TypeCheckError::TypeMismatch {
+                        expected: ty.clone(),
+                        found: expr_ty,
+                    });
+                }
+                true
+            } else {
+                false
+            };
+
+            cx.vars.insert(name.as_str(), ty.clone());
 
             Ok(())
         }

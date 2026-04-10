@@ -1,5 +1,4 @@
 use fsc_assembler::Assembler;
-use fsc_codegen::check::check_func;
 use fsc_codegen::lower;
 use fsc_parse::diagnostic::render::DiagnosticRenderer;
 use fsc_parse::diagnostic::Diagnostic;
@@ -33,24 +32,22 @@ fn main() {
         eprint!("{}", renderer.render(&Diagnostic::from(e)));
     }
 
-    let ast = parser::parse(lex_output.tokens, source.clone()).map_err(|e| {
+    let ast_result = parser::parse(lex_output.tokens, source.clone()).map_err(|e| {
         eprint!("{}", renderer.render(&Diagnostic::from(e)));
     });
 
     let mut asm = Assembler::new();
 
-    match ast {
+    let ast = match ast_result {
         Ok(ast) => {
-            for ast in ast.iter() {
-                println!("{:?}", check_func(&ast));
-                match lower::lower_func(ast, &mut asm) {
-                    Ok(_) => {}
-                    Err(e) => {}
-                }
-            }
+            println!("{:?}", fsc_sema::check(&ast));
+            ast
         }
         Err(_) => todo!(),
-    }
+    };
+
+    lower(&ast, &mut asm);
+
     let binary = match asm.finalize(
         input
             .file_stem()
