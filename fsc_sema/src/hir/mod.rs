@@ -69,3 +69,13 @@ pub struct FuncDef {
     pub frame: FrameLayout,
     pub body: Vec<Stmt>,
 }
+
+#[derive(Debug)]
+pub enum Item {
+    FuncDef(FuncDef),
+}
+
+#[derive(Debug)]
+pub struct Script {
+    pub items: Vec<Item>,
+}

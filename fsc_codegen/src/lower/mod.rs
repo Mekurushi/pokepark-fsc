@@ -87,7 +87,7 @@ fn emit_binop(op: &BinOp, ty: &Ty, asm: &mut Assembler) {
     match ty {
         Ty::Int => emit_int_binop(op, asm),
         Ty::Void => {
-            unreachable!("BinOp with Ty::Void is unreachable due semantic analyses")
+            unreachable!("BinOp with Ty::Void is unreachable due semantic pass")
         }
     }
 }

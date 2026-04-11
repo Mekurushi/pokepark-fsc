@@ -28,3 +28,9 @@ int div(int a, int b) {
 void no_return() {
     return;
 }
+
+void pure_assign(){
+    int a;
+    a = 2;
+    return;
+}

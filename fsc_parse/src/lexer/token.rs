@@ -71,7 +71,7 @@ pub enum TokenKind {
     RBrace,
 }
 
-fn newline_callback(lex: &mut logos::Lexer<TokenKind>) -> logos::Skip {
+fn newline_callback(lex: &mut logos::Lexer<'_, TokenKind>) -> logos::Skip {
     lex.extras.push(lex.span().end);
     logos::Skip
 }

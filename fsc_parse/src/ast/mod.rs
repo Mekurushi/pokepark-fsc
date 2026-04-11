@@ -52,3 +52,13 @@ pub struct FuncDef {
     pub body: Vec<Stmt>,
     pub exported: bool,
 }
+
+#[derive(Debug, Clone)]
+pub enum Item {
+    FuncDef(FuncDef),
+}
+
+#[derive(Debug, Clone)]
+pub struct Script {
+    pub items: Vec<Item>,
+}

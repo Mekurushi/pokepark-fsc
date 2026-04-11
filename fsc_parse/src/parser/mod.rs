@@ -1,24 +1,24 @@
-mod error;
+pub(crate) mod error;
 
-use crate::ast::{BinOp, Expr, FuncDef, Param, Stmt, Ty};
+use crate::ast::{BinOp, Expr, FuncDef, Item, Param, Stmt, Ty};
 use crate::lexer::token::{Span, Token, TokenKind};
 use crate::parser::error::{ParseError, ParseResult};
 
-struct TokenStream {
+pub struct TokenStream {
     tokens: Vec<Token>,
     cursor: usize,
     source: String,
 }
 
 impl TokenStream {
-    fn new(tokens: Vec<Token>, source: String) -> Self {
+    pub(crate) fn new(tokens: Vec<Token>, source: String) -> Self {
         Self {
             tokens,
             cursor: 0,
             source,
         }
     }
-    fn is_at_end(&self) -> bool {
+    pub(crate) fn is_at_end(&self) -> bool {
         self.cursor >= self.tokens.len()
     }
 
@@ -85,14 +85,13 @@ impl TokenStream {
     }
 }
 
-pub fn parse(tokens: Vec<Token>, src: String) -> ParseResult<Vec<FuncDef>> {
-    let mut ts = TokenStream::new(tokens, src);
-    let mut functions = Vec::new();
-
-    while !ts.is_at_end() {
-        functions.push(parse_function(&mut ts)?);
+pub fn parse_item(ts: &mut TokenStream) -> ParseResult<Item> {
+    match ts.peek() {
+        Some(TokenKind::KwStatic | TokenKind::KwInt | TokenKind::KwVoid) => {
+            Ok(Item::FuncDef(parse_function(ts)?))
+        }
+        _ => Err(ts.unexpected("top-level item")),
     }
-    Ok(functions)
 }
 
 fn parse_function(ts: &mut TokenStream) -> ParseResult<FuncDef> {

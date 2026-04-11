@@ -1,4 +1,4 @@
-mod error;
+pub mod error;
 pub mod token;
 
 use crate::lexer::error::LexerError;

@@ -1,4 +1,5 @@
 use crate::diagnostic::{Diagnostic, Label};
+use crate::lexer::error::LexerError;
 use crate::lexer::token::Span;
 
 #[derive(Debug)]
@@ -12,11 +13,16 @@ pub enum ParseError {
         expected: &'static str,
         span: Span,
     },
+    Lex(Vec<LexerError>),
 }
 
 impl From<ParseError> for Diagnostic {
     fn from(e: ParseError) -> Self {
         match e {
+            ParseError::Lex(errors) => errors.into_iter().next().map_or_else(
+                || Diagnostic::error("unknown lexer error"),
+                Diagnostic::from,
+            ),
             ParseError::UnexpectedToken {
                 got,
                 expected,

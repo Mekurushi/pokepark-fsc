@@ -2,10 +2,8 @@ use crate::error::{SemaError, SemaResult};
 use crate::infer::infer_expr;
 use crate::resolve::ScopeStack;
 use fsc_parse::ast::{Expr, FuncDef, Stmt, Ty};
-//TODO: just a simple typecheck for prototyping right now; should be extended prob separate crate
-// later on
 
-//TODO: casting to typed AST would make codegen checks easier
+// TODO: forbid instructions after return or missing returns
 
 pub fn check_func(func: &FuncDef, scope: &ScopeStack) -> SemaResult<()> {
     for stmt in &func.body {
