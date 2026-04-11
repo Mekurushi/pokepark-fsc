@@ -1,126 +1,71 @@
-use crate::error::{TypeCheckError, TypeCheckResult};
+use crate::error::{SemaError, SemaResult};
+use crate::infer::infer_expr;
+use crate::resolve::ScopeStack;
 use fsc_parse::ast::{Expr, FuncDef, Stmt, Ty};
-use std::collections::HashMap;
 //TODO: just a simple typecheck for prototyping right now; should be extended prob separate crate
 // later on
 
 //TODO: casting to typed AST would make codegen checks easier
-struct CheckCtx<'a> {
-    vars: HashMap<&'a str, Ty>,
-    ret_ty: Ty,
-}
-impl<'a> CheckCtx<'a> {
-    pub fn new(func: &'a FuncDef) -> Self {
-        let mut vars = HashMap::new();
 
-        for param in &func.params {
-            vars.insert(param.name.as_str(), param.ty.clone());
-        }
-
-        Self {
-            vars,
-            ret_ty: func.ret_ty.clone(),
-        }
-    }
-
-    pub fn resolve_ty(&self, name: &str) -> TypeCheckResult<Ty> {
-        self.vars
-            .get(name)
-            .cloned()
-            .ok_or(TypeCheckError::UnknownVar(name.to_string()))
-    }
-}
-
-pub fn check_func(func: &FuncDef) -> TypeCheckResult<()> {
-    let mut cx = CheckCtx::new(func);
+pub fn check_func(func: &FuncDef, scope: &ScopeStack) -> SemaResult<()> {
     for stmt in &func.body {
-        check_stmt(stmt, &mut cx)?;
+        check_stmt(stmt, &func.ret_ty, scope)?;
     }
     Ok(())
 }
 
-fn check_stmt<'a>(stmt: &'a Stmt, cx: &mut CheckCtx<'a>) -> TypeCheckResult<()> {
+fn check_stmt(stmt: &Stmt, ret_ty: &Ty, scope: &ScopeStack) -> SemaResult<()> {
     match stmt {
-        Stmt::Return(expr) => {
-            match expr {
-                Some(e) => {
-                    let ty = check_expr(e, cx)?;
-
-                    if ty != cx.ret_ty {
-                        return Err(TypeCheckError::TypeMismatch {
-                            expected: cx.ret_ty.clone(),
-                            found: ty,
-                        });
-                    }
-                }
-                None => {
-                    if cx.ret_ty != Ty::Void {
-                        return Err(TypeCheckError::MissingReturnValue);
-                    }
+        Stmt::Return(expr) => match expr {
+            Some(expr) => check_return(expr, ret_ty, scope),
+            None => {
+                if *ret_ty == Ty::Void {
+                    Ok(())
+                } else {
+                    Err(SemaError::ReturnTypeMismatch {
+                        expected: ret_ty.clone(),
+                        found: Ty::Void,
+                    })
                 }
             }
+        },
 
-            Ok(())
-        }
         Stmt::Assign { name, expr } => {
-            let var_ty = cx
-                .vars
-                .get(name.as_str())
-                .ok_or(TypeCheckError::UnknownVar(name.clone()))?;
-
-            let expr_ty = check_expr(expr, cx)?;
-            if expr_ty != *var_ty {
-                return Err(TypeCheckError::TypeMismatch {
-                    expected: var_ty.clone(),
-                    found: expr_ty,
-                });
-            }
-
-            Ok(())
+            let decl_ty = scope.lookup(name)?;
+            let found = infer_expr(expr, scope)?;
+            check_assignable(decl_ty, &found)
         }
-        Stmt::VarDecl { name, ty, init } => {
-            if cx.vars.contains_key(name.as_str()) {
-                return Err(TypeCheckError::AlreadyDeclared(name.clone()));
+        Stmt::VarDecl {
+            name: _name,
+            ty,
+            init,
+        } => match init {
+            Some(expr) => {
+                let found = infer_expr(expr, scope)?;
+                check_assignable(ty, &found)
             }
-
-            let initialized = if let Some(expr) = init {
-                let expr_ty = check_expr(expr, cx)?;
-                if &expr_ty != ty {
-                    return Err(TypeCheckError::TypeMismatch {
-                        expected: ty.clone(),
-                        found: expr_ty,
-                    });
-                }
-                true
-            } else {
-                false
-            };
-
-            cx.vars.insert(name.as_str(), ty.clone());
-
-            Ok(())
-        }
+            None => Ok(()),
+        },
     }
 }
 
-fn check_expr(expr: &Expr, cx: &CheckCtx) -> TypeCheckResult<Ty> {
-    match expr {
-        Expr::IntLit(_) => Ok(Ty::Int),
-
-        Expr::Var(name) => cx.resolve_ty(name),
-
-        Expr::BinOp { op: _, lhs, rhs } => {
-            let lty = check_expr(lhs, cx)?;
-            let rty = check_expr(rhs, cx)?;
-
-            if lty != rty {
-                return Err(TypeCheckError::TypeMismatch {
-                    expected: lty,
-                    found: rty,
-                });
-            }
-
-            Ok(lty)
-        }
+fn check_assignable(decl_ty: &Ty, infered_ty: &Ty) -> SemaResult<()> {
+    if decl_ty == infered_ty {
+        return Ok(());
     }
+    Err(SemaError::TypeMismatch {
+        expected: decl_ty.clone(),
+        found: infered_ty.clone(),
+    })
+}
+
+fn check_return(expr: &Expr, ret_ty: &Ty, scope: &ScopeStack) -> SemaResult<()> {
+    let found = infer_expr(expr, scope)?;
+    if &found != ret_ty {
+        return Err(SemaError::ReturnTypeMismatch {
+            expected: ret_ty.clone(),
+            found,
+        });
+    }
+    Ok(())
 }

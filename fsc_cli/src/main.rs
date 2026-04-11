@@ -4,6 +4,7 @@ use fsc_parse::diagnostic::render::DiagnosticRenderer;
 use fsc_parse::diagnostic::Diagnostic;
 use fsc_parse::lexer;
 use fsc_parse::parser;
+use fsc_sema::check;
 use std::fs::{read_to_string, write};
 use std::path::PathBuf;
 use std::process;
@@ -38,15 +39,15 @@ fn main() {
 
     let mut asm = Assembler::new();
 
-    let ast = match ast_result {
-        Ok(ast) => {
-            println!("{:?}", fsc_sema::check(&ast));
-            ast
-        }
+    let hir = match ast_result {
+        Ok(ast) => match check(&ast) {
+            Ok(hir) => hir,
+            Err(_) => todo!(),
+        },
         Err(_) => todo!(),
     };
 
-    lower(&ast, &mut asm);
+    lower(&hir, &mut asm);
 
     let binary = match asm.finalize(
         input

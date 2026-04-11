@@ -44,7 +44,7 @@ name = "fsc_codegen"
 version = "0.1.0"
 dependencies = [
  "fsc_assembler",
- "fsc_parse",
+ "fsc_sema",
 ]
 
 [[package]]

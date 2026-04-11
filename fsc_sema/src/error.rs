@@ -1,47 +1,51 @@
-use fsc_parse::ast::{BinOp, Ty};
+use fsc_parse::ast::Ty;
 
-#[derive(Debug)]
-pub enum TypeCheckError {
-    UnknownVar(String),
+// TODO: diagnostic for Span context
+#[derive(Debug, PartialEq)]
+pub enum SemaError {
+    // TODO: span for error location.
+    UndeclaredName(String),
 
+    // TODO: span for duplicate declaration location.
+    // TODO: span for original declaration location.
+    DuplicateDeclaration(String),
+
+    // TODO: span for operation location.
     TypeMismatch { expected: Ty, found: Ty },
 
-    AlreadyDeclared(String),
+    // TODO: span for return expression location.
+    // TODO: span for return type declaration.
+    ReturnTypeMismatch { expected: Ty, found: Ty },
 
-    MissingReturnValue,
-
-    UnexpectedReturnValue,
-
-    InvalidOperandType { op: BinOp, ty: Ty },
+    VoidInValuePosition,
 }
-impl std::fmt::Display for TypeCheckError {
+
+impl std::fmt::Display for SemaError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TypeCheckError::UnknownVar(name) => {
-                write!(f, "unknown variable `{name}`")
+            Self::UndeclaredName(name) => {
+                write!(f, "undeclared name `{name}`")
             }
-
-            TypeCheckError::AlreadyDeclared(name) => {
-                write!(f, "variable `{name}` is already declared")
+            Self::DuplicateDeclaration(name) => {
+                write!(f, "`{name}` is already declared in this scope")
             }
-
-            TypeCheckError::TypeMismatch { expected, found } => {
-                write!(f, "type mismatch: expected {expected:?}, found {found:?}")
+            Self::TypeMismatch { expected, found } => {
+                write!(
+                    f,
+                    "type mismatch: expected `{expected:?}`, found `{found:?}`"
+                )
             }
-
-            TypeCheckError::MissingReturnValue => {
-                write!(f, "missing return value")
+            Self::ReturnTypeMismatch { expected, found } => {
+                write!(
+                    f,
+                    "return type mismatch: \
+                     function declares `{expected:?}` but expression has type `{found:?}`"
+                )
             }
-
-            TypeCheckError::UnexpectedReturnValue => {
-                write!(f, "unexpected return value in void function")
-            }
-
-            TypeCheckError::InvalidOperandType { op, ty } => {
-                write!(f, "invalid operand type {ty:?} for operator {op:?}")
+            Self::VoidInValuePosition => {
+                write!(f, "expression has type `void` where a value is required")
             }
         }
     }
 }
-
-pub type TypeCheckResult<T> = Result<T, TypeCheckError>;
+pub type SemaResult<T> = Result<T, SemaError>;

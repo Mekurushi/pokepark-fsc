@@ -1,14 +1,23 @@
-use crate::check::check_func;
+use crate::error::SemaResult;
 use fsc_parse::ast::FuncDef;
 
 mod check;
 mod error;
+pub mod frame;
+pub mod hir;
+mod infer;
+mod lower;
+mod resolve;
 
-pub fn check(func: &Vec<FuncDef>) {
-    for fun in func {
-        match check_func(fun) {
-            Ok(_) => (),
-            Err(e) => todo!(),
-        }
-    }
+pub fn analyze(func: &FuncDef) -> SemaResult<hir::FuncDef> {
+    let frame = frame::build_frame(func)?;
+
+    let scope = resolve::resolve_func(func)?;
+
+    check::check_func(func, &scope)?;
+    lower::lower_func(func, frame, &scope)
+}
+
+pub fn check(funcs: &[FuncDef]) -> SemaResult<Vec<hir::FuncDef>> {
+    funcs.iter().map(analyze).collect::<SemaResult<Vec<_>>>()
 }
