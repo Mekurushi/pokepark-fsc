@@ -2,8 +2,11 @@ use crate::error::SemaResult;
 use crate::frame::FrameLayout;
 use crate::hir;
 use crate::infer;
+use crate::infer::infer_expr;
 use crate::resolve::ScopeStack;
 use fsc_parse::ast::{self};
+
+// TODO: short-circuit
 
 pub fn lower_func(
     func: &ast::FuncDef,
@@ -65,6 +68,11 @@ fn lower_expr(expr: &ast::Expr, frame: &FrameLayout, scope: &ScopeStack) -> Sema
             ty: lower_ty(&ast::Ty::Int),
         }),
 
+        ast::Expr::BoolLit(value) => Ok(hir::Expr::BoolLit {
+            value: *value,
+            ty: lower_ty(&ast::Ty::Bool),
+        }),
+
         ast::Expr::Var(name) => {
             let slot = frame.resolve(name)?;
             let ty = scope.lookup(name)?.clone();
@@ -72,6 +80,18 @@ fn lower_expr(expr: &ast::Expr, frame: &FrameLayout, scope: &ScopeStack) -> Sema
             Ok(hir::Expr::Var {
                 name: name.clone(),
                 slot,
+                ty: lower_ty(&ty),
+            })
+        }
+
+        ast::Expr::Unary {
+            op,
+            expr: expression,
+        } => {
+            let ty = infer_expr(expr, scope)?;
+            Ok(hir::Expr::Unary {
+                op: lower_unaryop(op),
+                expr: Box::new(lower_expr(expression, frame, scope)?),
                 ty: lower_ty(&ty),
             })
         }
@@ -93,6 +113,14 @@ fn lower_ty(ty: &ast::Ty) -> hir::Ty {
     match ty {
         ast::Ty::Int => hir::Ty::Int,
         ast::Ty::Void => hir::Ty::Void,
+        ast::Ty::Bool => hir::Ty::Bool,
+    }
+}
+
+fn lower_unaryop(op: &ast::UnaryOp) -> hir::UnaryOp {
+    match op {
+        ast::UnaryOp::Not => hir::UnaryOp::Not,
+        ast::UnaryOp::Neg => hir::UnaryOp::Neg,
     }
 }
 
@@ -102,5 +130,16 @@ fn lower_binop(op: &ast::BinOp) -> hir::BinOp {
         ast::BinOp::Sub => hir::BinOp::Sub,
         ast::BinOp::Mul => hir::BinOp::Mul,
         ast::BinOp::Div => hir::BinOp::Div,
+
+        // comparison
+        ast::BinOp::Lt => hir::BinOp::Lt,
+        ast::BinOp::Gt => hir::BinOp::Gt,
+        ast::BinOp::Le => hir::BinOp::Le,
+        ast::BinOp::Ge => hir::BinOp::Ge,
+        ast::BinOp::Eq => hir::BinOp::Eq,
+        ast::BinOp::Neq => hir::BinOp::Neq,
+        // logical
+        ast::BinOp::And => hir::BinOp::And,
+        ast::BinOp::Or => hir::BinOp::Or,
     }
 }

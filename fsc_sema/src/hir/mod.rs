@@ -3,14 +3,32 @@ use crate::frame::{FrameLayout, StackSlot};
 pub enum Ty {
     Int,
     Void,
+    Bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UnaryOp {
+    Not,
+    Neg,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BinOp {
+    //arithmetic
     Add,
     Sub,
     Mul,
     Div,
+    // comparison
+    Eq,
+    Neq,
+    Lt,
+    Gt,
+    Le,
+    Ge,
+    // logical
+    And,
+    Or,
 }
 
 #[derive(Debug, Clone)]
@@ -20,9 +38,20 @@ pub enum Expr {
         ty: Ty,
     },
 
+    BoolLit {
+        value: bool,
+        ty: Ty,
+    },
+
     Var {
         name: String,
         slot: StackSlot,
+        ty: Ty,
+    },
+
+    Unary {
+        op: UnaryOp,
+        expr: Box<Expr>,
         ty: Ty,
     },
 
@@ -37,9 +66,11 @@ pub enum Expr {
 impl Expr {
     pub fn ty(&self) -> &Ty {
         match self {
-            Self::IntLit { ty, .. } => ty,
-            Self::Var { ty, .. } => ty,
-            Self::BinOp { ty, .. } => ty,
+            Self::IntLit { ty, .. }
+            | Self::Var { ty, .. }
+            | Self::BinOp { ty, .. }
+            | Self::BoolLit { ty, .. }
+            | Self::Unary { ty, .. } => ty,
         }
     }
 }

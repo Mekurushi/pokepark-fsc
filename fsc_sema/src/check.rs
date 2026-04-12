@@ -4,6 +4,7 @@ use crate::resolve::ScopeStack;
 use fsc_parse::ast::{Expr, FuncDef, Stmt, Ty};
 
 // TODO: forbid instructions after return or missing returns
+// TODO: forbid a < b < c only allow as a < b && b < c
 
 pub fn check_func(func: &FuncDef, scope: &ScopeStack) -> SemaResult<()> {
     for stmt in &func.body {

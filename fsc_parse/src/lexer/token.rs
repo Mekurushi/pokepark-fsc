@@ -15,6 +15,9 @@ pub enum TokenKind {
     #[token("void", priority = 10)]
     KwVoid,
 
+    #[token("bool", priority = 10)]
+    KwBool,
+
     // --- Control Flow ---
     #[token("return", priority = 10)]
     KwReturn,
@@ -22,6 +25,11 @@ pub enum TokenKind {
     // --- Declaration keywords ---
     #[token("static", priority = 10)]
     KwStatic,
+
+    // --- boolean literals ---
+    #[token("true",  priority = 10, callback = |_| true)]
+    #[token("false", priority = 10, callback = |_| false)]
+    BoolLit(bool),
 
     // --- Integer literals ---
     /// Hexadecimal integer; higher priority so it's not splitting
@@ -49,6 +57,28 @@ pub enum TokenKind {
     Slash,
     #[token("%")]
     Percent,
+
+    // --- Comparison operators ---
+    #[token("==")]
+    EqEq,
+    #[token("!=")]
+    BangEq,
+    #[token("<=")]
+    LtEq,
+    #[token(">=")]
+    GtEq,
+    #[token("<")]
+    Lt,
+    #[token(">")]
+    Gt,
+
+    // --- Logical operators ---
+    #[token("&&")]
+    AmpAmp,
+    #[token("||")]
+    PipePipe,
+    #[token("!")]
+    Bang,
 
     // --- Assignment ---
     #[token("=")]
@@ -81,15 +111,26 @@ impl TokenKind {
         match self {
             Self::KwInt => "`int`",
             Self::KwVoid => "`void`",
+            Self::KwBool => "`boolean`",
             Self::KwReturn => "`return`",
             Self::KwStatic => "`static`",
-            Self::IntLit(_) => "integer literal",
-            Self::Ident(_) => "identifier",
+            Self::BoolLit(_) => "`boolean literal`",
+            Self::IntLit(_) => "`integer literal`",
+            Self::Ident(_) => "`identifier`",
             Self::Plus => "`+`",
             Self::Minus => "`-`",
             Self::Star => "`*`",
             Self::Slash => "`/`",
             Self::Percent => "`%`",
+            Self::EqEq => "`==`",
+            Self::BangEq => "`!=`",
+            Self::LtEq => "`<=`",
+            Self::GtEq => "`>=`",
+            Self::Lt => "`<`",
+            Self::Gt => "`>`",
+            Self::AmpAmp => "`&&`",
+            Self::PipePipe => "`||`",
+            Self::Bang => "`!`",
             Self::Eq => "`=`",
             Self::Comma => "`,`",
             Self::Semicolon => "`;`",

@@ -1,6 +1,6 @@
 pub(crate) mod error;
 
-use crate::ast::{BinOp, Expr, FuncDef, Item, Param, Stmt, Ty};
+use crate::ast::{BinOp, Expr, FuncDef, Item, Param, Stmt, Ty, UnaryOp};
 use crate::lexer::token::{Span, Token, TokenKind};
 use crate::parser::error::{ParseError, ParseResult};
 
@@ -87,7 +87,7 @@ impl TokenStream {
 
 pub fn parse_item(ts: &mut TokenStream) -> ParseResult<Item> {
     match ts.peek() {
-        Some(TokenKind::KwStatic | TokenKind::KwInt | TokenKind::KwVoid) => {
+        Some(TokenKind::KwStatic | TokenKind::KwInt | TokenKind::KwVoid | TokenKind::KwBool) => {
             Ok(Item::FuncDef(parse_function(ts)?))
         }
         _ => Err(ts.unexpected("top-level item")),
@@ -127,6 +127,10 @@ fn parse_type_keyword(ts: &mut TokenStream) -> ParseResult<Ty> {
             ts.expect(&TokenKind::KwVoid, "void")?;
             Ok(Ty::Void)
         }
+        Some(TokenKind::KwBool) => {
+            ts.expect(&TokenKind::KwBool, "bool")?;
+            Ok(Ty::Bool)
+        }
         _ => Err(ts.unexpected("type keyword")),
     }
 }
@@ -161,7 +165,7 @@ fn parse_stmt(ts: &mut TokenStream) -> ParseResult<Stmt> {
     let stmt = match ts.peek() {
         Some(TokenKind::KwReturn) => parse_return(ts),
         Some(TokenKind::Ident(_)) => parse_assign_or_expr_stmt(ts),
-        Some(TokenKind::KwInt) => parse_var_decl(ts),
+        Some(TokenKind::KwInt | TokenKind::KwBool) => parse_var_decl(ts),
         _ => Err(ts.unexpected("statement")),
     };
     ts.expect(&TokenKind::Semicolon, "`;`")?;
@@ -201,9 +205,12 @@ fn parse_return(ts: &mut TokenStream) -> ParseResult<Stmt> {
 
 fn parse_expr(ts: &mut TokenStream, min_bp: u8) -> ParseResult<Expr> {
     let mut lhs = match ts.peek() {
-        Some(TokenKind::IntLit(_)) => parse_literal(ts),
+        Some(TokenKind::IntLit(_)) => parse_int_literal(ts),
+        Some(TokenKind::BoolLit(_)) => parse_bool_literal(ts),
         Some(TokenKind::Ident(_)) => parse_identifier(ts),
         Some(TokenKind::LParen) => parse_group(ts),
+        Some(TokenKind::Bang) => parse_unary(ts, UnaryOp::Not),
+        Some(TokenKind::Minus) => parse_unary(ts, UnaryOp::Neg),
         _ => Err(ts.unexpected("expression")),
     }?;
 
@@ -226,20 +233,47 @@ fn parse_expr(ts: &mut TokenStream, min_bp: u8) -> ParseResult<Expr> {
     Ok(lhs)
 }
 
+fn parse_unary(ts: &mut TokenStream, op: UnaryOp) -> ParseResult<Expr> {
+    ts.advance();
+    let expr = parse_expr(ts, 6)?;
+    Ok(Expr::Unary {
+        op,
+        expr: Box::new(expr),
+    })
+}
+
+fn parse_bool_literal(ts: &mut TokenStream) -> ParseResult<Expr> {
+    match ts.advance() {
+        Some(TokenKind::BoolLit(b)) => Ok(Expr::BoolLit(*b)),
+        _ => Err(ts.unexpected("boolean literal")),
+    }
+}
+
 fn binding_power(tok: &TokenKind) -> Option<(u8, BinOp)> {
     match tok {
-        TokenKind::Plus => Some((1, BinOp::Add)),
-        TokenKind::Minus => Some((1, BinOp::Sub)),
-        TokenKind::Star => Some((2, BinOp::Mul)),
-        TokenKind::Slash => Some((2, BinOp::Div)),
+        // logical
+        TokenKind::PipePipe => Some((1, BinOp::Or)),
+        TokenKind::AmpAmp => Some((2, BinOp::And)),
+        // comparison
+        TokenKind::EqEq => Some((3, BinOp::Eq)),
+        TokenKind::BangEq => Some((3, BinOp::Neq)),
+        TokenKind::Lt => Some((3, BinOp::Lt)),
+        TokenKind::Gt => Some((3, BinOp::Gt)),
+        TokenKind::LtEq => Some((3, BinOp::Le)),
+        TokenKind::GtEq => Some((3, BinOp::Ge)),
+        // arithmetic
+        TokenKind::Plus => Some((4, BinOp::Add)),
+        TokenKind::Minus => Some((4, BinOp::Sub)),
+        TokenKind::Star => Some((5, BinOp::Mul)),
+        TokenKind::Slash => Some((5, BinOp::Div)),
         _ => None,
     }
 }
 
-fn parse_literal(ts: &mut TokenStream) -> ParseResult<Expr> {
+fn parse_int_literal(ts: &mut TokenStream) -> ParseResult<Expr> {
     match ts.advance() {
         Some(TokenKind::IntLit(n)) => Ok(Expr::IntLit(*n)),
-        _ => Err(ts.unexpected("literal")),
+        _ => Err(ts.unexpected("`integer literal`")),
     }
 }
 fn parse_group(ts: &mut TokenStream) -> ParseResult<Expr> {
@@ -277,6 +311,102 @@ mod parse_expr_tests {
         );
         parse_expr(&mut TokenStream::new(lex_output.tokens, src.to_string()), 0)
             .expect("parse error")
+    }
+
+    #[test]
+    fn comparison_lower_precedence_than_arithmetic() {
+        // 1 + 2 == 3  →  (1 + 2) == 3
+        let e = parse("1 + 2 == 3");
+
+        match e {
+            Expr::BinOp {
+                op: BinOp::Eq,
+                lhs: left,
+                rhs: right,
+            } => {
+                assert!(matches!(*right, Expr::IntLit(3)));
+
+                match *left {
+                    Expr::BinOp {
+                        op: BinOp::Add,
+                        lhs: l,
+                        rhs: r,
+                    } => {
+                        assert!(matches!(*l, Expr::IntLit(1)));
+                        assert!(matches!(*r, Expr::IntLit(2)));
+                    }
+                    _ => panic!("left side should be addition"),
+                }
+            }
+            _ => panic!("expected top-level equality"),
+        }
+    }
+
+    #[test]
+    fn logical_and_lower_than_comparison() {
+        // a == b && c == d  →  (a == b) && (c == d)
+        let e = parse("a == b && c == d");
+
+        match e {
+            Expr::BinOp {
+                op: BinOp::And,
+                lhs: left,
+                rhs: right,
+            } => {
+                // left: a == b
+                match *left {
+                    Expr::BinOp {
+                        op: BinOp::Eq,
+                        lhs: l,
+                        rhs: r,
+                    } => {
+                        assert!(matches!(*l, Expr::Var(ref s) if s == "a"));
+                        assert!(matches!(*r, Expr::Var(ref s) if s == "b"));
+                    }
+                    _ => panic!("left side should be equality"),
+                }
+
+                // right: c == d
+                match *right {
+                    Expr::BinOp {
+                        op: BinOp::Eq,
+                        lhs: l,
+                        rhs: r,
+                    } => {
+                        assert!(matches!(*l, Expr::Var(ref s) if s == "c"));
+                        assert!(matches!(*r, Expr::Var(ref s) if s == "d"));
+                    }
+                    _ => panic!("right side should be equality"),
+                }
+            }
+            _ => panic!("expected top-level AND"),
+        }
+    }
+
+    #[test]
+    fn unary_not() {
+        // !x
+        let e = parse("!x");
+
+        match e {
+            Expr::Unary {
+                op: UnaryOp::Not,
+                expr,
+            } => {
+                assert!(matches!(*expr, Expr::Var(ref s) if s == "x"));
+            }
+            _ => panic!("expected unary NOT"),
+        }
+    }
+
+    #[test]
+    fn bool_literal_true() {
+        assert_eq!(parse("true"), Expr::BoolLit(true));
+    }
+
+    #[test]
+    fn bool_literal_false() {
+        assert_eq!(parse("false"), Expr::BoolLit(false));
     }
     #[test]
     fn multiplication_binds_tighter_than_addition() {

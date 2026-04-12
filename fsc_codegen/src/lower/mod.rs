@@ -1,7 +1,7 @@
 use crate::error::{CodegenError, CodegenResult};
 use fsc_assembler::Assembler;
 use fsc_sema::frame::FrameLayout;
-use fsc_sema::hir::{BinOp, Expr, FuncDef, Stmt, Ty};
+use fsc_sema::hir::{BinOp, Expr, FuncDef, Stmt, Ty, UnaryOp};
 
 pub fn lower_func(func: &FuncDef, asm: &mut Assembler) -> CodegenResult<()> {
     let frame = &func.frame;
@@ -55,6 +55,13 @@ pub fn lower_expr(expr: &Expr, asm: &mut Assembler) -> CodegenResult<()> {
         Expr::IntLit { value, .. } => {
             emit_int_lit(*value, asm);
         }
+        Expr::BoolLit { value, .. } => {
+            if *value {
+                asm.emit_push(1);
+            } else {
+                asm.emit_push(0);
+            }
+        }
 
         Expr::Var {
             name: _name,
@@ -64,10 +71,25 @@ pub fn lower_expr(expr: &Expr, asm: &mut Assembler) -> CodegenResult<()> {
             asm.emit_load_arg(slot.0);
         }
 
-        Expr::BinOp { op, lhs, rhs, ty } => {
+        Expr::Unary {
+            op,
+            expr: expression,
+            ty: _ty,
+        } => {
+            lower_expr(expression, asm)?;
+            emit_unary(op, asm);
+        }
+
+        Expr::BinOp {
+            op,
+            lhs,
+            rhs,
+            ty: _,
+        } => {
             lower_expr(lhs, asm)?;
             lower_expr(rhs, asm)?;
-            emit_binop(op, ty, asm);
+
+            emit_binop(op, lhs.ty(), asm);
             // TODO: original scripts are saving in arg and load again; check if this is really
             // everytime necessary
         }
@@ -83,20 +105,43 @@ fn emit_int_lit(value: i32, asm: &mut Assembler) {
     }
 }
 
-fn emit_binop(op: &BinOp, ty: &Ty, asm: &mut Assembler) {
-    match ty {
-        Ty::Int => emit_int_binop(op, asm),
-        Ty::Void => {
-            unreachable!("BinOp with Ty::Void is unreachable due semantic pass")
-        }
+fn emit_binop(op: &BinOp, operand_ty: &Ty, asm: &mut Assembler) {
+    match op {
+        BinOp::Add => match operand_ty {
+            Ty::Int => asm.emit_add(),
+            Ty::Bool => unreachable!("add on bool"),
+            Ty::Void => unreachable!("add on void"),
+        },
+        BinOp::Sub => match operand_ty {
+            Ty::Int => asm.emit_sub(),
+            Ty::Bool => unreachable!("sub on bool"),
+            Ty::Void => unreachable!("sub on void"),
+        },
+        BinOp::Mul => match operand_ty {
+            Ty::Int => asm.emit_mul(),
+            Ty::Bool => unreachable!("mul on bool"),
+            Ty::Void => unreachable!("mul on void"),
+        },
+        BinOp::Div => match operand_ty {
+            Ty::Int => asm.emit_div(),
+            Ty::Bool => unreachable!("div on bool"),
+            Ty::Void => unreachable!("div on void"),
+        },
+
+        BinOp::And => asm.emit_and(),
+        BinOp::Or => asm.emit_or(),
+        BinOp::Eq => asm.emit_eq(),
+        BinOp::Neq => asm.emit_neq(),
+        BinOp::Gt => asm.emit_gt(),
+        BinOp::Ge => asm.emit_ge(),
+        BinOp::Lt => asm.emit_lt(),
+        BinOp::Le => asm.emit_le(),
     }
 }
 
-fn emit_int_binop(op: &BinOp, asm: &mut Assembler) {
+fn emit_unary(op: &UnaryOp, asm: &mut Assembler) {
     match op {
-        BinOp::Add => asm.emit_add(),
-        BinOp::Sub => asm.emit_sub(),
-        BinOp::Mul => asm.emit_mul(),
-        BinOp::Div => asm.emit_div(),
+        UnaryOp::Not => asm.emit_eq0(), // logical not
+        UnaryOp::Neg => asm.emit_neg(),
     }
 }

@@ -2,13 +2,31 @@
 pub enum Ty {
     Int,
     Void,
+    Bool,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BinOp {
+    // arithmetic
     Add,
     Sub,
     Mul,
     Div,
+    // comparison
+    Eq,
+    Neq,
+    Lt,
+    Gt,
+    Le,
+    Ge,
+    // logical
+    And,
+    Or,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UnaryOp {
+    Not, // !
+    Neg, // -
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -21,6 +39,11 @@ pub enum Expr {
         op: BinOp,
         lhs: Box<Expr>,
         rhs: Box<Expr>,
+    },
+    BoolLit(bool),
+    Unary {
+        op: UnaryOp,
+        expr: Box<Expr>,
     },
 }
 

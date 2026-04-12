@@ -1,6 +1,6 @@
 use crate::ast::Script;
 use crate::parser::error::{ParseError, ParseResult};
-use crate::parser::{parse_item, TokenStream};
+use crate::parser::{TokenStream, parse_item};
 
 pub mod ast;
 pub mod diagnostic;

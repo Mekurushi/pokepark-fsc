@@ -1,6 +1,6 @@
 use fsc_assembler::Assembler;
-use fsc_parse::diagnostic::render::DiagnosticRenderer;
 use fsc_parse::diagnostic::Diagnostic;
+use fsc_parse::diagnostic::render::DiagnosticRenderer;
 use fsc_parse::lexer;
 use std::path::{Path, PathBuf};
 use std::{env, fs, process};

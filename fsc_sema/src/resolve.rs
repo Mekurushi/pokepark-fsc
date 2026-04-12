@@ -86,12 +86,14 @@ fn resolve_stmt(stmt: &Stmt, scope: &mut ScopeStack) -> SemaResult<()> {
 
 fn resolve_expr(expr: &Expr, scope: &ScopeStack) -> SemaResult<()> {
     match expr {
-        Expr::IntLit(_) => Ok(()),
+        Expr::BoolLit(_) | Expr::IntLit(_) => Ok(()),
 
         Expr::Var(name) => {
             scope.lookup(name)?;
             Ok(())
         }
+
+        Expr::Unary { op: _op, expr } => resolve_expr(expr, scope),
 
         Expr::BinOp { lhs, rhs, .. } => {
             resolve_expr(lhs, scope)?;
