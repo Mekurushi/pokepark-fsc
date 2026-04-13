@@ -70,3 +70,85 @@ bool ret_unary(){
 int ret_int_unary(){
     return -1;
 }
+
+int check(int id) {
+    if (id == 0) {
+        return 1;
+    }
+    return 0;
+}
+
+int else_cases() {
+    if (1 == 1) {
+        int x = 0;
+    }
+    else{
+        int y = 1;
+    }
+
+    return 0;
+}
+
+int multi_decl() {
+    int x;
+    x = 1;
+    int y = 2;
+    if (1 == 1) {
+        int x = 0;
+    }
+    else{
+        int y = 1;
+    }
+
+    return 0;
+}
+
+int chained_ahritmetic(bool enrich){
+    int x = 1 + 2 + 3 + 4 + 5;
+    if (enrich){
+        x = x +1;
+    }
+    int y = 1+2;
+    return x+y;
+}
+
+int multi_ifs(int case){
+    int x;
+    if(1 == case){
+        x = 1;
+    }
+    else{
+       if(2==case){
+        x =2;
+        }
+        else{
+        x = 0;
+        }
+    }
+    return x;
+}
+
+int dynamic_cond(int x) {
+    if (x) {
+        return 1;
+    }
+    return 0;
+}
+
+int empty_blocks() {
+    if (1) {
+    } else {
+    }
+    return 0;
+}
+
+int deep_shadow() {
+    int x = 1;
+    if (1) {
+        int x = 2;
+        if (1) {
+            int x = 3;
+        }
+    }
+    return x; // should be 1
+}

@@ -1,10 +1,15 @@
+mod label_ctx;
+
 use crate::error::{CodegenError, CodegenResult};
+use crate::lower::label_ctx::LabelCtx;
 use fsc_assembler::Assembler;
 use fsc_sema::frame::FrameLayout;
 use fsc_sema::hir::{BinOp, Expr, FuncDef, Stmt, Ty, UnaryOp};
 
 pub fn lower_func(func: &FuncDef, asm: &mut Assembler) -> CodegenResult<()> {
     let frame = &func.frame;
+    let mut ctx = LabelCtx::new();
+
     asm.define_function(&func.name, func.exported)
         .map_err(Into::<CodegenError>::into)?;
 
@@ -13,12 +18,17 @@ pub fn lower_func(func: &FuncDef, asm: &mut Assembler) -> CodegenResult<()> {
     }
 
     for stmt in &func.body {
-        lower_stmt(stmt, frame, asm)?;
+        lower_stmt(stmt, frame, &mut ctx, asm)?;
     }
     Ok(())
 }
 
-pub fn lower_stmt(stmt: &Stmt, frame: &FrameLayout, asm: &mut Assembler) -> CodegenResult<()> {
+pub fn lower_stmt(
+    stmt: &Stmt,
+    frame: &FrameLayout,
+    ctx: &mut LabelCtx,
+    asm: &mut Assembler,
+) -> CodegenResult<()> {
     match stmt {
         Stmt::Return(expr) => Ok(lower_return(expr, frame, asm)?),
         Stmt::ReturnVoid => {
@@ -39,6 +49,38 @@ pub fn lower_stmt(stmt: &Stmt, frame: &FrameLayout, asm: &mut Assembler) -> Code
             if let Some(expr) = init {
                 lower_expr(expr, asm)?;
                 asm.emit_store_arg(slot.0);
+            }
+            Ok(())
+        }
+        Stmt::If {
+            cond,
+            then_body,
+            else_body,
+        } => {
+            lower_expr(cond, asm)?;
+            match else_body {
+                None => {
+                    let end = ctx.fresh_label("if_end");
+                    asm.emit_jz(&end)?;
+                    for s in then_body {
+                        lower_stmt(s, frame, ctx, asm)?;
+                    }
+                    asm.define_label(&end)?;
+                }
+                Some(else_stmts) => {
+                    let else_lbl = ctx.fresh_label("else");
+                    let end = ctx.fresh_label("if_end");
+                    asm.emit_jz(&else_lbl)?;
+                    for s in then_body {
+                        lower_stmt(s, frame, ctx, asm)?;
+                    }
+                    asm.emit_jmp(&end)?;
+                    asm.define_label(&else_lbl)?;
+                    for s in else_stmts {
+                        lower_stmt(s, frame, ctx, asm)?;
+                    }
+                    asm.define_label(&end)?;
+                }
             }
             Ok(())
         }

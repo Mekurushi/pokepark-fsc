@@ -1,3 +1,6 @@
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct NodeId(pub u32);
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Ty {
     Int,
@@ -30,8 +33,15 @@ pub enum UnaryOp {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Expr {
+pub struct Expr {
+    pub id: NodeId,
+    pub kind: ExprKind,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ExprKind {
     IntLit(i32),
+    BoolLit(bool),
 
     Var(String),
 
@@ -40,15 +50,25 @@ pub enum Expr {
         lhs: Box<Expr>,
         rhs: Box<Expr>,
     },
-    BoolLit(bool),
     Unary {
         op: UnaryOp,
         expr: Box<Expr>,
     },
 }
 
+impl Expr {
+    pub fn new(id: NodeId, kind: ExprKind) -> Self {
+        Self { id, kind }
+    }
+}
+
 #[derive(Debug, Clone)]
-pub enum Stmt {
+pub struct Stmt {
+    pub id: NodeId,
+    pub kind: StmtKind,
+}
+#[derive(Debug, Clone)]
+pub enum StmtKind {
     Return(Option<Expr>),
     VarDecl {
         name: String,
@@ -56,9 +76,20 @@ pub enum Stmt {
         init: Option<Expr>,
     },
     Assign {
-        name: String,
+        target: Expr,
         expr: Expr,
     },
+    If {
+        cond: Expr,
+        then_body: Vec<Stmt>,
+        else_body: Option<Vec<Stmt>>,
+    },
+}
+
+impl Stmt {
+    pub fn new(id: NodeId, kind: StmtKind) -> Self {
+        Self { id, kind }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -69,6 +100,7 @@ pub struct Param {
 
 #[derive(Debug, Clone)]
 pub struct FuncDef {
+    pub id: NodeId,
     pub name: String,
     pub params: Vec<Param>,
     pub ret_ty: Ty,

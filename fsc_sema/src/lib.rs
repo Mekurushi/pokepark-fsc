@@ -8,6 +8,8 @@ pub mod hir;
 mod infer;
 mod lower;
 mod resolve;
+mod symbol;
+
 pub fn analyze(script: &ast::Script) -> SemaResult<hir::Script> {
     let items = script
         .items
@@ -19,10 +21,9 @@ pub fn analyze(script: &ast::Script) -> SemaResult<hir::Script> {
 }
 
 pub fn analyze_func(func: &ast::FuncDef) -> SemaResult<hir::FuncDef> {
-    let frame = frame::build_frame(func)?;
-    let scope = resolve::resolve_func(func)?;
-    check::check_func(func, &scope)?;
-    lower::lower_func(func, frame, &scope)
+    let resolved = resolve::resolve_fn(func)?;
+    check::check_fn(func, &resolved)?;
+    lower::lower_fn(func, &resolved)
 }
 
 fn analyze_item(item: &ast::Item) -> SemaResult<hir::Item> {

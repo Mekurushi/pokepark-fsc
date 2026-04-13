@@ -1,70 +1,94 @@
 use crate::error::{SemaError, SemaResult};
-use crate::infer::infer_expr;
-use crate::resolve::ScopeStack;
-use fsc_parse::ast::{Expr, FuncDef, Stmt, Ty};
+use crate::infer;
+use crate::resolve::ResolveOutput;
+use fsc_parse::ast::{self, Ty};
 
-// TODO: forbid instructions after return or missing returns
-// TODO: forbid a < b < c only allow as a < b && b < c
+pub fn check_fn(func: &ast::FuncDef, resolved: &ResolveOutput) -> SemaResult<()> {
+    check_stmts(&func.body, &func.ret_ty, resolved)
+}
 
-pub fn check_func(func: &FuncDef, scope: &ScopeStack) -> SemaResult<()> {
-    for stmt in &func.body {
-        check_stmt(stmt, &func.ret_ty, scope)?;
+fn check_stmts(stmts: &[ast::Stmt], ret_ty: &Ty, resolved: &ResolveOutput) -> SemaResult<()> {
+    for stmt in stmts {
+        check_stmt(stmt, ret_ty, resolved)?;
     }
     Ok(())
 }
 
-fn check_stmt(stmt: &Stmt, ret_ty: &Ty, scope: &ScopeStack) -> SemaResult<()> {
-    match stmt {
-        Stmt::Return(expr) => match expr {
-            Some(expr) => check_return(expr, ret_ty, scope),
-            None => {
-                if *ret_ty == Ty::Void {
-                    Ok(())
-                } else {
-                    Err(SemaError::ReturnTypeMismatch {
-                        expected: ret_ty.clone(),
-                        found: Ty::Void,
-                    })
-                }
+fn check_stmt(stmt: &ast::Stmt, ret_ty: &Ty, resolved: &ResolveOutput) -> SemaResult<()> {
+    match &stmt.kind {
+        ast::StmtKind::Return(expr) => match expr {
+            Some(e) => {
+                let found = infer::infer_expr(e, resolved)?;
+                check_return(ret_ty, &found)
             }
+            None => check_void_return(ret_ty),
         },
 
-        Stmt::Assign { name, expr } => {
-            let decl_ty = scope.lookup(name)?;
-            let found = infer_expr(expr, scope)?;
+        ast::StmtKind::VarDecl { ty, init, .. } => {
+            if let Some(e) = init {
+                let found = infer::infer_expr(e, resolved)?;
+                check_assignable(ty, &found)?;
+            }
+            Ok(())
+        }
+
+        ast::StmtKind::Assign { target, expr } => {
+            let sym_id = resolved.resolutions.symbol(target.id);
+            let decl_ty = &resolved.symbols.get(sym_id).ty;
+            let found = infer::infer_expr(expr, resolved)?;
             check_assignable(decl_ty, &found)
         }
-        Stmt::VarDecl {
-            name: _name,
-            ty,
-            init,
-        } => match init {
-            Some(expr) => {
-                let found = infer_expr(expr, scope)?;
-                check_assignable(ty, &found)
+
+        ast::StmtKind::If {
+            cond,
+            then_body,
+            else_body,
+        } => {
+            let cond_ty = infer::infer_expr(cond, resolved)?;
+            check_condition(&cond_ty)?;
+            check_stmts(then_body, ret_ty, resolved)?;
+            if let Some(else_stmts) = else_body {
+                check_stmts(else_stmts, ret_ty, resolved)?;
             }
-            None => Ok(()),
-        },
+            Ok(())
+        }
     }
 }
 
-fn check_assignable(decl_ty: &Ty, infered_ty: &Ty) -> SemaResult<()> {
-    if decl_ty == infered_ty {
-        return Ok(());
-    }
-    Err(SemaError::TypeMismatch {
-        expected: decl_ty.clone(),
-        found: infered_ty.clone(),
-    })
-}
-
-fn check_return(expr: &Expr, ret_ty: &Ty, scope: &ScopeStack) -> SemaResult<()> {
-    let found = infer_expr(expr, scope)?;
-    if &found != ret_ty {
-        return Err(SemaError::ReturnTypeMismatch {
-            expected: ret_ty.clone(),
-            found,
+pub fn check_assignable(declared: &Ty, found: &Ty) -> SemaResult<()> {
+    if declared != found {
+        return Err(SemaError::TypeMismatch {
+            expected: declared.clone(),
+            found: found.clone(),
         });
     }
+    Ok(())
+}
+
+pub fn check_return(ret_ty: &Ty, found: &Ty) -> SemaResult<()> {
+    if ret_ty != found {
+        return Err(SemaError::ReturnTypeMismatch {
+            expected: ret_ty.clone(),
+            found: found.clone(),
+        });
+    }
+    Ok(())
+}
+
+pub fn check_void_return(ret_ty: &Ty) -> SemaResult<()> {
+    if *ret_ty != Ty::Void {
+        return Err(SemaError::ReturnTypeMismatch {
+            expected: ret_ty.clone(),
+            found: Ty::Void,
+        });
+    }
+    Ok(())
+}
+
+pub fn check_condition(ty: &Ty) -> SemaResult<()> {
+    if *ty == Ty::Void {
+        return Err(SemaError::VoidInValuePosition);
+    }
+    //TODO: check for boolean
     Ok(())
 }

@@ -19,6 +19,12 @@ pub enum TokenKind {
     KwBool,
 
     // --- Control Flow ---
+    #[token("if", priority = 10)]
+    KwIf,
+
+    #[token("else", priority = 10)]
+    KwElse,
+
     #[token("return", priority = 10)]
     KwReturn,
 
@@ -112,6 +118,8 @@ impl TokenKind {
             Self::KwInt => "`int`",
             Self::KwVoid => "`void`",
             Self::KwBool => "`boolean`",
+            Self::KwIf => "`if`",
+            Self::KwElse => "`else`",
             Self::KwReturn => "`return`",
             Self::KwStatic => "`static`",
             Self::BoolLit(_) => "`boolean literal`",

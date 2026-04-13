@@ -1,6 +1,6 @@
 use crate::ast::Script;
 use crate::parser::error::{ParseError, ParseResult};
-use crate::parser::{TokenStream, parse_item};
+use crate::parser::{Parser, TokenStream};
 
 pub mod ast;
 pub mod diagnostic;
@@ -14,11 +14,12 @@ pub fn parse(source: &str) -> ParseResult<Script> {
         return Err(ParseError::Lex(lex_output.errors));
     }
 
-    let mut ts = TokenStream::new(lex_output.tokens, source.to_string());
+    let ts = TokenStream::new(lex_output.tokens, source.to_string());
+    let mut parser = Parser::new(ts);
     let mut items = Vec::new();
 
-    while !ts.is_at_end() {
-        items.push(parse_item(&mut ts)?);
+    while !parser.is_at_end() {
+        items.push(parser.parse_item()?);
     }
 
     Ok(Script { items })

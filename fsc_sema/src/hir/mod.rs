@@ -90,6 +90,11 @@ pub enum Stmt {
         slot: StackSlot,
         value: Expr,
     },
+    If {
+        cond: Expr,
+        then_body: Vec<Stmt>,
+        else_body: Option<Vec<Stmt>>,
+    },
 }
 
 #[derive(Debug)]

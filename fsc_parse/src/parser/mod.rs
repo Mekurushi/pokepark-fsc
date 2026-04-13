@@ -1,6 +1,6 @@
 pub(crate) mod error;
-
-use crate::ast::{BinOp, Expr, FuncDef, Item, Param, Stmt, Ty, UnaryOp};
+use crate::ast::{BinOp, Expr, ExprKind, FuncDef, Item, Param, Stmt, Ty, UnaryOp};
+use crate::ast::{NodeId, StmtKind};
 use crate::lexer::token::{Span, Token, TokenKind};
 use crate::parser::error::{ParseError, ParseResult};
 
@@ -85,167 +85,286 @@ impl TokenStream {
     }
 }
 
-pub fn parse_item(ts: &mut TokenStream) -> ParseResult<Item> {
-    match ts.peek() {
-        Some(TokenKind::KwStatic | TokenKind::KwInt | TokenKind::KwVoid | TokenKind::KwBool) => {
-            Ok(Item::FuncDef(parse_function(ts)?))
+#[derive(Default)]
+pub struct NodeIdGen {
+    next: u32,
+}
+
+impl NodeIdGen {
+    pub fn new() -> Self {
+        Self { next: 0 }
+    }
+
+    pub fn alloc(&mut self) -> NodeId {
+        let id = NodeId(self.next);
+        self.next += 1;
+        id
+    }
+}
+
+pub struct Parser {
+    ts: TokenStream,
+    ids: NodeIdGen,
+}
+
+impl Parser {
+    pub fn new(ts: TokenStream) -> Self {
+        Self {
+            ts,
+            ids: NodeIdGen::new(),
         }
-        _ => Err(ts.unexpected("top-level item")),
     }
-}
-
-fn parse_function(ts: &mut TokenStream) -> ParseResult<FuncDef> {
-    let exported = !ts.eat(&TokenKind::KwStatic); // static = private
-    let ret_ty = parse_type_keyword(ts)?;
-    // function name
-    let name = ts.expect_ident()?;
-
-    // parameters
-    ts.expect(&TokenKind::LParen, "`(`")?;
-    let params = parse_param_list(ts)?;
-
-    // body
-    ts.expect(&TokenKind::LBrace, "`{`")?;
-    let body = parse_body(ts)?;
-    Ok(FuncDef {
-        name,
-        params,
-        ret_ty,
-        body,
-        exported,
-    })
-}
-
-fn parse_type_keyword(ts: &mut TokenStream) -> ParseResult<Ty> {
-    let token = ts.peek();
-    match token {
-        Some(TokenKind::KwInt) => {
-            ts.expect(&TokenKind::KwInt, "int")?;
-            Ok(Ty::Int)
+    pub fn parse_item(&mut self) -> ParseResult<Item> {
+        match self.ts.peek() {
+            Some(
+                TokenKind::KwStatic | TokenKind::KwInt | TokenKind::KwVoid | TokenKind::KwBool,
+            ) => Ok(Item::FuncDef(self.parse_function()?)),
+            _ => Err(self.ts.unexpected("top-level item")),
         }
-        Some(TokenKind::KwVoid) => {
-            ts.expect(&TokenKind::KwVoid, "void")?;
-            Ok(Ty::Void)
+    }
+    pub fn is_at_end(&self) -> bool {
+        self.ts.is_at_end()
+    }
+
+    fn parse_function(&mut self) -> ParseResult<FuncDef> {
+        let exported = !self.ts.eat(&TokenKind::KwStatic); // static = private
+        let ret_ty = self.parse_type_keyword()?;
+        // function name
+        let name = self.ts.expect_ident()?;
+
+        // parameters
+        self.ts.expect(&TokenKind::LParen, "`(`")?;
+        let params = self.parse_param_list()?;
+
+        // body
+        self.ts.expect(&TokenKind::LBrace, "`{`")?;
+        let body = self.parse_body()?;
+        Ok(FuncDef {
+            id: self.ids.alloc(),
+            name,
+            params,
+            ret_ty,
+            body,
+            exported,
+        })
+    }
+
+    fn parse_type_keyword(&mut self) -> ParseResult<Ty> {
+        let token = self.ts.peek();
+        match token {
+            Some(TokenKind::KwInt) => {
+                self.ts.expect(&TokenKind::KwInt, "int")?;
+                Ok(Ty::Int)
+            }
+            Some(TokenKind::KwVoid) => {
+                self.ts.expect(&TokenKind::KwVoid, "void")?;
+                Ok(Ty::Void)
+            }
+            Some(TokenKind::KwBool) => {
+                self.ts.expect(&TokenKind::KwBool, "bool")?;
+                Ok(Ty::Bool)
+            }
+            _ => Err(self.ts.unexpected("type keyword")),
         }
-        Some(TokenKind::KwBool) => {
-            ts.expect(&TokenKind::KwBool, "bool")?;
-            Ok(Ty::Bool)
+    }
+
+    fn parse_param_list(&mut self) -> ParseResult<Vec<Param>> {
+        let mut params: Vec<Param> = Vec::new();
+
+        while !self.ts.eat(&TokenKind::RParen) {
+            params.push(self.parse_param()?);
+            self.ts.eat(&TokenKind::Comma);
         }
-        _ => Err(ts.unexpected("type keyword")),
-    }
-}
-
-fn parse_param_list(ts: &mut TokenStream) -> ParseResult<Vec<Param>> {
-    let mut params: Vec<Param> = Vec::new();
-
-    while !ts.eat(&TokenKind::RParen) {
-        params.push(parse_param(ts)?);
-        ts.eat(&TokenKind::Comma);
-    }
-    Ok(params)
-}
-
-fn parse_param(ts: &mut TokenStream) -> ParseResult<Param> {
-    let ty = parse_type_keyword(ts)?;
-    let name = ts.expect_ident()?;
-    Ok(Param { name, ty })
-}
-
-fn parse_body(ts: &mut TokenStream) -> ParseResult<Vec<Stmt>> {
-    let mut body = Vec::new();
-
-    while !ts.eat(&TokenKind::RBrace) {
-        body.push(parse_stmt(ts)?);
+        Ok(params)
     }
 
-    Ok(body)
-}
-
-fn parse_stmt(ts: &mut TokenStream) -> ParseResult<Stmt> {
-    let stmt = match ts.peek() {
-        Some(TokenKind::KwReturn) => parse_return(ts),
-        Some(TokenKind::Ident(_)) => parse_assign_or_expr_stmt(ts),
-        Some(TokenKind::KwInt | TokenKind::KwBool) => parse_var_decl(ts),
-        _ => Err(ts.unexpected("statement")),
-    };
-    ts.expect(&TokenKind::Semicolon, "`;`")?;
-    stmt
-}
-fn parse_var_decl(ts: &mut TokenStream) -> ParseResult<Stmt> {
-    let ty = parse_type_keyword(ts)?;
-    let name = ts.expect_ident()?;
-    let init = if ts.eat(&TokenKind::Eq) {
-        Some(parse_expr(ts, 0)?)
-    } else {
-        None
-    };
-    Ok(Stmt::VarDecl { name, ty, init })
-}
-
-fn parse_assign_or_expr_stmt(ts: &mut TokenStream) -> ParseResult<Stmt> {
-    let name = ts.expect_ident()?;
-    if ts.eat(&TokenKind::Eq) {
-        let expr = parse_expr(ts, 0)?;
-        Ok(Stmt::Assign { name, expr })
-    } else {
-        Err(ts.unexpected("assignment or expression statement"))
-    }
-}
-
-fn parse_return(ts: &mut TokenStream) -> ParseResult<Stmt> {
-    ts.expect(&TokenKind::KwReturn, "`return`")?;
-
-    if ts.peek() == Some(&TokenKind::Semicolon) {
-        return Ok(Stmt::Return(None));
+    fn parse_param(&mut self) -> ParseResult<Param> {
+        let ty = self.parse_type_keyword()?;
+        let name = self.ts.expect_ident()?;
+        Ok(Param { name, ty })
     }
 
-    let expr = parse_expr(ts, 0)?;
-    Ok(Stmt::Return(Option::from(expr)))
-}
+    fn parse_body(&mut self) -> ParseResult<Vec<Stmt>> {
+        let mut body = Vec::new();
 
-fn parse_expr(ts: &mut TokenStream, min_bp: u8) -> ParseResult<Expr> {
-    let mut lhs = match ts.peek() {
-        Some(TokenKind::IntLit(_)) => parse_int_literal(ts),
-        Some(TokenKind::BoolLit(_)) => parse_bool_literal(ts),
-        Some(TokenKind::Ident(_)) => parse_identifier(ts),
-        Some(TokenKind::LParen) => parse_group(ts),
-        Some(TokenKind::Bang) => parse_unary(ts, UnaryOp::Not),
-        Some(TokenKind::Minus) => parse_unary(ts, UnaryOp::Neg),
-        _ => Err(ts.unexpected("expression")),
-    }?;
+        while !self.ts.eat(&TokenKind::RBrace) {
+            body.push(self.parse_stmt()?);
+        }
 
-    while let Some(tok) = ts.peek() {
-        let Some((bp, op)) = binding_power(tok) else {
-            break;
+        Ok(body)
+    }
+
+    fn parse_stmt(&mut self) -> ParseResult<Stmt> {
+        if let Some(TokenKind::KwIf) = self.ts.peek() {
+            self.parse_if()
+        } else {
+            let stmt = self.parse_stmt_inner()?;
+            self.ts.expect(&TokenKind::Semicolon, "`;`")?;
+            Ok(stmt)
+        }
+    }
+
+    fn parse_stmt_inner(&mut self) -> ParseResult<Stmt> {
+        match self.ts.peek() {
+            Some(TokenKind::KwReturn) => self.parse_return(),
+            Some(TokenKind::Ident(_)) => self.parse_assign_or_expr_stmt(),
+            Some(TokenKind::KwInt | TokenKind::KwBool) => self.parse_var_decl(),
+            _ => Err(self.ts.unexpected("statement")),
+        }
+    }
+
+    fn parse_if(&mut self) -> ParseResult<Stmt> {
+        self.ts.expect(&TokenKind::KwIf, "`if`")?;
+        self.ts.expect(&TokenKind::LParen, "`(`")?;
+        let cond = self.parse_expr(0)?;
+        self.ts.expect(&TokenKind::RParen, "`)`")?;
+
+        let then_body = self.parse_block()?;
+
+        let else_body = if self.ts.eat(&TokenKind::KwElse) {
+            Some(self.parse_block()?)
+        } else {
+            None
         };
-        if bp < min_bp {
-            break;
-        }
-        ts.advance();
-        let rhs = parse_expr(ts, bp + 1)?;
-        lhs = Expr::BinOp {
-            op,
-            lhs: Box::new(lhs),
-            rhs: Box::new(rhs),
-        };
+
+        Ok(Stmt::new(
+            self.ids.alloc(),
+            StmtKind::If {
+                cond,
+                then_body,
+                else_body,
+            },
+        ))
     }
 
-    Ok(lhs)
-}
+    fn parse_block(&mut self) -> ParseResult<Vec<Stmt>> {
+        self.ts.expect(&TokenKind::LBrace, "`{`")?;
+        let mut stmts = Vec::new();
+        while !self.ts.eat(&TokenKind::RBrace) {
+            stmts.push(self.parse_stmt()?);
+        }
+        Ok(stmts)
+    }
 
-fn parse_unary(ts: &mut TokenStream, op: UnaryOp) -> ParseResult<Expr> {
-    ts.advance();
-    let expr = parse_expr(ts, 6)?;
-    Ok(Expr::Unary {
-        op,
-        expr: Box::new(expr),
-    })
-}
+    fn parse_var_decl(&mut self) -> ParseResult<Stmt> {
+        let ty = self.parse_type_keyword()?;
+        let name = self.ts.expect_ident()?;
+        let init = if self.ts.eat(&TokenKind::Eq) {
+            Some(self.parse_expr(0)?)
+        } else {
+            None
+        };
+        Ok(Stmt::new(
+            self.ids.alloc(),
+            StmtKind::VarDecl { name, ty, init },
+        ))
+    }
 
-fn parse_bool_literal(ts: &mut TokenStream) -> ParseResult<Expr> {
-    match ts.advance() {
-        Some(TokenKind::BoolLit(b)) => Ok(Expr::BoolLit(*b)),
-        _ => Err(ts.unexpected("boolean literal")),
+    fn parse_assign_or_expr_stmt(&mut self) -> ParseResult<Stmt> {
+        let name = self.ts.expect_ident()?;
+        if self.ts.eat(&TokenKind::Eq) {
+            let expr = self.parse_expr(0)?;
+            Ok(Stmt::new(
+                self.ids.alloc(),
+                StmtKind::Assign {
+                    target: Expr::new(self.ids.alloc(), ExprKind::Var(name)),
+                    expr,
+                },
+            ))
+        } else {
+            Err(self.ts.unexpected("assignment or expression statement"))
+        }
+    }
+
+    fn parse_return(&mut self) -> ParseResult<Stmt> {
+        self.ts.expect(&TokenKind::KwReturn, "`return`")?;
+
+        if self.ts.peek() == Some(&TokenKind::Semicolon) {
+            return Ok(Stmt::new(self.ids.alloc(), StmtKind::Return(None)));
+        }
+
+        let expr = self.parse_expr(0)?;
+        Ok(Stmt::new(
+            self.ids.alloc(),
+            StmtKind::Return(Option::from(expr)),
+        ))
+    }
+
+    fn parse_expr(&mut self, min_bp: u8) -> ParseResult<Expr> {
+        let mut lhs = match self.ts.peek() {
+            Some(TokenKind::IntLit(_)) => self.parse_int_literal(),
+            Some(TokenKind::BoolLit(_)) => self.parse_bool_literal(),
+            Some(TokenKind::Ident(_)) => self.parse_identifier(),
+            Some(TokenKind::LParen) => self.parse_group(),
+            Some(TokenKind::Bang) => self.parse_unary(UnaryOp::Not),
+            Some(TokenKind::Minus) => self.parse_unary(UnaryOp::Neg),
+            _ => Err(self.ts.unexpected("expression")),
+        }?;
+
+        while let Some(tok) = self.ts.peek() {
+            let Some((bp, op)) = binding_power(tok) else {
+                break;
+            };
+            if bp < min_bp {
+                break;
+            }
+            self.ts.advance();
+            let rhs = self.parse_expr(bp + 1)?;
+
+            lhs = Expr::new(
+                self.ids.alloc(),
+                ExprKind::BinOp {
+                    op,
+                    lhs: Box::new(lhs),
+                    rhs: Box::new(rhs),
+                },
+            );
+        }
+
+        Ok(lhs)
+    }
+
+    fn parse_unary(&mut self, op: UnaryOp) -> ParseResult<Expr> {
+        self.ts.advance();
+        let expr = self.parse_expr(6)?;
+
+        Ok(Expr::new(
+            self.ids.alloc(),
+            ExprKind::Unary {
+                op,
+                expr: Box::new(expr),
+            },
+        ))
+    }
+
+    fn parse_bool_literal(&mut self) -> ParseResult<Expr> {
+        match self.ts.advance() {
+            Some(TokenKind::BoolLit(b)) => Ok(Expr::new(self.ids.alloc(), ExprKind::BoolLit(*b))),
+            _ => Err(self.ts.unexpected("boolean literal")),
+        }
+    }
+
+    fn parse_int_literal(&mut self) -> ParseResult<Expr> {
+        match self.ts.advance() {
+            Some(TokenKind::IntLit(n)) => Ok(Expr::new(self.ids.alloc(), ExprKind::IntLit(*n))),
+            _ => Err(self.ts.unexpected("`integer literal`")),
+        }
+    }
+    fn parse_group(&mut self) -> ParseResult<Expr> {
+        self.ts.advance();
+        let expr = self.parse_expr(0)?;
+        self.ts.expect(&TokenKind::RParen, "`)`")?;
+        Ok(expr)
+    }
+
+    fn parse_identifier(&mut self) -> ParseResult<Expr> {
+        let name = self.ts.expect_ident()?;
+        match self.ts.peek() {
+            Some(TokenKind::LParen) => {
+                todo!("function calls are not supported yet");
+            }
+            _ => Ok(Expr::new(self.ids.alloc(), ExprKind::Var(name))),
+        }
     }
 }
 
@@ -270,29 +389,6 @@ fn binding_power(tok: &TokenKind) -> Option<(u8, BinOp)> {
     }
 }
 
-fn parse_int_literal(ts: &mut TokenStream) -> ParseResult<Expr> {
-    match ts.advance() {
-        Some(TokenKind::IntLit(n)) => Ok(Expr::IntLit(*n)),
-        _ => Err(ts.unexpected("`integer literal`")),
-    }
-}
-fn parse_group(ts: &mut TokenStream) -> ParseResult<Expr> {
-    ts.advance();
-    let expr = parse_expr(ts, 0)?;
-    ts.expect(&TokenKind::RParen, "`)`")?;
-    Ok(expr)
-}
-
-fn parse_identifier(ts: &mut TokenStream) -> ParseResult<Expr> {
-    let name = ts.expect_ident()?;
-    match ts.peek() {
-        Some(TokenKind::LParen) => {
-            todo!("function calls are not supported yet");
-        }
-        _ => Ok(Expr::Var(name)),
-    }
-}
-
 #[cfg(test)]
 mod parse_expr_tests {
     #![allow(clippy::unwrap_used)]
@@ -309,8 +405,8 @@ mod parse_expr_tests {
             "lex errors: {:?}",
             lex_output.errors
         );
-        parse_expr(&mut TokenStream::new(lex_output.tokens, src.to_string()), 0)
-            .expect("parse error")
+        let mut parser = Parser::new(TokenStream::new(lex_output.tokens, src.to_string()));
+        parser.parse_expr(0).expect("parse error")
     }
 
     #[test]
@@ -318,22 +414,22 @@ mod parse_expr_tests {
         // 1 + 2 == 3  →  (1 + 2) == 3
         let e = parse("1 + 2 == 3");
 
-        match e {
-            Expr::BinOp {
+        match e.kind {
+            ExprKind::BinOp {
                 op: BinOp::Eq,
                 lhs: left,
                 rhs: right,
             } => {
-                assert!(matches!(*right, Expr::IntLit(3)));
+                assert!(matches!(right.kind, ExprKind::IntLit(3)));
 
-                match *left {
-                    Expr::BinOp {
+                match left.kind {
+                    ExprKind::BinOp {
                         op: BinOp::Add,
                         lhs: l,
                         rhs: r,
                     } => {
-                        assert!(matches!(*l, Expr::IntLit(1)));
-                        assert!(matches!(*r, Expr::IntLit(2)));
+                        assert!(matches!(l.kind, ExprKind::IntLit(1)));
+                        assert!(matches!(r.kind, ExprKind::IntLit(2)));
                     }
                     _ => panic!("left side should be addition"),
                 }
@@ -347,34 +443,34 @@ mod parse_expr_tests {
         // a == b && c == d  →  (a == b) && (c == d)
         let e = parse("a == b && c == d");
 
-        match e {
-            Expr::BinOp {
+        match e.kind {
+            ExprKind::BinOp {
                 op: BinOp::And,
                 lhs: left,
                 rhs: right,
             } => {
                 // left: a == b
-                match *left {
-                    Expr::BinOp {
+                match left.kind {
+                    ExprKind::BinOp {
                         op: BinOp::Eq,
                         lhs: l,
                         rhs: r,
                     } => {
-                        assert!(matches!(*l, Expr::Var(ref s) if s == "a"));
-                        assert!(matches!(*r, Expr::Var(ref s) if s == "b"));
+                        assert!(matches!(l.kind, ExprKind::Var(ref s) if s == "a"));
+                        assert!(matches!(r.kind, ExprKind::Var(ref s) if s == "b"));
                     }
                     _ => panic!("left side should be equality"),
                 }
 
                 // right: c == d
-                match *right {
-                    Expr::BinOp {
+                match right.kind {
+                    ExprKind::BinOp {
                         op: BinOp::Eq,
                         lhs: l,
                         rhs: r,
                     } => {
-                        assert!(matches!(*l, Expr::Var(ref s) if s == "c"));
-                        assert!(matches!(*r, Expr::Var(ref s) if s == "d"));
+                        assert!(matches!(l.kind, ExprKind::Var(ref s) if s == "c"));
+                        assert!(matches!(r.kind, ExprKind::Var(ref s) if s == "d"));
                     }
                     _ => panic!("right side should be equality"),
                 }
@@ -388,12 +484,12 @@ mod parse_expr_tests {
         // !x
         let e = parse("!x");
 
-        match e {
-            Expr::Unary {
+        match e.kind {
+            ExprKind::Unary {
                 op: UnaryOp::Not,
                 expr,
             } => {
-                assert!(matches!(*expr, Expr::Var(ref s) if s == "x"));
+                assert!(matches!(expr.kind, ExprKind::Var(ref s) if s == "x"));
             }
             _ => panic!("expected unary NOT"),
         }
@@ -401,98 +497,168 @@ mod parse_expr_tests {
 
     #[test]
     fn bool_literal_true() {
-        assert_eq!(parse("true"), Expr::BoolLit(true));
+        assert_eq!(parse("true").kind, ExprKind::BoolLit(true));
     }
 
     #[test]
     fn bool_literal_false() {
-        assert_eq!(parse("false"), Expr::BoolLit(false));
+        assert_eq!(parse("false").kind, ExprKind::BoolLit(false));
     }
     #[test]
     fn multiplication_binds_tighter_than_addition() {
-        assert_eq!(
-            parse("1 + 2 * 3"),
-            Expr::BinOp {
+        let e = parse("1 + 2 * 3");
+
+        match e.kind {
+            ExprKind::BinOp {
                 op: BinOp::Add,
-                lhs: Box::new(Expr::IntLit(1)),
-                rhs: Box::new(Expr::BinOp {
-                    op: BinOp::Mul,
-                    lhs: Box::new(Expr::IntLit(2)),
-                    rhs: Box::new(Expr::IntLit(3)),
-                }),
+                lhs: left,
+                rhs: right,
+            } => {
+                assert!(matches!(left.kind, ExprKind::IntLit(1)));
+                match right.kind {
+                    ExprKind::BinOp {
+                        op: BinOp::Mul,
+                        lhs: l,
+                        rhs: r,
+                    } => {
+                        assert!(matches!(l.kind, ExprKind::IntLit(2)));
+                        assert!(matches!(r.kind, ExprKind::IntLit(3)));
+                    }
+                    _ => panic!("left side should be addition"),
+                }
             }
-        );
+            _ => panic!("expected unary NOT"),
+        }
     }
 
     #[test]
     fn variable_in_expression() {
-        assert_eq!(
-            parse("x + 1"),
-            Expr::BinOp {
+        let e = parse("x + 1");
+        match e.kind {
+            ExprKind::BinOp {
                 op: BinOp::Add,
-                lhs: Box::new(Expr::Var("x".to_string())),
-                rhs: Box::new(Expr::IntLit(1)),
+                lhs: left,
+                rhs: right,
+            } => {
+                assert!(matches!(left.kind, ExprKind::Var(ref s) if s == "x"));
+                assert!(matches!(right.kind, ExprKind::IntLit(1)));
             }
-        );
+            _ => panic!("expected add"),
+        }
     }
 
     #[test]
     fn chained_mixed_precedence() {
-        assert_eq!(
-            parse("1 + 2 * 3 + 4"),
-            Expr::BinOp {
+        let e = parse("1 + 2 * 3 + 4");
+
+        match e.kind {
+            ExprKind::BinOp {
                 op: BinOp::Add,
-                lhs: Box::new(Expr::BinOp {
-                    op: BinOp::Add,
-                    lhs: Box::new(Expr::IntLit(1)),
-                    rhs: Box::new(Expr::BinOp {
-                        op: BinOp::Mul,
-                        lhs: Box::new(Expr::IntLit(2)),
-                        rhs: Box::new(Expr::IntLit(3)),
-                    }),
-                }),
-                rhs: Box::new(Expr::IntLit(4)),
+                lhs,
+                rhs,
+            } => {
+                match lhs.kind {
+                    ExprKind::BinOp {
+                        op: BinOp::Add,
+                        lhs: l1,
+                        rhs: r1,
+                    } => {
+                        assert!(matches!(l1.kind, ExprKind::IntLit(1)));
+
+                        match r1.kind {
+                            ExprKind::BinOp {
+                                op: BinOp::Mul,
+                                lhs: m1,
+                                rhs: m2,
+                            } => {
+                                assert!(matches!(m1.kind, ExprKind::IntLit(2)));
+                                assert!(matches!(m2.kind, ExprKind::IntLit(3)));
+                            }
+                            _ => panic!("expected multiplication in middle"),
+                        }
+                    }
+                    _ => panic!("expected left nested addition"),
+                }
+
+                assert!(matches!(rhs.kind, ExprKind::IntLit(4)));
             }
-        );
+            _ => panic!("expected top-level addition"),
+        }
     }
 
     #[test]
     fn nested_groups() {
-        assert_eq!(
-            parse("((1 + 2)) * ((3 + 4))"),
-            Expr::BinOp {
+        let e = parse("((1 + 2)) * ((3 + 4))");
+
+        match e.kind {
+            ExprKind::BinOp {
                 op: BinOp::Mul,
-                lhs: Box::new(Expr::BinOp {
-                    op: BinOp::Add,
-                    lhs: Box::new(Expr::IntLit(1)),
-                    rhs: Box::new(Expr::IntLit(2)),
-                }),
-                rhs: Box::new(Expr::BinOp {
-                    op: BinOp::Add,
-                    lhs: Box::new(Expr::IntLit(3)),
-                    rhs: Box::new(Expr::IntLit(4)),
-                }),
+                lhs,
+                rhs,
+            } => {
+                match lhs.kind {
+                    ExprKind::BinOp {
+                        op: BinOp::Add,
+                        lhs: l1,
+                        rhs: r1,
+                    } => {
+                        assert!(matches!(l1.kind, ExprKind::IntLit(1)));
+                        assert!(matches!(r1.kind, ExprKind::IntLit(2)));
+                    }
+                    _ => panic!("expected left side to be addition"),
+                }
+
+                match rhs.kind {
+                    ExprKind::BinOp {
+                        op: BinOp::Add,
+                        lhs: l2,
+                        rhs: r2,
+                    } => {
+                        assert!(matches!(l2.kind, ExprKind::IntLit(3)));
+                        assert!(matches!(r2.kind, ExprKind::IntLit(4)));
+                    }
+                    _ => panic!("expected right side to be addition"),
+                }
             }
-        );
+            _ => panic!("expected top-level multiplication"),
+        }
     }
 
     #[test]
     fn group_in_middle_of_chain() {
-        assert_eq!(
-            parse("1 * (2 + 3) * 4"),
-            Expr::BinOp {
+        let e = parse("1 * (2 + 3) * 4");
+        match e.kind {
+            ExprKind::BinOp {
                 op: BinOp::Mul,
-                lhs: Box::new(Expr::BinOp {
-                    op: BinOp::Mul,
-                    lhs: Box::new(Expr::IntLit(1)),
-                    rhs: Box::new(Expr::BinOp {
-                        op: BinOp::Add,
-                        lhs: Box::new(Expr::IntLit(2)),
-                        rhs: Box::new(Expr::IntLit(3)),
-                    }),
-                }),
-                rhs: Box::new(Expr::IntLit(4)),
+                lhs,
+                rhs,
+            } => {
+                match lhs.kind {
+                    ExprKind::BinOp {
+                        op: BinOp::Mul,
+                        lhs: l1,
+                        rhs: r1,
+                    } => {
+                        assert!(matches!(l1.kind, ExprKind::IntLit(1)));
+
+                        match r1.kind {
+                            ExprKind::BinOp {
+                                op: BinOp::Add,
+                                lhs: a1,
+                                rhs: a2,
+                            } => {
+                                assert!(matches!(a1.kind, ExprKind::IntLit(2)));
+                                assert!(matches!(a2.kind, ExprKind::IntLit(3)));
+                            }
+                            _ => panic!("expected (2 + 3) in middle"),
+                        }
+                    }
+                    _ => panic!("expected left multiplication"),
+                }
+
+                assert!(matches!(rhs.kind, ExprKind::IntLit(4)));
             }
-        );
+            _ => panic!("expected top-level multiplication"),
+        }
     }
 }
