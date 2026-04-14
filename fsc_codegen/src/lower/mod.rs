@@ -84,7 +84,37 @@ pub fn lower_stmt(
             }
             Ok(())
         }
+
+        Stmt::While { cond, body } => {
+            lower_while(cond, body, frame, label_ctx, asm)?;
+            Ok(())
+        }
     }
+}
+
+fn lower_while(
+    cond: &Expr,
+    body: &[Stmt],
+    frame: &FrameLayout,
+    label_ctx: &mut LabelCtx,
+    asm: &mut Assembler,
+) -> CodegenResult<()> {
+    let start = label_ctx.fresh_label("while_start");
+    let end = label_ctx.fresh_label("while_end");
+
+    asm.define_label(&start)?;
+
+    lower_expr(cond, label_ctx, asm)?;
+    asm.emit_jz(&end)?;
+
+    for s in body {
+        lower_stmt(s, frame, label_ctx, asm)?;
+    }
+
+    asm.emit_jmp(&start)?;
+    asm.define_label(&end)?;
+
+    Ok(())
 }
 fn lower_return(
     expr: &Expr,

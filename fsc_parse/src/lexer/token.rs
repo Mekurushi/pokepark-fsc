@@ -25,6 +25,9 @@ pub enum TokenKind {
     #[token("else", priority = 10)]
     KwElse,
 
+    #[token("while", priority = 10)]
+    KwWhile,
+
     #[token("return", priority = 10)]
     KwReturn,
 
@@ -120,6 +123,7 @@ impl TokenKind {
             Self::KwBool => "`boolean`",
             Self::KwIf => "`if`",
             Self::KwElse => "`else`",
+            Self::KwWhile => "`while`",
             Self::KwReturn => "`return`",
             Self::KwStatic => "`static`",
             Self::BoolLit(_) => "`boolean literal`",

@@ -84,6 +84,10 @@ pub enum StmtKind {
         then_body: Vec<Stmt>,
         else_body: Option<Vec<Stmt>>,
     },
+    While {
+        cond: Expr,
+        body: Vec<Stmt>,
+    },
 }
 
 impl Stmt {

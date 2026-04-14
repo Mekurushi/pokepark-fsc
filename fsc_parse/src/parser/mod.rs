@@ -195,12 +195,14 @@ impl Parser {
     }
 
     fn parse_stmt(&mut self) -> ParseResult<Stmt> {
-        if let Some(TokenKind::KwIf) = self.ts.peek() {
-            self.parse_if()
-        } else {
-            let stmt = self.parse_stmt_inner()?;
-            self.ts.expect(&TokenKind::Semicolon, "`;`")?;
-            Ok(stmt)
+        match self.ts.peek() {
+            Some(TokenKind::KwIf) => self.parse_if(),
+            Some(TokenKind::KwWhile) => self.parse_while(),
+            _ => {
+                let stmt = self.parse_stmt_inner()?;
+                self.ts.expect(&TokenKind::Semicolon, "`;`")?;
+                Ok(stmt)
+            }
         }
     }
 
@@ -235,6 +237,19 @@ impl Parser {
                 else_body,
             },
         ))
+    }
+
+    fn parse_while(&mut self) -> ParseResult<Stmt> {
+        self.ts.expect(&TokenKind::KwWhile, "`while`")?;
+        self.ts.expect(&TokenKind::LParen, "`(`")?;
+
+        let cond = self.parse_expr(0)?;
+
+        self.ts.expect(&TokenKind::RParen, "`)`")?;
+
+        let body = self.parse_block()?;
+
+        Ok(Stmt::new(self.ids.alloc(), StmtKind::While { cond, body }))
     }
 
     fn parse_block(&mut self) -> ParseResult<Vec<Stmt>> {

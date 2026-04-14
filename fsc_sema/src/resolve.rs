@@ -167,6 +167,15 @@ fn resolve_stmt(
             }
             Ok(())
         }
+        ast::StmtKind::While { cond, body } => {
+            resolve_expr(cond, scope, resolutions)?;
+
+            scope.push();
+            resolve_stmts(body, scope, symbols, resolutions)?;
+            scope.pop();
+
+            Ok(())
+        }
     }
 }
 

@@ -118,6 +118,11 @@ fn lower_stmt(stmt: &Stmt, resolved: &ResolveOutput, layout: &mut Layout) -> Sem
                 .map(|b| lower_stmts(b, resolved, layout))
                 .transpose()?,
         }),
+
+        ast::StmtKind::While { cond, body } => Ok(hir::Stmt::While {
+            cond: lower_expr(cond, resolved, layout)?,
+            body: lower_stmts(body, resolved, layout)?,
+        }),
     }
 }
 

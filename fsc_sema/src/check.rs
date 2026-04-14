@@ -52,6 +52,14 @@ fn check_stmt(stmt: &ast::Stmt, ret_ty: &Ty, resolved: &ResolveOutput) -> SemaRe
             }
             Ok(())
         }
+
+        ast::StmtKind::While { cond, body } => {
+            let cond_ty = infer::infer_expr(cond, resolved)?;
+            check_condition(&cond_ty)?;
+
+            check_stmts(body, ret_ty, resolved)?;
+            Ok(())
+        }
     }
 }
 
