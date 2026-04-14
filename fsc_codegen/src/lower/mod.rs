@@ -8,7 +8,7 @@ use fsc_sema::hir::{BinOp, Expr, FuncDef, Stmt, Ty, UnaryOp};
 
 pub fn lower_func(func: &FuncDef, asm: &mut Assembler) -> CodegenResult<()> {
     let frame = &func.frame;
-    let mut ctx = LabelCtx::new();
+    let mut label_ctx = LabelCtx::new();
 
     asm.define_function(&func.name, func.exported)
         .map_err(Into::<CodegenError>::into)?;
@@ -18,7 +18,7 @@ pub fn lower_func(func: &FuncDef, asm: &mut Assembler) -> CodegenResult<()> {
     }
 
     for stmt in &func.body {
-        lower_stmt(stmt, frame, &mut ctx, asm)?;
+        lower_stmt(stmt, frame, &mut label_ctx, asm)?;
     }
     Ok(())
 }
@@ -26,17 +26,17 @@ pub fn lower_func(func: &FuncDef, asm: &mut Assembler) -> CodegenResult<()> {
 pub fn lower_stmt(
     stmt: &Stmt,
     frame: &FrameLayout,
-    ctx: &mut LabelCtx,
+    label_ctx: &mut LabelCtx,
     asm: &mut Assembler,
 ) -> CodegenResult<()> {
     match stmt {
-        Stmt::Return(expr) => Ok(lower_return(expr, frame, asm)?),
+        Stmt::Return(expr) => Ok(lower_return(expr, frame, label_ctx, asm)?),
         Stmt::ReturnVoid => {
             asm.emit_ret(frame.frame_size());
             Ok(())
         }
         Stmt::Assign { slot, value: expr } => {
-            lower_expr(expr, asm)?;
+            lower_expr(expr, label_ctx, asm)?;
             asm.emit_store_arg(slot.0);
             Ok(())
         }
@@ -47,7 +47,7 @@ pub fn lower_stmt(
             init,
         } => {
             if let Some(expr) = init {
-                lower_expr(expr, asm)?;
+                lower_expr(expr, label_ctx, asm)?;
                 asm.emit_store_arg(slot.0);
             }
             Ok(())
@@ -57,27 +57,27 @@ pub fn lower_stmt(
             then_body,
             else_body,
         } => {
-            lower_expr(cond, asm)?;
+            lower_expr(cond, label_ctx, asm)?;
             match else_body {
                 None => {
-                    let end = ctx.fresh_label("if_end");
+                    let end = label_ctx.fresh_label("if_end");
                     asm.emit_jz(&end)?;
                     for s in then_body {
-                        lower_stmt(s, frame, ctx, asm)?;
+                        lower_stmt(s, frame, label_ctx, asm)?;
                     }
                     asm.define_label(&end)?;
                 }
                 Some(else_stmts) => {
-                    let else_lbl = ctx.fresh_label("else");
-                    let end = ctx.fresh_label("if_end");
+                    let else_lbl = label_ctx.fresh_label("else");
+                    let end = label_ctx.fresh_label("if_end");
                     asm.emit_jz(&else_lbl)?;
                     for s in then_body {
-                        lower_stmt(s, frame, ctx, asm)?;
+                        lower_stmt(s, frame, label_ctx, asm)?;
                     }
                     asm.emit_jmp(&end)?;
                     asm.define_label(&else_lbl)?;
                     for s in else_stmts {
-                        lower_stmt(s, frame, ctx, asm)?;
+                        lower_stmt(s, frame, label_ctx, asm)?;
                     }
                     asm.define_label(&end)?;
                 }
@@ -86,13 +86,18 @@ pub fn lower_stmt(
         }
     }
 }
-fn lower_return(expr: &Expr, frame: &FrameLayout, asm: &mut Assembler) -> CodegenResult<()> {
-    lower_expr(expr, asm)?;
+fn lower_return(
+    expr: &Expr,
+    frame: &FrameLayout,
+    label_ctx: &mut LabelCtx,
+    asm: &mut Assembler,
+) -> CodegenResult<()> {
+    lower_expr(expr, label_ctx, asm)?;
     asm.emit_retv(frame.frame_size());
     Ok(())
 }
 
-pub fn lower_expr(expr: &Expr, asm: &mut Assembler) -> CodegenResult<()> {
+pub fn lower_expr(expr: &Expr, label_ctx: &mut LabelCtx, asm: &mut Assembler) -> CodegenResult<()> {
     match expr {
         Expr::IntLit { value, .. } => {
             emit_int_lit(*value, asm);
@@ -118,24 +123,77 @@ pub fn lower_expr(expr: &Expr, asm: &mut Assembler) -> CodegenResult<()> {
             expr: expression,
             ty: _ty,
         } => {
-            lower_expr(expression, asm)?;
+            lower_expr(expression, label_ctx, asm)?;
             emit_unary(op, asm);
         }
-
+        Expr::BinOp { op, lhs, rhs, .. } if matches!(op, BinOp::And | BinOp::Or) => match op {
+            BinOp::And => emit_and_short_circuit(lhs, rhs, label_ctx, asm)?,
+            BinOp::Or => emit_or_short_circuit(lhs, rhs, label_ctx, asm)?,
+            _ => unreachable!(),
+        },
         Expr::BinOp {
             op,
             lhs,
             rhs,
             ty: _,
         } => {
-            lower_expr(lhs, asm)?;
-            lower_expr(rhs, asm)?;
+            lower_expr(lhs, label_ctx, asm)?;
+            lower_expr(rhs, label_ctx, asm)?;
 
             emit_binop(op, lhs.ty(), asm);
             // TODO: original scripts are saving in arg and load again; check if this is really
             // everytime necessary
         }
     }
+    Ok(())
+}
+fn emit_and_short_circuit(
+    lhs: &Expr,
+    rhs: &Expr,
+    ctx: &mut LabelCtx,
+    asm: &mut Assembler,
+) -> CodegenResult<()> {
+    let false_label = ctx.fresh_label("and_false");
+    let end_label = ctx.fresh_label("and_end");
+
+    lower_expr(lhs, ctx, asm)?;
+    asm.emit_jz(&false_label)?;
+
+    lower_expr(rhs, ctx, asm)?;
+    asm.emit_jz(&false_label)?;
+
+    asm.emit_push(1);
+    asm.emit_jmp(&end_label)?;
+
+    asm.define_label(&false_label)?;
+    asm.emit_push(0);
+
+    asm.define_label(&end_label)?;
+    Ok(())
+}
+
+fn emit_or_short_circuit(
+    lhs: &Expr,
+    rhs: &Expr,
+    ctx: &mut LabelCtx,
+    asm: &mut Assembler,
+) -> CodegenResult<()> {
+    let true_label = ctx.fresh_label("or_true");
+    let end_label = ctx.fresh_label("or_end");
+
+    lower_expr(lhs, ctx, asm)?;
+    asm.emit_jnz(&true_label)?;
+
+    lower_expr(rhs, ctx, asm)?;
+    asm.emit_jnz(&true_label)?;
+
+    asm.emit_push(0);
+    asm.emit_jmp(&end_label)?;
+
+    asm.define_label(&true_label)?;
+    asm.emit_push(1);
+
+    asm.define_label(&end_label)?;
     Ok(())
 }
 fn emit_int_lit(value: i32, asm: &mut Assembler) {
@@ -170,14 +228,14 @@ fn emit_binop(op: &BinOp, operand_ty: &Ty, asm: &mut Assembler) {
             Ty::Void => unreachable!("div on void"),
         },
 
-        BinOp::And => asm.emit_and(),
-        BinOp::Or => asm.emit_or(),
         BinOp::Eq => asm.emit_eq(),
         BinOp::Neq => asm.emit_neq(),
         BinOp::Gt => asm.emit_gt(),
         BinOp::Ge => asm.emit_ge(),
         BinOp::Lt => asm.emit_lt(),
         BinOp::Le => asm.emit_le(),
+
+        BinOp::And | BinOp::Or => unreachable!("should be in short circuit logic"),
     }
 }
 

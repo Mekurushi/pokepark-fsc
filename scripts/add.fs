@@ -152,3 +152,18 @@ int deep_shadow() {
     }
     return x; // should be 1
 }
+
+int short_circuit_and(){
+    int x = 0;
+    if (false && true) {
+        x = 1;
+    }
+    return x;
+}
+int short_circuit_or(){
+    int x = 0;
+    if (false || true) {
+        x = 1;
+    }
+    return x;
+}
