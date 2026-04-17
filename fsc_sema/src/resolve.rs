@@ -1,5 +1,5 @@
 use crate::error::{SemaError, SemaResult};
-use crate::symbol::{Symbol, SymbolId, SymbolKind, SymbolTable};
+use crate::symbol::{ParamInfo, Symbol, SymbolId, SymbolKind, SymbolTable};
 use fsc_parse::ast;
 use fsc_parse::ast::NodeId;
 use std::collections::HashMap;
@@ -28,46 +28,97 @@ impl Resolutions {
 }
 
 pub struct ResolveOutput {
-    pub symbols: SymbolTable,
+    pub symbols: SymbolTable, // TODO: borrow is probably better now
     pub resolutions: Resolutions,
     pub params_in_order: Vec<SymbolId>,
 }
-
-struct ScopeStack {
-    scopes: Vec<HashMap<String, SymbolId>>,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ScopeKind {
+    File,
+    Function,
+    Block,
+}
+#[derive(Debug)]
+struct Scope {
+    kind: ScopeKind,
+    map: HashMap<String, SymbolId>,
+}
+#[derive(Debug)]
+pub struct ScopeStack {
+    scopes: Vec<Scope>,
 }
 
+// TODO: check assertions; currently more development check than state enforcements
 impl ScopeStack {
-    fn new() -> Self {
-        Self {
-            scopes: vec![HashMap::new()],
-        }
+    pub(crate) fn new() -> Self {
+        Self { scopes: vec![] }
+    }
+    fn push_scope(&mut self, kind: ScopeKind) {
+        self.scopes.push(Scope {
+            kind,
+            map: HashMap::new(),
+        });
+    }
+    fn current_kind(&self) -> Option<ScopeKind> {
+        self.scopes.last().map(|s| s.kind)
     }
 
-    fn push(&mut self) {
-        self.scopes.push(HashMap::new());
+    fn enter_file_scope(&mut self) {
+        assert!(
+            self.scopes.is_empty(),
+            "file scope already \
+        initialized"
+        );
+
+        self.push_scope(ScopeKind::File);
     }
 
-    fn pop(&mut self) {
-        debug_assert!(self.scopes.len() > 1, "cannot pop the outermost scope");
+    fn enter_function_scope(&mut self) {
+        assert_eq!(
+            self.current_kind(),
+            Some(ScopeKind::File),
+            "function scope must be entered from file scope"
+        );
+        self.push_scope(ScopeKind::Function);
+    }
+
+    fn enter_block_scope(&mut self) {
+        assert!(
+            matches!(
+                self.current_kind(),
+                Some(ScopeKind::Function | ScopeKind::Block)
+            ),
+            "block scope must be inside function or block"
+        );
+        self.push_scope(ScopeKind::Block);
+    }
+
+    fn exit_scope(&mut self) {
+        assert!(!self.scopes.is_empty(), "cannot exit empty scope stack");
+        assert_ne!(
+            self.current_kind(),
+            Some(ScopeKind::File),
+            "cannot exit root scope"
+        );
+
         self.scopes.pop();
     }
 
     fn declare(&mut self, name: &str, sym_id: SymbolId) -> SemaResult<()> {
         let current = self.scopes.last_mut();
-        let Some(map) = current else {
+        let Some(scope) = current else {
             unreachable!("unreachable initialized with at least one scope")
         };
-        if map.contains_key(name) {
+        if scope.map.contains_key(name) {
             return Err(SemaError::DuplicateDeclaration(name.to_string()));
         }
-        map.insert(name.to_string(), sym_id);
+        scope.map.insert(name.to_string(), sym_id);
         Ok(())
     }
 
     fn lookup(&self, name: &str) -> SemaResult<SymbolId> {
         for scope in self.scopes.iter().rev() {
-            if let Some(&id) = scope.get(name) {
+            if let Some(&id) = scope.map.get(name) {
                 return Ok(id);
             }
         }
@@ -75,31 +126,76 @@ impl ScopeStack {
     }
 }
 
-pub fn resolve_fn(func: &ast::FuncDef) -> SemaResult<ResolveOutput> {
-    let mut symbols = SymbolTable::new();
-    let mut resolutions = Resolutions::new();
-    let mut scope = ScopeStack::new();
+pub fn declare_items(
+    script: &ast::Script,
+    scope: &mut ScopeStack,
+    symbols: &mut SymbolTable,
+) -> SemaResult<()> {
+    scope.enter_file_scope();
+    for item in &script.items {
+        if let ast::Item::FuncDef(func) = item {
+            let mut params: Vec<ParamInfo> = Vec::new();
+            for param in func.params.iter() {
+                params.push(ParamInfo {
+                    name: param.name.clone(),
+                    ty: param.ty.clone(),
+                });
+            }
+            let fn_sym_id = symbols.insert(Symbol {
+                name: func.name.clone(),
+                ty: func.ret_ty.clone(),
+                kind: SymbolKind::Function {
+                    ret_ty: func.ret_ty.clone(),
+                    params,
+                },
+            });
+            scope.declare(&func.name, fn_sym_id)?;
+        }
+    }
+    Ok(())
+}
 
-    let mut params: Vec<SymbolId> = Vec::new();
-    for (index, param) in func.params.iter().enumerate() {
-        let sym_id = symbols.insert(Symbol {
+pub fn resolve_params(
+    params: &[ParamInfo],
+    scope: &mut ScopeStack,
+    symbol_table: &mut SymbolTable,
+) -> SemaResult<Vec<SymbolId>> {
+    let mut params_in_order: Vec<SymbolId> = Vec::new();
+    for (index, param) in params.iter().enumerate() {
+        let sym_id = symbol_table.insert(Symbol {
             name: param.name.clone(),
             ty: param.ty.clone(),
             kind: SymbolKind::Param {
-                // TODO: unused, original idea not used check if this can be removed
                 index: index as u32,
             },
         });
         scope.declare(&param.name, sym_id)?;
-        params.push(sym_id);
+        params_in_order.push(sym_id);
     }
+    Ok(params_in_order)
+}
 
-    resolve_stmts(&func.body, &mut scope, &mut symbols, &mut resolutions)?;
+pub fn resolve_fn(
+    func: &ast::FuncDef,
+    symbols: &mut SymbolTable,
+    scope: &mut ScopeStack,
+) -> SemaResult<ResolveOutput> {
+    scope.enter_function_scope();
+    let mut resolutions = Resolutions::new();
+    let fn_symbol_id = scope.lookup(&func.name)?;
+    let (params, ..) = match symbols.get(fn_symbol_id).kind.clone() {
+        SymbolKind::Function { params, ret_ty } => (params, ret_ty),
+        _ => todo!(),
+    };
+    let params_in_order = resolve_params(&params, scope, symbols)?;
 
+    resolve_stmts(&func.body, scope, symbols, &mut resolutions)?;
+    let symbol_table = symbols.clone();
+    scope.exit_scope();
     Ok(ResolveOutput {
-        symbols,
+        symbols: symbol_table,
         resolutions,
-        params_in_order: params,
+        params_in_order,
     })
 }
 
@@ -156,24 +252,28 @@ fn resolve_stmt(
         } => {
             resolve_expr(cond, scope, resolutions)?;
 
-            scope.push();
+            scope.enter_block_scope();
             resolve_stmts(then_body, scope, symbols, resolutions)?;
-            scope.pop();
+            scope.exit_scope();
 
             if let Some(else_stmts) = else_body {
-                scope.push();
+                scope.enter_block_scope();
                 resolve_stmts(else_stmts, scope, symbols, resolutions)?;
-                scope.pop();
+                scope.exit_scope();
             }
             Ok(())
         }
         ast::StmtKind::While { cond, body } => {
             resolve_expr(cond, scope, resolutions)?;
 
-            scope.push();
+            scope.enter_block_scope();
             resolve_stmts(body, scope, symbols, resolutions)?;
-            scope.pop();
+            scope.exit_scope();
 
+            Ok(())
+        }
+        ast::StmtKind::ExprStmt(expr) => {
+            resolve_expr(expr, scope, resolutions)?;
             Ok(())
         }
     }
@@ -199,5 +299,14 @@ fn resolve_expr(
         }
 
         ast::ExprKind::Unary { expr: inner, .. } => resolve_expr(inner, scope, resolutions),
+
+        ast::ExprKind::Call { callee, args } => {
+            let sym_id = scope.lookup(callee)?;
+            resolutions.insert(expr.id, sym_id);
+            for arg in args {
+                resolve_expr(arg, scope, resolutions)?;
+            }
+            Ok(())
+        }
     }
 }

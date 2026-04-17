@@ -11,11 +11,18 @@ pub struct Symbol {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParamInfo {
+    pub name: String,
+    pub ty: Ty,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SymbolKind {
     Param { index: u32 },
     Local,
+    Function { ret_ty: Ty, params: Vec<ParamInfo> },
 }
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct SymbolTable {
     symbols: Vec<Symbol>,
 }

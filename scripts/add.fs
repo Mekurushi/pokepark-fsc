@@ -165,7 +165,8 @@ int short_circuit_or(){
     if (false || true) {
         x = 1;
     }
-    return x;
+    int c = short_circuit_and();
+    return c;
 }
 
 int loop() {
@@ -174,4 +175,13 @@ int loop() {
         i = i + 1;
     }
     return i;
+}
+
+int caller(){
+    called(2,2);
+    return called(1,2);
+}
+
+int called(int a,int b){
+    return a  +b;
 }

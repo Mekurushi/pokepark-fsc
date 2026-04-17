@@ -84,7 +84,10 @@ pub fn lower_stmt(
             }
             Ok(())
         }
-
+        Stmt::ExprStmt(expr) => {
+            lower_expr(expr, label_ctx, asm)?;
+            Ok(())
+        }
         Stmt::While { cond, body } => {
             lower_while(cond, body, frame, label_ctx, asm)?;
             Ok(())
@@ -173,6 +176,13 @@ pub fn lower_expr(expr: &Expr, label_ctx: &mut LabelCtx, asm: &mut Assembler) ->
             emit_binop(op, lhs.ty(), asm);
             // TODO: original scripts are saving in arg and load again; check if this is really
             // everytime necessary
+        }
+        Expr::Call { callee, args, .. } => {
+            // TODO: rev() used because of calling convention; check how to make this more explicit
+            for arg in args.iter().rev() {
+                lower_expr(arg, label_ctx, asm)?;
+            }
+            asm.emit_call(callee)?;
         }
     }
     Ok(())

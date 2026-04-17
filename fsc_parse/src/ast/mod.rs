@@ -54,6 +54,10 @@ pub enum ExprKind {
         op: UnaryOp,
         expr: Box<Expr>,
     },
+    Call {
+        callee: String,
+        args: Vec<Expr>,
+    },
 }
 
 impl Expr {
@@ -79,6 +83,7 @@ pub enum StmtKind {
         target: Expr,
         expr: Expr,
     },
+    ExprStmt(Expr),
     If {
         cond: Expr,
         then_body: Vec<Stmt>,

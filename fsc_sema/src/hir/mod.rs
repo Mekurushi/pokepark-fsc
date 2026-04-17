@@ -61,6 +61,12 @@ pub enum Expr {
         rhs: Box<Expr>,
         ty: Ty,
     },
+
+    Call {
+        callee: String,
+        args: Vec<Expr>,
+        ty: Ty,
+    },
 }
 
 impl Expr {
@@ -70,7 +76,8 @@ impl Expr {
             | Self::Var { ty, .. }
             | Self::BinOp { ty, .. }
             | Self::BoolLit { ty, .. }
-            | Self::Unary { ty, .. } => ty,
+            | Self::Unary { ty, .. }
+            | Self::Call { ty, .. } => ty,
         }
     }
 }
@@ -90,6 +97,7 @@ pub enum Stmt {
         slot: StackSlot,
         value: Expr,
     },
+    ExprStmt(Expr),
     If {
         cond: Expr,
         then_body: Vec<Stmt>,

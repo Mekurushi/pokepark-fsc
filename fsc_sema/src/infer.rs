@@ -1,5 +1,6 @@
 use crate::error::{SemaError, SemaResult};
 use crate::resolve::ResolveOutput;
+use crate::symbol::SymbolKind;
 use fsc_parse::ast::{BinOp, Expr, ExprKind, Ty, UnaryOp};
 
 pub fn infer_expr(expr: &Expr, resolved: &ResolveOutput) -> SemaResult<Ty> {
@@ -14,6 +15,14 @@ pub fn infer_expr(expr: &Expr, resolved: &ResolveOutput) -> SemaResult<Ty> {
         ExprKind::BinOp { op, lhs, rhs } => infer_binop(op, lhs, rhs, resolved),
 
         ExprKind::Unary { op, expr } => infer_unary(op, expr, resolved),
+        ExprKind::Call { .. } => {
+            let sym_id = resolved.resolutions.symbol(expr.id);
+            let sym = resolved.symbols.get(sym_id);
+            match &sym.kind {
+                SymbolKind::Function { ret_ty, .. } => Ok(ret_ty.clone()),
+                _ => Err(SemaError::NotCallable(sym.name.clone())),
+            }
+        }
     }
 }
 fn infer_binop(op: &BinOp, lhs: &Expr, rhs: &Expr, resolved: &ResolveOutput) -> SemaResult<Ty> {

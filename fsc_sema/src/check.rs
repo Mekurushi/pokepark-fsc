@@ -60,6 +60,15 @@ fn check_stmt(stmt: &ast::Stmt, ret_ty: &Ty, resolved: &ResolveOutput) -> SemaRe
             check_stmts(body, ret_ty, resolved)?;
             Ok(())
         }
+        ast::StmtKind::ExprStmt(expr) => {
+            let ty = infer::infer_expr(expr, resolved)?;
+            if ty != Ty::Void {
+                if !matches!(expr.kind, ast::ExprKind::Call { .. }) {
+                    // TODO: emit warning: "expression result unused"
+                }
+            }
+            Ok(())
+        }
     }
 }
 

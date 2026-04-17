@@ -286,8 +286,11 @@ impl Parser {
                     expr,
                 },
             ))
+        } else if self.ts.peek() == Some(&TokenKind::LParen) {
+            let call = self.parse_call(name)?;
+            Ok(Stmt::new(self.ids.alloc(), StmtKind::ExprStmt(call)))
         } else {
-            Err(self.ts.unexpected("assignment or expression statement"))
+            Err(self.ts.unexpected("assignment or call statement"))
         }
     }
 
@@ -375,11 +378,26 @@ impl Parser {
     fn parse_identifier(&mut self) -> ParseResult<Expr> {
         let name = self.ts.expect_ident()?;
         match self.ts.peek() {
-            Some(TokenKind::LParen) => {
-                todo!("function calls are not supported yet");
-            }
+            Some(TokenKind::LParen) => self.parse_call(name),
             _ => Ok(Expr::new(self.ids.alloc(), ExprKind::Var(name))),
         }
+    }
+
+    fn parse_call(&mut self, name: String) -> ParseResult<Expr> {
+        self.ts.advance();
+        let args = self.parse_arg_list()?;
+        Ok(Expr::new(
+            self.ids.alloc(),
+            ExprKind::Call { callee: name, args },
+        ))
+    }
+    fn parse_arg_list(&mut self) -> ParseResult<Vec<Expr>> {
+        let mut args = Vec::new();
+        while !self.ts.eat(&TokenKind::RParen) {
+            args.push(self.parse_expr(0)?);
+            self.ts.eat(&TokenKind::Comma);
+        }
+        Ok(args)
     }
 }
 

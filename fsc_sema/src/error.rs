@@ -18,6 +18,7 @@ pub enum SemaError {
     ReturnTypeMismatch { expected: Ty, found: Ty },
 
     VoidInValuePosition,
+    NotCallable(String),
 }
 
 impl std::fmt::Display for SemaError {
@@ -44,6 +45,9 @@ impl std::fmt::Display for SemaError {
             }
             Self::VoidInValuePosition => {
                 write!(f, "expression has type `void` where a value is required")
+            }
+            Self::NotCallable(name) => {
+                write!(f, "function is not callable {name}")
             }
         }
     }

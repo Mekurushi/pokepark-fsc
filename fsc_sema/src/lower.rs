@@ -31,6 +31,7 @@ impl Layout {
                 self.local_count += 1;
                 StackSlot(-self.local_count)
             }
+            SymbolKind::Function { .. } => todo!(),
         };
         self.slots.insert(sym_id, slot);
         slot
@@ -123,6 +124,9 @@ fn lower_stmt(stmt: &Stmt, resolved: &ResolveOutput, layout: &mut Layout) -> Sem
             cond: lower_expr(cond, resolved, layout)?,
             body: lower_stmts(body, resolved, layout)?,
         }),
+        ast::StmtKind::ExprStmt(expr) => {
+            Ok(hir::Stmt::ExprStmt(lower_expr(expr, resolved, layout)?))
+        }
     }
 }
 
@@ -164,6 +168,19 @@ fn lower_expr(expr: &Expr, resolved: &ResolveOutput, layout: &mut Layout) -> Sem
             Ok(hir::Expr::Unary {
                 op: lower_unaryop(op),
                 expr: Box::new(lower_expr(inner, resolved, layout)?),
+                ty: lower_ty(&ty),
+            })
+        }
+
+        ast::ExprKind::Call { callee, args } => {
+            let ty = infer_expr(expr, resolved)?;
+
+            Ok(hir::Expr::Call {
+                callee: callee.clone(),
+                args: args
+                    .iter()
+                    .map(|x| lower_expr(x, resolved, layout))
+                    .collect::<Result<_, _>>()?,
                 ty: lower_ty(&ty),
             })
         }
