@@ -4,6 +4,7 @@ pub enum Ty {
     Int,
     Void,
     Bool,
+    Str,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -42,6 +43,10 @@ pub enum Expr {
         value: bool,
         ty: Ty,
     },
+    StrLit {
+        value: String,
+        ty: Ty,
+    },
 
     Var {
         name: String,
@@ -77,7 +82,8 @@ impl Expr {
             | Self::BinOp { ty, .. }
             | Self::BoolLit { ty, .. }
             | Self::Unary { ty, .. }
-            | Self::Call { ty, .. } => ty,
+            | Self::Call { ty, .. }
+            | Self::StrLit { ty, .. } => ty,
         }
     }
 }

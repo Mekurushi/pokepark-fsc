@@ -18,6 +18,9 @@ pub enum TokenKind {
     #[token("bool", priority = 10)]
     KwBool,
 
+    #[token("string", priority = 10)]
+    KwString,
+
     // --- Control Flow ---
     #[token("if", priority = 10)]
     KwIf,
@@ -39,6 +42,12 @@ pub enum TokenKind {
     #[token("true",  priority = 10, callback = |_| true)]
     #[token("false", priority = 10, callback = |_| false)]
     BoolLit(bool),
+
+    #[regex(r#""[^"]*""#, |lex| {
+    let s = lex.slice();
+    s[1..s.len()-1].to_string() // strip quotes
+})]
+    StrLit(String),
 
     // --- Integer literals ---
     /// Hexadecimal integer; higher priority so it's not splitting
@@ -121,6 +130,7 @@ impl TokenKind {
             Self::KwInt => "`int`",
             Self::KwVoid => "`void`",
             Self::KwBool => "`boolean`",
+            Self::KwString => "`string`",
             Self::KwIf => "`if`",
             Self::KwElse => "`else`",
             Self::KwWhile => "`while`",
@@ -128,6 +138,7 @@ impl TokenKind {
             Self::KwStatic => "`static`",
             Self::BoolLit(_) => "`boolean literal`",
             Self::IntLit(_) => "`integer literal`",
+            Self::StrLit(_) => "`string literal`",
             Self::Ident(_) => "`identifier`",
             Self::Plus => "`+`",
             Self::Minus => "`-`",

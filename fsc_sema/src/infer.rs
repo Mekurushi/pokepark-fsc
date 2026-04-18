@@ -7,6 +7,7 @@ pub fn infer_expr(expr: &Expr, resolved: &ResolveOutput) -> SemaResult<Ty> {
     match &expr.kind {
         ExprKind::IntLit(_) => Ok(Ty::Int),
         ExprKind::BoolLit(_) => Ok(Ty::Bool),
+        ExprKind::StringLit(_) => Ok(Ty::Str),
 
         ExprKind::Var(_) => {
             let sym_id = resolved.resolutions.symbol(expr.id);

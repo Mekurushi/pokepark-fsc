@@ -6,6 +6,7 @@ pub enum Ty {
     Int,
     Void,
     Bool,
+    Str,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BinOp {
@@ -42,6 +43,7 @@ pub struct Expr {
 pub enum ExprKind {
     IntLit(i32),
     BoolLit(bool),
+    StringLit(String),
 
     Var(String),
 

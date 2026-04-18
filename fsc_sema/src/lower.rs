@@ -136,6 +136,10 @@ fn lower_expr(expr: &Expr, resolved: &ResolveOutput, layout: &mut Layout) -> Sem
             value: *v,
             ty: hir::Ty::Int,
         }),
+        ast::ExprKind::StringLit(v) => Ok(hir::Expr::StrLit {
+            value: v.clone(),
+            ty: hir::Ty::Int,
+        }),
 
         ast::ExprKind::BoolLit(v) => Ok(hir::Expr::BoolLit {
             value: *v,
@@ -192,6 +196,7 @@ fn lower_ty(ty: &ast::Ty) -> hir::Ty {
         ast::Ty::Int => hir::Ty::Int,
         ast::Ty::Void => hir::Ty::Void,
         ast::Ty::Bool => hir::Ty::Bool,
+        ast::Ty::Str => hir::Ty::Str,
     }
 }
 

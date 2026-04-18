@@ -147,6 +147,9 @@ pub fn lower_expr(expr: &Expr, label_ctx: &mut LabelCtx, asm: &mut Assembler) ->
                 asm.emit_push(0);
             }
         }
+        Expr::StrLit { value, .. } => {
+            asm.emit_lstr(value)?;
+        }
 
         Expr::Var {
             name: _name,
@@ -269,21 +272,25 @@ fn emit_binop(op: &BinOp, operand_ty: &Ty, asm: &mut Assembler) {
             Ty::Int => asm.emit_add(),
             Ty::Bool => unreachable!("add on bool"),
             Ty::Void => unreachable!("add on void"),
+            Ty::Str => unreachable!("add on str"),
         },
         BinOp::Sub => match operand_ty {
             Ty::Int => asm.emit_sub(),
             Ty::Bool => unreachable!("sub on bool"),
             Ty::Void => unreachable!("sub on void"),
+            Ty::Str => unreachable!("sub on str"),
         },
         BinOp::Mul => match operand_ty {
             Ty::Int => asm.emit_mul(),
             Ty::Bool => unreachable!("mul on bool"),
             Ty::Void => unreachable!("mul on void"),
+            Ty::Str => unreachable!("mul on str"),
         },
         BinOp::Div => match operand_ty {
             Ty::Int => asm.emit_div(),
             Ty::Bool => unreachable!("div on bool"),
             Ty::Void => unreachable!("div on void"),
+            Ty::Str => unreachable!("div on str"),
         },
 
         BinOp::Eq => asm.emit_eq(),

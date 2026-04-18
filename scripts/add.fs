@@ -185,3 +185,16 @@ int caller(){
 int called(int a,int b){
     return a  +b;
 }
+
+static string name(){
+    return "test";
+}
+
+static string var_string(){
+    string name = "name";
+    return ret_string(name);
+}
+
+string ret_string(string name){
+    return name;
+}

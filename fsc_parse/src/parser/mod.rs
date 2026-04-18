@@ -3,7 +3,7 @@ use crate::ast::{BinOp, Expr, ExprKind, FuncDef, Item, Param, Stmt, Ty, UnaryOp}
 use crate::ast::{NodeId, StmtKind};
 use crate::lexer::token::{Span, Token, TokenKind};
 use crate::parser::error::{ParseError, ParseResult};
-
+//TODO: better way for groups e.g. is type check in top-level item check
 pub struct TokenStream {
     tokens: Vec<Token>,
     cursor: usize,
@@ -117,7 +117,11 @@ impl Parser {
     pub fn parse_item(&mut self) -> ParseResult<Item> {
         match self.ts.peek() {
             Some(
-                TokenKind::KwStatic | TokenKind::KwInt | TokenKind::KwVoid | TokenKind::KwBool,
+                TokenKind::KwStatic
+                | TokenKind::KwInt
+                | TokenKind::KwVoid
+                | TokenKind::KwBool
+                | TokenKind::KwString,
             ) => Ok(Item::FuncDef(self.parse_function()?)),
             _ => Err(self.ts.unexpected("top-level item")),
         }
@@ -163,6 +167,10 @@ impl Parser {
             Some(TokenKind::KwBool) => {
                 self.ts.expect(&TokenKind::KwBool, "bool")?;
                 Ok(Ty::Bool)
+            }
+            Some(TokenKind::KwString) => {
+                self.ts.expect(&TokenKind::KwString, "string")?;
+                Ok(Ty::Str)
             }
             _ => Err(self.ts.unexpected("type keyword")),
         }
@@ -210,7 +218,9 @@ impl Parser {
         match self.ts.peek() {
             Some(TokenKind::KwReturn) => self.parse_return(),
             Some(TokenKind::Ident(_)) => self.parse_assign_or_expr_stmt(),
-            Some(TokenKind::KwInt | TokenKind::KwBool) => self.parse_var_decl(),
+            Some(TokenKind::KwInt | TokenKind::KwBool | TokenKind::KwString) => {
+                self.parse_var_decl()
+            }
             _ => Err(self.ts.unexpected("statement")),
         }
     }
@@ -312,6 +322,7 @@ impl Parser {
         let mut lhs = match self.ts.peek() {
             Some(TokenKind::IntLit(_)) => self.parse_int_literal(),
             Some(TokenKind::BoolLit(_)) => self.parse_bool_literal(),
+            Some(TokenKind::StrLit(_)) => self.parse_string_literal(),
             Some(TokenKind::Ident(_)) => self.parse_identifier(),
             Some(TokenKind::LParen) => self.parse_group(),
             Some(TokenKind::Bang) => self.parse_unary(UnaryOp::Not),
@@ -366,6 +377,14 @@ impl Parser {
         match self.ts.advance() {
             Some(TokenKind::IntLit(n)) => Ok(Expr::new(self.ids.alloc(), ExprKind::IntLit(*n))),
             _ => Err(self.ts.unexpected("`integer literal`")),
+        }
+    }
+    fn parse_string_literal(&mut self) -> ParseResult<Expr> {
+        match self.ts.advance() {
+            Some(TokenKind::StrLit(n)) => {
+                Ok(Expr::new(self.ids.alloc(), ExprKind::StringLit(n.clone())))
+            }
+            _ => Err(self.ts.unexpected("`string literal`")),
         }
     }
     fn parse_group(&mut self) -> ParseResult<Expr> {
