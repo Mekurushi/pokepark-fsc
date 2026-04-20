@@ -218,6 +218,10 @@ impl Parser {
         match self.ts.peek() {
             Some(TokenKind::KwReturn) => self.parse_return(),
             Some(TokenKind::Ident(_)) => self.parse_assign_or_expr_stmt(),
+            Some(TokenKind::KwSysCall) => Ok(Stmt::new(
+                self.ids.alloc(),
+                StmtKind::ExprStmt(self.parse_syscall()?),
+            )),
             Some(TokenKind::KwInt | TokenKind::KwBool | TokenKind::KwString) => {
                 self.parse_var_decl()
             }
@@ -327,6 +331,7 @@ impl Parser {
             Some(TokenKind::LParen) => self.parse_group(),
             Some(TokenKind::Bang) => self.parse_unary(UnaryOp::Not),
             Some(TokenKind::Minus) => self.parse_unary(UnaryOp::Neg),
+            Some(TokenKind::KwSysCall) => self.parse_syscall(),
             _ => Err(self.ts.unexpected("expression")),
         }?;
 
@@ -351,6 +356,17 @@ impl Parser {
         }
 
         Ok(lhs)
+    }
+    //TODO: cleanup logic in parser general, so less duplications
+    fn parse_syscall(&mut self) -> ParseResult<Expr> {
+        self.ts.advance();
+        self.ts.expect(&TokenKind::LParen, "`(`")?;
+        let mut args = Vec::new();
+        while !self.ts.eat(&TokenKind::RParen) {
+            args.push(self.parse_expr(0)?);
+            self.ts.eat(&TokenKind::Comma);
+        }
+        Ok(Expr::new(self.ids.alloc(), ExprKind::SysCall { args }))
     }
 
     fn parse_unary(&mut self, op: UnaryOp) -> ParseResult<Expr> {

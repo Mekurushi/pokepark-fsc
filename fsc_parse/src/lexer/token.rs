@@ -34,9 +34,13 @@ pub enum TokenKind {
     #[token("return", priority = 10)]
     KwReturn,
 
-    // --- Declaration keywords ---
+    // --- Declaration keywords --- //TODO: check if an entry keyword would be better
     #[token("static", priority = 10)]
     KwStatic,
+
+    // --- misc ---
+    #[token("SysCall", priority = 10)]
+    KwSysCall,
 
     // --- boolean literals ---
     #[token("true",  priority = 10, callback = |_| true)]
@@ -136,6 +140,7 @@ impl TokenKind {
             Self::KwWhile => "`while`",
             Self::KwReturn => "`return`",
             Self::KwStatic => "`static`",
+            Self::KwSysCall => "`SysCall`",
             Self::BoolLit(_) => "`boolean literal`",
             Self::IntLit(_) => "`integer literal`",
             Self::StrLit(_) => "`string literal`",

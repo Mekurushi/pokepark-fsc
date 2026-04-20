@@ -188,6 +188,46 @@ fn lower_expr(expr: &Expr, resolved: &ResolveOutput, layout: &mut Layout) -> Sem
                 ty: lower_ty(&ty),
             })
         }
+        ast::ExprKind::SysCall { args } => {
+            let (page, func) = extract_syscall(args)?;
+            let lowered_args: Vec<_> = args[2..]
+                .iter()
+                .map(|a| lower_expr(a, resolved, layout))
+                .collect::<Result<_, _>>()?;
+
+            let subtype = lowered_args.len() as u8;
+
+            Ok(hir::Expr::SysCall {
+                page,
+                func,
+                subtype,
+                args: lowered_args,
+                ty: hir::Ty::Int,
+            })
+        }
+    }
+}
+pub fn extract_syscall(args: &[Expr]) -> SemaResult<(u8, u16)> {
+    if args.len() < 3 {
+        todo!("Syscall called with too few arguments");
+    }
+
+    let page = extract_syscall_u8(&args[0])?;
+    let func = extract_syscall_u16(&args[1])?;
+
+    Ok((page, func))
+}
+fn extract_syscall_u8(expr: &Expr) -> SemaResult<u8> {
+    match &expr.kind {
+        ast::ExprKind::IntLit(n) => u8::try_from(*n).map_err(|_| todo!("out of range")),
+        _ => todo!("unsupported expr kind"),
+    }
+}
+
+fn extract_syscall_u16(expr: &Expr) -> SemaResult<u16> {
+    match &expr.kind {
+        ast::ExprKind::IntLit(n) => u16::try_from(*n).map_err(|_| todo!("out of range")),
+        _ => todo!("unsupported expr kind"),
     }
 }
 

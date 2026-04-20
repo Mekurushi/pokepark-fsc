@@ -60,6 +60,9 @@ pub enum ExprKind {
         callee: String,
         args: Vec<Expr>,
     },
+    SysCall {
+        args: Vec<Expr>,
+    },
 }
 
 impl Expr {

@@ -71,6 +71,7 @@ fn check_stmt(stmt: &ast::Stmt, ret_ty: &Ty, resolved: &ResolveOutput) -> SemaRe
         }
     }
 }
+//TODO: check Syscall
 
 pub fn check_assignable(declared: &Ty, found: &Ty) -> SemaResult<()> {
     if declared != found {

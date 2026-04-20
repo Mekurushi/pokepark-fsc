@@ -310,5 +310,11 @@ fn resolve_expr(
             }
             Ok(())
         }
+        ast::ExprKind::SysCall { args } => {
+            for arg in &args[3..] {
+                resolve_expr(arg, scope, resolutions)?;
+            }
+            Ok(())
+        }
     }
 }

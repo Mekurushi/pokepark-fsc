@@ -24,6 +24,8 @@ pub fn infer_expr(expr: &Expr, resolved: &ResolveOutput) -> SemaResult<Ty> {
                 _ => Err(SemaError::NotCallable(sym.name.clone())),
             }
         }
+        // TODO: check this again; always Int and caller interprets?
+        ExprKind::SysCall { .. } => Ok(Ty::Int),
     }
 }
 fn infer_binop(op: &BinOp, lhs: &Expr, rhs: &Expr, resolved: &ResolveOutput) -> SemaResult<Ty> {

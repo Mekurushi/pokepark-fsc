@@ -198,3 +198,81 @@ static string var_string(){
 string ret_string(string name){
     return name;
 }
+
+int get_module(string name) {
+    int handle = SysCall(0x0, 0x10, 1, name);
+    if (handle == 0) {
+        SysCall(0x0, 0x3, "slFindModule: module not found", name);
+        SysCall(0x0, 0x1, "ERROR: slFindModule\n");
+    }
+    return handle;
+}
+
+static void get_global_manager(){
+    int gm = get_module("GlobalManager");
+    return;
+}
+
+
+static int unlock_pokemon(int pokemon_objectId)
+
+{
+  int iVar1;
+  int iVar2;
+
+  iVar1 = get_module("DisposManager");
+  iVar2 = get_module("GlobalManager");
+  iVar1 = SysCall(0,0x15,4,iVar1,pokemon_objectId);
+  if (iVar1 == -2) {
+    return 0;
+  }
+  if (iVar1 == -1) {
+    return 0;
+  }
+  SysCall(0,0x15,0x29,iVar2,iVar1);
+  SysCall(0,0x15,0x28,iVar2,iVar1);
+  return 1;
+}
+
+int FUN_000502a0()
+
+{
+  int iVar1;
+  int uVar2;
+  int iVar3;
+
+  iVar1 = get_module("ObjectManager");
+  uVar2 = SysCall(0,0x15,0,iVar1,0,0);
+  uVar2 = SysCall(0,0x15,1,iVar1,uVar2);
+  iVar3 = SysCall(0,0x15,0x17,uVar2,0);
+  if (iVar3 != -1) {
+    uVar2 = SysCall(0,0x15,1,iVar1,iVar3);
+    iVar1 = SysCall(0,0x15,0x18,uVar2);
+    if (iVar1 == 6) {
+      iVar1 = SysCall(0,0x15,0x19,uVar2);
+      return iVar1;
+    }
+  }
+  return -1;
+}
+
+int FUN_00050f20(int param_1,int param_2,int param_3)
+
+{
+  int iVar1;
+  int iVar2;
+  int uVar3;
+  int uStack_c;
+
+  iVar1 = get_module("ObjectManager");
+  iVar2 = get_module("EventScript");
+  if (param_3 == 1) {
+    uStack_c = param_2;
+  }
+  else {
+    uStack_c = SysCall(0,0x15,1,iVar2,param_1);
+  }
+  uVar3 = SysCall(0,0x15,4,iVar1,uStack_c);
+  iVar1 = SysCall(0,0x15,1,iVar1,uVar3);
+  return iVar1;
+}

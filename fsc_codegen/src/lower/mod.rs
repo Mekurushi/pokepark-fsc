@@ -37,6 +37,9 @@ pub fn lower_stmt(
         }
         Stmt::Assign { slot, value: expr } => {
             lower_expr(expr, label_ctx, asm)?;
+            if let Expr::SysCall { .. } | Expr::Call { .. } = expr {
+                asm.emit_push_result();
+            }
             asm.emit_store_arg(slot.0);
             Ok(())
         }
@@ -48,6 +51,9 @@ pub fn lower_stmt(
         } => {
             if let Some(expr) = init {
                 lower_expr(expr, label_ctx, asm)?;
+                if let Some(Expr::SysCall { .. } | Expr::Call { .. }) = init {
+                    asm.emit_push_result();
+                }
                 asm.emit_store_arg(slot.0);
             }
             Ok(())
@@ -164,6 +170,7 @@ pub fn lower_expr(expr: &Expr, label_ctx: &mut LabelCtx, asm: &mut Assembler) ->
             expr: expression,
             ty: _ty,
         } => {
+            // TODO: optimize push literal directly
             lower_expr(expression, label_ctx, asm)?;
             emit_unary(op, asm);
         }
@@ -178,6 +185,7 @@ pub fn lower_expr(expr: &Expr, label_ctx: &mut LabelCtx, asm: &mut Assembler) ->
             rhs,
             ty: _,
         } => {
+            //TODO: for Eq == 0 optimization to eq0
             lower_expr(lhs, label_ctx, asm)?;
             lower_expr(rhs, label_ctx, asm)?;
 
@@ -185,18 +193,27 @@ pub fn lower_expr(expr: &Expr, label_ctx: &mut LabelCtx, asm: &mut Assembler) ->
             // TODO: original scripts are saving in arg and load again; check if this is really
             // everytime necessary
         }
-        Expr::Call { callee, args, ty } => {
+        Expr::Call { callee, args, .. } => {
             lower_call(callee, args, label_ctx, asm)?;
-            if ty != &Ty::Void {
-                asm.emit_push_result();
+        }
+        Expr::SysCall {
+            page,
+            func,
+            subtype,
+            args,
+            ..
+        } => {
+            for arg in args.iter().rev() {
+                lower_expr(arg, label_ctx, asm)?;
             }
+            asm.emit_syscall(*subtype, *page, *func);
         }
     }
     Ok(())
 }
 
 fn lower_call(
-    callee: &String,
+    callee: &str,
     args: &[Expr],
     label_ctx: &mut LabelCtx,
     asm: &mut Assembler,

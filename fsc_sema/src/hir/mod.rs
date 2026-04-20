@@ -72,6 +72,13 @@ pub enum Expr {
         args: Vec<Expr>,
         ty: Ty,
     },
+    SysCall {
+        page: u8,
+        func: u16,
+        subtype: u8,
+        args: Vec<Expr>,
+        ty: Ty,
+    },
 }
 
 impl Expr {
@@ -83,7 +90,8 @@ impl Expr {
             | Self::BoolLit { ty, .. }
             | Self::Unary { ty, .. }
             | Self::Call { ty, .. }
-            | Self::StrLit { ty, .. } => ty,
+            | Self::StrLit { ty, .. }
+            | Self::SysCall { ty, .. } => ty,
         }
     }
 }
