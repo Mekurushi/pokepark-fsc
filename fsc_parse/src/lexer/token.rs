@@ -42,6 +42,9 @@ pub enum TokenKind {
     #[token("SysCall", priority = 10)]
     KwSysCall,
 
+    #[token("Pause", priority = 10)]
+    KwPause,
+
     // --- boolean literals ---
     #[token("true",  priority = 10, callback = |_| true)]
     #[token("false", priority = 10, callback = |_| false)]
@@ -141,6 +144,7 @@ impl TokenKind {
             Self::KwReturn => "`return`",
             Self::KwStatic => "`static`",
             Self::KwSysCall => "`SysCall`",
+            Self::KwPause => "`Pause`",
             Self::BoolLit(_) => "`boolean literal`",
             Self::IntLit(_) => "`integer literal`",
             Self::StrLit(_) => "`string literal`",

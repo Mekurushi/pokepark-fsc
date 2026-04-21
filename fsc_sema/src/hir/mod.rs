@@ -121,6 +121,7 @@ pub enum Stmt {
         cond: Expr,
         body: Vec<Stmt>,
     },
+    Pause(Expr),
 }
 
 #[derive(Debug)]

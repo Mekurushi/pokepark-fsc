@@ -103,6 +103,12 @@ pub fn lower_stmt(
             lower_while(cond, body, frame, label_ctx, asm)?;
             Ok(())
         }
+        Stmt::Pause(expr) => {
+            lower_expr(expr, label_ctx, asm)?;
+
+            asm.emit_delay_load();
+            Ok(())
+        }
     }
 }
 

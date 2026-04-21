@@ -69,6 +69,16 @@ fn check_stmt(stmt: &ast::Stmt, ret_ty: &Ty, resolved: &ResolveOutput) -> SemaRe
             }
             Ok(())
         }
+        ast::StmtKind::Pause(expr) => {
+            let ty = infer::infer_expr(expr, resolved)?;
+            if ty != Ty::Int {
+                return Err(SemaError::TypeMismatch {
+                    expected: Ty::Int,
+                    found: ty.clone(),
+                });
+            }
+            Ok(())
+        }
     }
 }
 //TODO: check Syscall

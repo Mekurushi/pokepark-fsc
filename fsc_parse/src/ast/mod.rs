@@ -89,6 +89,7 @@ pub enum StmtKind {
         expr: Expr,
     },
     ExprStmt(Expr),
+    Pause(Expr),
     If {
         cond: Expr,
         then_body: Vec<Stmt>,

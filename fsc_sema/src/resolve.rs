@@ -276,6 +276,11 @@ fn resolve_stmt(
             resolve_expr(expr, scope, resolutions)?;
             Ok(())
         }
+
+        ast::StmtKind::Pause(expr) => {
+            resolve_expr(expr, scope, resolutions)?;
+            Ok(())
+        }
     }
 }
 
@@ -311,7 +316,7 @@ fn resolve_expr(
             Ok(())
         }
         ast::ExprKind::SysCall { args } => {
-            for arg in &args[3..] {
+            for arg in &args[2..] {
                 resolve_expr(arg, scope, resolutions)?;
             }
             Ok(())

@@ -222,11 +222,20 @@ impl Parser {
                 self.ids.alloc(),
                 StmtKind::ExprStmt(self.parse_syscall()?),
             )),
+            Some(TokenKind::KwPause) => self.parse_pause(),
             Some(TokenKind::KwInt | TokenKind::KwBool | TokenKind::KwString) => {
                 self.parse_var_decl()
             }
             _ => Err(self.ts.unexpected("statement")),
         }
+    }
+
+    fn parse_pause(&mut self) -> ParseResult<Stmt> {
+        self.ts.advance();
+        self.ts.expect(&TokenKind::LParen, "`(`")?;
+        let expr = self.parse_expr(0)?;
+        self.ts.expect(&TokenKind::RParen, "`)`")?;
+        Ok(Stmt::new(self.ids.alloc(), StmtKind::Pause(expr)))
     }
 
     fn parse_if(&mut self) -> ParseResult<Stmt> {

@@ -127,6 +127,7 @@ fn lower_stmt(stmt: &Stmt, resolved: &ResolveOutput, layout: &mut Layout) -> Sem
         ast::StmtKind::ExprStmt(expr) => {
             Ok(hir::Stmt::ExprStmt(lower_expr(expr, resolved, layout)?))
         }
+        ast::StmtKind::Pause(expr) => Ok(hir::Stmt::Pause(lower_expr(expr, resolved, layout)?)),
     }
 }
 

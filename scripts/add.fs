@@ -276,3 +276,45 @@ int FUN_00050f20(int param_1,int param_2,int param_3)
   iVar1 = SysCall(0,0x15,1,iVar1,uVar3);
   return iVar1;
 }
+
+void wait(){
+    Pause(1);
+    Pause(2);
+    return;
+}
+
+void OPEN(int param_1)
+
+{
+  int uVar1;
+  int uVar2;
+
+  uVar1 = SysCall(0,0x15,4,param_1);
+  SysCall(0,0x15,0,uVar1,param_1,2);
+  uVar2 = SysCall(0,0x15,0x1e,param_1);
+  SysCall(0,0x15,4,uVar2,1,0);
+  SysCall(0,0x15,4,uVar2,1,1);
+  return;
+}
+
+
+static void CLOSE(int param_1)
+
+{
+  int iVar1;
+  int uVar2;
+
+  iVar1 = get_module("ObjectManager");
+  uVar2 = SysCall(0,0x15,0,param_1);
+  uVar2 = SysCall(0,0x15,1,iVar1,uVar2);
+  iVar1 = get_module("GlobalManager");
+  iVar1 = SysCall(0,0x15,1,iVar1,"GF0002");
+  if (iVar1 == 1) {
+    SysCall(0,0x15,0,uVar2,2);
+  }
+  else {
+    SysCall(0,0x15,4,param_1);
+    SysCall(0,0x15,1,uVar2,0);
+  }
+  return;
+}
