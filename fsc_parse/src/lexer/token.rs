@@ -34,6 +34,9 @@ pub enum TokenKind {
     #[token("return", priority = 10)]
     KwReturn,
 
+    #[token("break", priority = 10)]
+    KwBreak,
+
     // --- Declaration keywords --- //TODO: check if an entry keyword would be better
     #[token("static", priority = 10)]
     KwStatic,
@@ -142,6 +145,7 @@ impl TokenKind {
             Self::KwElse => "`else`",
             Self::KwWhile => "`while`",
             Self::KwReturn => "`return`",
+            Self::KwBreak => "`break`",
             Self::KwStatic => "`static`",
             Self::KwSysCall => "`SysCall`",
             Self::KwPause => "`Pause`",

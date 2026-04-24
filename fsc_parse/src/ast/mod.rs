@@ -79,6 +79,7 @@ pub struct Stmt {
 #[derive(Debug, Clone)]
 pub enum StmtKind {
     Return(Option<Expr>),
+    Break,
     VarDecl {
         name: String,
         ty: Ty,

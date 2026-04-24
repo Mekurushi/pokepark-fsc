@@ -217,6 +217,10 @@ impl Parser {
     fn parse_stmt_inner(&mut self) -> ParseResult<Stmt> {
         match self.ts.peek() {
             Some(TokenKind::KwReturn) => self.parse_return(),
+            Some(TokenKind::KwBreak) => {
+                self.ts.advance();
+                Ok(Stmt::new(self.ids.alloc(), StmtKind::Break))
+            }
             Some(TokenKind::Ident(_)) => self.parse_assign_or_expr_stmt(),
             Some(TokenKind::KwSysCall) => Ok(Stmt::new(
                 self.ids.alloc(),

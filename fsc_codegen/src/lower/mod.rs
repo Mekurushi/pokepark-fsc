@@ -31,6 +31,10 @@ pub fn lower_stmt(
 ) -> CodegenResult<()> {
     match stmt {
         Stmt::Return(expr) => Ok(lower_return(expr, frame, label_ctx, asm)?),
+        Stmt::Break => match label_ctx.loop_end() {
+            Some(label) => Ok(asm.emit_jmp(label)?),
+            None => todo!("error?"),
+        },
         Stmt::ReturnVoid => {
             asm.emit_ret(frame.frame_size());
             Ok(())
@@ -119,20 +123,19 @@ fn lower_while(
     label_ctx: &mut LabelCtx,
     asm: &mut Assembler,
 ) -> CodegenResult<()> {
-    let start = label_ctx.fresh_label("while_start");
-    let end = label_ctx.fresh_label("while_end");
+    let labels = label_ctx.enter_loop();
 
-    asm.define_label(&start)?;
+    asm.define_label(&labels.header)?;
 
     lower_expr(cond, label_ctx, asm)?;
-    asm.emit_jz(&end)?;
+    asm.emit_jz(&labels.end)?;
 
     for s in body {
         lower_stmt(s, frame, label_ctx, asm)?;
     }
 
-    asm.emit_jmp(&start)?;
-    asm.define_label(&end)?;
+    asm.emit_jmp(&labels.header)?;
+    asm.define_label(&labels.end)?;
 
     Ok(())
 }

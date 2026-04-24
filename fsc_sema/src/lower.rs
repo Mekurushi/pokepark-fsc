@@ -77,6 +77,7 @@ fn lower_stmt(stmt: &Stmt, resolved: &ResolveOutput, layout: &mut Layout) -> Sem
             Some(e) => Ok(hir::Stmt::Return(lower_expr(e, resolved, layout)?)),
             None => Ok(hir::Stmt::ReturnVoid),
         },
+        ast::StmtKind::Break => Ok(hir::Stmt::Break),
 
         ast::StmtKind::VarDecl { name, ty, init } => {
             let hir_init = init

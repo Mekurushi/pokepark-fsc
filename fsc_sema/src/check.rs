@@ -23,6 +23,10 @@ fn check_stmt(stmt: &ast::Stmt, ret_ty: &Ty, resolved: &ResolveOutput) -> SemaRe
             }
             None => check_void_return(ret_ty),
         },
+        ast::StmtKind::Break => {
+            //TODO: check is in loop
+            Ok(())
+        }
 
         ast::StmtKind::VarDecl { ty, init, .. } => {
             if let Some(e) = init {

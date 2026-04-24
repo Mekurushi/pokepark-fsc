@@ -281,6 +281,7 @@ fn resolve_stmt(
             resolve_expr(expr, scope, resolutions)?;
             Ok(())
         }
+        ast::StmtKind::Break => Ok(()),
     }
 }
 
