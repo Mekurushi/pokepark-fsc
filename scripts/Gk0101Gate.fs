@@ -1,17 +1,13 @@
-int unknown(int param_1)
-
+void unknown(int param_1)
 {
-  int iVar1;
-
-  iVar1 = SysCall(0,0x16,param_1);
-  if (iVar1 == 3) {
-    iVar1 = SysCall(0,0x13,param_1);
+  if (SysCall(0,0x16,param_1) == 3) {
+    SysCall(0,0x13,param_1);
   }
-  return iVar1;
+  return;
 }
 int get_module(string name) {
-    int handle = SysCall(0x0, 0x10, 1, name);
-    if (handle == 0) {
+    int handle = SysCall(0x0, 0x10, name);
+    if (!handle) {
         SysCall(0x0, 0x3, "slFindModule: module not found", name);
         SysCall(0x0, 0x1, "ERROR: slFindModule\n");
     }
