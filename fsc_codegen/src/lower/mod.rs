@@ -41,9 +41,6 @@ pub fn lower_stmt(
         }
         Stmt::Assign { slot, value: expr } => {
             lower_expr(expr, label_ctx, asm)?;
-            if let Expr::SysCall { .. } | Expr::Call { .. } = expr {
-                asm.emit_push_result();
-            }
             asm.emit_store_arg(slot.0);
             Ok(())
         }
@@ -55,9 +52,6 @@ pub fn lower_stmt(
         } => {
             if let Some(expr) = init {
                 lower_expr(expr, label_ctx, asm)?;
-                if let Some(Expr::SysCall { .. } | Expr::Call { .. }) = init {
-                    asm.emit_push_result();
-                }
                 asm.emit_store_arg(slot.0);
             }
             Ok(())
@@ -99,6 +93,13 @@ pub fn lower_stmt(
                 Expr::Call { callee, args, .. } => {
                     lower_call(callee, args, label_ctx, asm)?;
                 }
+                Expr::SysCall {
+                    args,
+                    subtype,
+                    page,
+                    func,
+                    ..
+                } => lower_syscall(args, label_ctx, asm, *subtype, *page, *func)?,
                 _ => lower_expr(expr, label_ctx, asm)?,
             }
             Ok(())
@@ -137,6 +138,7 @@ fn lower_while(
     asm.emit_jmp(&labels.header)?;
     asm.define_label(&labels.end)?;
 
+    label_ctx.exit_loop();
     Ok(())
 }
 fn lower_return(
@@ -204,6 +206,7 @@ pub fn lower_expr(expr: &Expr, label_ctx: &mut LabelCtx, asm: &mut Assembler) ->
         }
         Expr::Call { callee, args, .. } => {
             lower_call(callee, args, label_ctx, asm)?;
+            asm.emit_push_result();
         }
         Expr::SysCall {
             page,
@@ -212,12 +215,25 @@ pub fn lower_expr(expr: &Expr, label_ctx: &mut LabelCtx, asm: &mut Assembler) ->
             args,
             ..
         } => {
-            for arg in args.iter().rev() {
-                lower_expr(arg, label_ctx, asm)?;
-            }
-            asm.emit_syscall(*subtype, *page, *func);
+            lower_syscall(args, label_ctx, asm, *subtype, *page, *func)?;
+            asm.emit_push_result();
         }
     }
+    Ok(())
+}
+
+fn lower_syscall(
+    args: &[Expr],
+    label_ctx: &mut LabelCtx,
+    asm: &mut Assembler,
+    subtype: u8,
+    page: u8,
+    func: u16,
+) -> CodegenResult<()> {
+    for arg in args.iter().rev() {
+        lower_expr(arg, label_ctx, asm)?;
+    }
+    asm.emit_syscall(subtype, page, func);
     Ok(())
 }
 
