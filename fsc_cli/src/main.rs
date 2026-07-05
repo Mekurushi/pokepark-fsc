@@ -1,6 +1,6 @@
 use fsc_assembler::Assembler;
-use fsc_parse::diagnostic::Diagnostic;
 use fsc_parse::diagnostic::render::DiagnosticRenderer;
+use fsc_parse::diagnostic::Diagnostic;
 use fsc_parse::lexer;
 use std::path::{Path, PathBuf};
 use std::{env, fs, process};
@@ -46,7 +46,7 @@ fn parse_build_args(args: &[String]) -> (PathBuf, PathBuf) {
         PathBuf::from(p)
     } else {
         eprintln!("error: `fsc build` requires an input file");
-        eprintln!("usage: fsc build <input.fs> [-o <output.fsb>]");
+        eprintln!("usage: fsc build <input.fsc> [-o <output.fsb>]");
         process::exit(1);
     };
 
@@ -126,5 +126,5 @@ fn print_usage() {
     eprintln!("usage: fsc <command> [options]");
     eprintln!();
     eprintln!("commands:");
-    eprintln!("  build <input.fs> [-o <output.fsb>]   compile a script");
+    eprintln!("  build <input.fsc> [-o <output.fsb>]   compile a script");
 }
