@@ -1,5 +1,13 @@
 [workspace]
-members = ["fsc_assembler", "fsc_asm", "fsc_cli", "fsc_parse", "fsc_codegen", "fsc_sema"]
+members = [
+    "fsc_assembler",
+    "fsc_asm",
+    "fsc_cli",
+    "fsc_codegen",
+    "fsc_compiler",
+    "fsc_parse",
+    "fsc_sema",
+]
 resolver = "2"
 
 [profile.dev]

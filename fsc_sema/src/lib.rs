@@ -1,5 +1,5 @@
 use crate::error::SemaResult;
-use crate::resolve::{declare_items, ScopeStack};
+use crate::resolve::{ScopeStack, declare_items};
 use crate::symbol::SymbolTable;
 use fsc_parse::ast;
 

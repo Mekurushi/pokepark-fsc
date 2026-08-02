@@ -1,130 +1,57 @@
-use fsc_assembler::Assembler;
-use fsc_parse::diagnostic::render::DiagnosticRenderer;
-use fsc_parse::diagnostic::Diagnostic;
-use fsc_parse::lexer;
-use std::path::{Path, PathBuf};
-use std::{env, fs, process};
+mod cli;
 
-fn main() {
-    let args: Vec<String> = env::args().collect();
+use clap::Parser;
+use cli::{BuildArgs, Cli, Command};
+use fsc_compiler::{CompileRequest, compile, render_diagnostics};
+use std::fs;
+use std::process::ExitCode;
 
-    match args.get(1).map(String::as_str) {
-        Some("build") => {
-            let (input, output) = parse_build_args(&args);
-            match compile(&input) {
-                Ok(bytes) => {
-                    if let Err(e) = fs::write(&output, &bytes) {
-                        eprintln!("error: could not write {}: {e}", output.display());
-                        process::exit(1);
-                    }
-                    eprintln!(
-                        "compiled {} → {}  ({} bytes)",
-                        input.display(),
-                        output.display(),
-                        bytes.len(),
-                    );
-                }
-                Err(()) => process::exit(1),
-            }
-        }
-
-        Some(cmd) => {
-            eprintln!("error: unknown command `{cmd}`");
-            print_usage();
-            process::exit(1);
-        }
-
-        None => {
-            print_usage();
-            process::exit(1);
-        }
+fn main() -> ExitCode {
+    if run(Cli::parse()).is_ok() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
     }
 }
 
-fn parse_build_args(args: &[String]) -> (PathBuf, PathBuf) {
-    let input = if let Some(p) = args.get(2) {
-        PathBuf::from(p)
-    } else {
-        eprintln!("error: `fsc build` requires an input file");
-        eprintln!("usage: fsc build <input.fsc> [-o <output.fsb>]");
-        process::exit(1);
-    };
-
-    let output = if let Some(o_flag) = args.get(3) {
-        if o_flag == "-o" {
-            if let Some(p) = args.get(4) {
-                PathBuf::from(p)
-            } else {
-                eprintln!("error: `-o` requires an output path");
-                process::exit(1);
-            }
-        } else {
-            input.with_extension("fsb")
-        }
-    } else {
-        input.with_extension("fsb")
-    };
-
-    (input, output)
-}
-
-fn compile(input: &Path) -> Result<Vec<u8>, ()> {
-    let source = fs::read_to_string(input).map_err(|e| {
-        eprintln!("error: could not read {}: {e}", input.display());
-    })?;
-
-    let Some(file_name) = input.file_name().and_then(|s| s.to_str()) else {
-        eprintln!("error: could not find file name");
-
-        return Err(());
-    };
-
-    let Some(script_name) = input.file_stem().and_then(|s| s.to_str()) else {
-        eprintln!("error: could not find file name");
-        return Err(());
-    };
-
-    let lex_output = lexer::tokenize(&source);
-    let renderer = DiagnosticRenderer::new(&source, file_name, &lex_output.line_starts);
-
-    // --- parse ---
-    let script = match fsc_parse::parse(&source) {
-        Ok(s) => s,
-        Err(e) => {
-            eprint!("{}", renderer.render(&Diagnostic::from(e)));
-            return Err(());
-        }
-    };
-
-    // --- sema ---
-    let hir = match fsc_sema::analyze(&script) {
-        Ok(h) => h,
-        Err(e) => {
-            eprintln!("error: {e}");
-            return Err(());
-        }
-    };
-
-    // --- codegen ---
-    let mut asm = Assembler::new();
-    if let Err(e) = fsc_codegen::compile(&hir, &mut asm) {
-        eprintln!("error: {e}");
-        return Err(());
+fn run(cli: Cli) -> Result<(), ()> {
+    match cli.command {
+        Command::Build(args) => build(args),
     }
-
-    // --- finalize ---
-    let binary = asm.finalize(script_name.to_string()).map_err(|e| {
-        eprintln!("error: {e}");
-    })?;
-
-    binary.serialize().map_err(|e| {
-        eprintln!("error: {e}");
-    })
 }
 
-fn print_usage() {
-    eprintln!("usage: fsc <command> [options]");
-    eprintln!();
-    eprintln!("commands:");
-    eprintln!("  build <input.fsc> [-o <output.fsb>]   compile a script");
+fn build(args: BuildArgs) -> Result<(), ()> {
+    let input = args.input;
+    let output = args.output.unwrap_or_else(|| input.with_extension("fsb"));
+    let source = fs::read_to_string(&input).map_err(|error| {
+        eprintln!("error: could not read {}: {error}", input.display());
+    })?;
+    let Some(source_name) = input.file_name().and_then(|name| name.to_str()) else {
+        eprintln!("error: input path does not have a valid UTF-8 file name");
+        return Err(());
+    };
+    let Some(script_name) = input.file_stem().and_then(|name| name.to_str()) else {
+        eprintln!("error: input path does not have a valid UTF-8 file stem");
+        return Err(());
+    };
+
+    let request = CompileRequest::new(&source, script_name);
+    let artifact = compile(request).map_err(|failure| {
+        eprint!("{}", failure.render(source_name, &source));
+    })?;
+
+    let rendered = render_diagnostics(artifact.diagnostics(), source_name, &source);
+    if !rendered.is_empty() {
+        eprint!("{rendered}");
+    }
+    fs::write(&output, artifact.bytes()).map_err(|error| {
+        eprintln!("error: could not write {}: {error}", output.display());
+    })?;
+    eprintln!(
+        "compiled {} → {}  ({} bytes)",
+        input.display(),
+        output.display(),
+        artifact.bytes().len(),
+    );
+    Ok(())
 }
