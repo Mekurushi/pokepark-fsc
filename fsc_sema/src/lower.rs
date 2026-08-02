@@ -79,7 +79,7 @@ fn lower_stmt(stmt: &Stmt, resolved: &ResolveOutput, layout: &mut Layout) -> Sem
         },
         ast::StmtKind::Break => Ok(hir::Stmt::Break),
 
-        ast::StmtKind::VarDecl { name, ty, init } => {
+        ast::StmtKind::VarDecl { name, ty, init, .. } => {
             let hir_init = init
                 .as_ref()
                 .map(|e| lower_expr(e, resolved, layout))
@@ -178,7 +178,7 @@ fn lower_expr(expr: &Expr, resolved: &ResolveOutput, layout: &mut Layout) -> Sem
             })
         }
 
-        ast::ExprKind::Call { callee, args } => {
+        ast::ExprKind::Call { callee, args, .. } => {
             let ty = infer_expr(expr, resolved)?;
 
             Ok(hir::Expr::Call {

@@ -1,3 +1,5 @@
+use fsc_diagnostics::Span;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct NodeId(pub u32);
 
@@ -37,6 +39,7 @@ pub enum UnaryOp {
 pub struct Expr {
     pub id: NodeId,
     pub kind: ExprKind,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -58,6 +61,7 @@ pub enum ExprKind {
     },
     Call {
         callee: String,
+        callee_span: Span,
         args: Vec<Expr>,
     },
     SysCall {
@@ -66,8 +70,8 @@ pub enum ExprKind {
 }
 
 impl Expr {
-    pub fn new(id: NodeId, kind: ExprKind) -> Self {
-        Self { id, kind }
+    pub fn new(id: NodeId, kind: ExprKind, span: Span) -> Self {
+        Self { id, kind, span }
     }
 }
 
@@ -75,6 +79,7 @@ impl Expr {
 pub struct Stmt {
     pub id: NodeId,
     pub kind: StmtKind,
+    pub span: Span,
 }
 #[derive(Debug, Clone)]
 pub enum StmtKind {
@@ -82,7 +87,9 @@ pub enum StmtKind {
     Break,
     VarDecl {
         name: String,
+        name_span: Span,
         ty: Ty,
+        ty_span: Span,
         init: Option<Expr>,
     },
     Assign {
@@ -103,23 +110,27 @@ pub enum StmtKind {
 }
 
 impl Stmt {
-    pub fn new(id: NodeId, kind: StmtKind) -> Self {
-        Self { id, kind }
+    pub fn new(id: NodeId, kind: StmtKind, span: Span) -> Self {
+        Self { id, kind, span }
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Param {
     pub name: String,
+    pub name_span: Span,
     pub ty: Ty,
+    pub ty_span: Span,
 }
 
 #[derive(Debug, Clone)]
 pub struct FuncDef {
     pub id: NodeId,
     pub name: String,
+    pub name_span: Span,
     pub params: Vec<Param>,
     pub ret_ty: Ty,
+    pub ret_ty_span: Span,
     pub body: Vec<Stmt>,
     pub exported: bool,
 }

@@ -1,3 +1,4 @@
+use fsc_diagnostics::Span;
 use fsc_parse::ast::Ty;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -6,14 +7,18 @@ pub struct SymbolId(u32);
 #[derive(Debug, Clone)]
 pub struct Symbol {
     pub name: String,
+    pub name_span: Span,
     pub ty: Ty,
+    pub type_span: Span,
     pub kind: SymbolKind,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParamInfo {
     pub name: String,
+    pub name_span: Span,
     pub ty: Ty,
+    pub type_span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

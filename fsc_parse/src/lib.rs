@@ -3,7 +3,6 @@ use crate::parser::error::{ParseError, ParseResult};
 use crate::parser::{Parser, TokenStream};
 
 pub mod ast;
-pub mod diagnostic;
 pub mod lexer;
 pub mod parser;
 

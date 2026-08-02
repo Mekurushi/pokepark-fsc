@@ -1,10 +1,10 @@
 use crate::lexer::error::LexerError;
+use fsc_diagnostics::Span;
 use logos::Logos;
 
 #[derive(Logos, Debug, Clone, PartialEq)]
 #[logos(skip r"[ \t\r\f]+")] // whitespace
-#[logos(extras = Vec<usize>)]
-#[logos(skip(r"\n", newline_callback))]
+#[logos(skip r"\n")]
 #[logos(skip(r"//[^\n]*", allow_greedy = true))] // line comments TODO: check greedy
 #[logos(skip r"/\*[^*]*\*+(?:[^/*][^*]*\*+)*/")] // block comments
 pub enum TokenKind {
@@ -129,11 +129,6 @@ pub enum TokenKind {
     RBrace,
 }
 
-fn newline_callback(lex: &mut logos::Lexer<'_, TokenKind>) -> logos::Skip {
-    lex.extras.push(lex.span().end);
-    logos::Skip
-}
-
 impl TokenKind {
     pub fn description(&self) -> &'static str {
         match self {
@@ -178,12 +173,6 @@ impl TokenKind {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Span {
-    pub start: usize,
-    pub end: usize,
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct Token {
     pub kind: TokenKind,
@@ -192,6 +181,5 @@ pub struct Token {
 
 pub struct LexOutput {
     pub tokens: Vec<Token>,
-    pub line_starts: Vec<usize>,
     pub errors: Vec<LexerError>,
 }

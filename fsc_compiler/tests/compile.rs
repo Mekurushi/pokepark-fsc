@@ -1,6 +1,7 @@
 #![allow(clippy::expect_used)]
 
-use fsc_compiler::{CompileRequest, CompileStage, Severity, compile};
+use fsc_compiler::{CompileRequest, compile};
+use fsc_diagnostics::{LabelStyle, Severity, Span, Stage, render_diagnostics};
 
 const VALID_SOURCE: &str = "void main() { return; }";
 
@@ -21,11 +22,11 @@ fn parse_failure_retains_source_location() {
         .expect_err("an unmatched closing brace should fail");
     let diagnostic = &failure.diagnostics()[0];
 
-    assert_eq!(diagnostic.stage(), CompileStage::Parse);
+    assert_eq!(diagnostic.stage(), Stage::Parse);
     assert_eq!(diagnostic.severity(), Severity::Error);
     assert_eq!(diagnostic.labels().len(), 1);
 
-    let rendered = failure.render("broken.fsc", source);
+    let rendered = render_diagnostics(failure.diagnostics(), "broken.fsc", source);
     assert!(rendered.contains("broken.fsc:2:1"));
     assert!(rendered.contains('^'));
 }
@@ -37,9 +38,9 @@ fn semantic_failure_is_normalized() {
         compile(CompileRequest::new(source, "main")).expect_err("undeclared call should fail");
     let diagnostic = &failure.diagnostics()[0];
 
-    assert_eq!(diagnostic.stage(), CompileStage::Semantic);
+    assert_eq!(diagnostic.stage(), Stage::Semantic);
     assert!(diagnostic.message().contains("undeclared name `missing`"));
-    assert!(diagnostic.labels().is_empty());
+    assert_eq!(diagnostic.labels().len(), 1);
 }
 
 #[test]
@@ -48,6 +49,59 @@ fn invalid_script_name_is_an_assembly_failure() {
         .expect_err("invalid B40 name should fail during serialization");
     let diagnostic = &failure.diagnostics()[0];
 
-    assert_eq!(diagnostic.stage(), CompileStage::Assembly);
+    assert_eq!(diagnostic.stage(), Stage::Assembly);
     assert!(diagnostic.message().contains("invalid character"));
+}
+
+#[test]
+fn all_lexer_failures_survive_in_source_order() {
+    let source = "void main() { @ # return; }";
+    let failure = compile(CompileRequest::new(source, "broken"))
+        .expect_err("unknown characters should fail lexing");
+    let diagnostics = failure.diagnostics();
+
+    assert_eq!(diagnostics.len(), 2);
+    assert!(diagnostics[0].message().contains("`@`"));
+    assert!(diagnostics[1].message().contains("`#`"));
+    assert!(diagnostics.iter().all(|item| item.stage() == Stage::Parse));
+}
+
+#[test]
+fn duplicate_declaration_labels_duplicate_before_original() {
+    let source = "void main(int value, int value) { return; }";
+    let failure =
+        compile(CompileRequest::new(source, "main")).expect_err("duplicate parameters should fail");
+    let labels = failure.diagnostics()[0].labels();
+
+    assert_eq!(labels.len(), 2);
+    assert_eq!(labels[0].style(), LabelStyle::Primary);
+    assert_eq!(labels[0].span(), Span::new(25, 30));
+    assert_eq!(labels[1].style(), LabelStyle::Secondary);
+    assert_eq!(labels[1].span(), Span::new(14, 19));
+}
+
+#[test]
+fn type_mismatch_points_to_expression_and_declared_type() {
+    let source = "void main() { int value = true; return; }";
+    let failure = compile(CompileRequest::new(source, "main"))
+        .expect_err("invalid initializer should fail checking");
+    let labels = failure.diagnostics()[0].labels();
+
+    assert_eq!(labels.len(), 2);
+    assert_eq!(labels[0].style(), LabelStyle::Primary);
+    assert_eq!(&source[labels[0].span().range()], "true");
+    assert_eq!(labels[1].style(), LabelStyle::Secondary);
+    assert_eq!(&source[labels[1].span().range()], "int");
+}
+
+#[test]
+fn unexpected_eof_uses_an_empty_span_at_source_end() {
+    let source = "void main(";
+    let failure = compile(CompileRequest::new(source, "broken"))
+        .expect_err("unfinished parameter list should fail parsing");
+    let label = &failure.diagnostics()[0].labels()[0];
+
+    assert_eq!(label.span(), Span::new(source.len(), source.len()));
+    let rendered = render_diagnostics(failure.diagnostics(), "broken.fsc", source);
+    assert!(rendered.contains("broken.fsc"));
 }

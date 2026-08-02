@@ -1,6 +1,6 @@
-use crate::diagnostic::{CompileDiagnostic, CompileFailure, CompileStage};
+use crate::diagnostic::CompileFailure;
 use fsc_assembler::Assembler;
-use fsc_parse::diagnostic as parse_diagnostic;
+use fsc_diagnostics::{Diagnostic, Stage};
 
 #[derive(Debug, Clone, Copy)]
 pub struct CompileRequest<'src> {
@@ -21,7 +21,7 @@ impl<'src> CompileRequest<'src> {
 #[derive(Debug)]
 pub struct CompileArtifact {
     bytes: Vec<u8>,
-    diagnostics: Vec<CompileDiagnostic>,
+    diagnostics: Vec<Diagnostic>,
 }
 
 impl CompileArtifact {
@@ -36,30 +36,22 @@ impl CompileArtifact {
     }
 
     #[must_use]
-    pub fn diagnostics(&self) -> &[CompileDiagnostic] {
+    pub fn diagnostics(&self) -> &[Diagnostic] {
         &self.diagnostics
     }
 }
 
 pub fn compile(request: CompileRequest<'_>) -> Result<CompileArtifact, CompileFailure> {
-    let script = fsc_parse::parse(request.source).map_err(|error| {
-        let diagnostic = parse_diagnostic::Diagnostic::from(error);
-        CompileFailure::from_diagnostic(diagnostic.into())
-    })?;
+    let script = fsc_parse::parse(request.source)
+        .map_err(|error| CompileFailure::from_diagnostics(error.into_diagnostics()))?;
 
-    let hir = fsc_sema::analyze(&script).map_err(|error| {
-        CompileFailure::from_diagnostic(CompileDiagnostic::error(
-            CompileStage::Semantic,
-            error.to_string(),
-        ))
-    })?;
+    let hir = fsc_sema::analyze(&script)
+        .map_err(|error| CompileFailure::from_diagnostic(Diagnostic::from(error)))?;
 
     let mut assembler = Assembler::new();
     fsc_codegen::compile(&hir, &mut assembler).map_err(|error| {
-        CompileFailure::from_diagnostic(CompileDiagnostic::error(
-            CompileStage::Codegen,
-            error.to_string(),
-        ))
+        // TODO: attach source labels when HIR has spans
+        CompileFailure::from_diagnostic(Diagnostic::error(Stage::Codegen, error.to_string()))
     })?;
 
     let binary = assembler
@@ -69,13 +61,12 @@ pub fn compile(request: CompileRequest<'_>) -> Result<CompileArtifact, CompileFa
 
     Ok(CompileArtifact {
         bytes,
+        // TODO: collect successful-stage warnings
         diagnostics: Vec::new(),
     })
 }
 
 fn assembly_failure(error: impl std::fmt::Display) -> CompileFailure {
-    CompileFailure::from_diagnostic(CompileDiagnostic::error(
-        CompileStage::Assembly,
-        error.to_string(),
-    ))
+    // TODO: attach source labels on assembly error
+    CompileFailure::from_diagnostic(Diagnostic::error(Stage::Assembly, error.to_string()))
 }

@@ -1,8 +1,9 @@
 pub(crate) mod error;
 use crate::ast::{BinOp, Expr, ExprKind, FuncDef, Item, Param, Stmt, Ty, UnaryOp};
 use crate::ast::{NodeId, StmtKind};
-use crate::lexer::token::{Span, Token, TokenKind};
+use crate::lexer::token::{Token, TokenKind};
 use crate::parser::error::{ParseError, ParseResult};
+use fsc_diagnostics::Span;
 //TODO: better way for groups e.g. is type check in top-level item check
 pub struct TokenStream {
     tokens: Vec<Token>,
@@ -22,12 +23,29 @@ impl TokenStream {
         self.cursor >= self.tokens.len()
     }
 
+    fn current_offset(&self) -> usize {
+        self.tokens
+            .get(self.cursor)
+            .map_or(self.source.len(), |token| token.span.start())
+    }
+
+    fn previous_token_end(&self) -> usize {
+        self.cursor
+            .checked_sub(1)
+            .and_then(|index| self.tokens.get(index))
+            .map_or(self.current_offset(), |token| token.span.end())
+    }
+
+    fn span_consumed_from(&self, start: usize) -> Span {
+        Span::new(start, self.previous_token_end().max(start))
+    }
+
     fn error_span(&self) -> Span {
         if let Some(t) = self.tokens.get(self.cursor) {
             t.span
         } else {
             let end = self.source.len();
-            Span { start: end, end }
+            Span::new(end, end)
         }
     }
 
@@ -71,15 +89,16 @@ impl TokenStream {
         Err(self.unexpected(label))
     }
 
-    fn eat_ident(&mut self) -> Option<String> {
+    fn eat_ident(&mut self) -> Option<(String, Span)> {
+        let span = self.tokens.get(self.cursor)?.span;
         if let Some(TokenKind::Ident(_)) = self.peek()
             && let Some(TokenKind::Ident(s)) = self.advance()
         {
-            return Some(s.clone());
+            return Some((s.clone(), span));
         }
         None
     }
-    fn expect_ident(&mut self) -> ParseResult<String> {
+    fn expect_ident(&mut self) -> ParseResult<(String, Span)> {
         self.eat_ident()
             .ok_or_else(|| self.unexpected("identifier"))
     }
@@ -132,9 +151,9 @@ impl Parser {
 
     fn parse_function(&mut self) -> ParseResult<FuncDef> {
         let exported = !self.ts.eat(&TokenKind::KwStatic); // static = private
-        let ret_ty = self.parse_type_keyword()?;
+        let (ret_ty, ret_ty_span) = self.parse_type_keyword()?;
         // function name
-        let name = self.ts.expect_ident()?;
+        let (name, name_span) = self.ts.expect_ident()?;
 
         // parameters
         self.ts.expect(&TokenKind::LParen, "`(`")?;
@@ -146,34 +165,38 @@ impl Parser {
         Ok(FuncDef {
             id: self.ids.alloc(),
             name,
+            name_span,
             params,
             ret_ty,
+            ret_ty_span,
             body,
             exported,
         })
     }
 
-    fn parse_type_keyword(&mut self) -> ParseResult<Ty> {
+    fn parse_type_keyword(&mut self) -> ParseResult<(Ty, Span)> {
+        let start = self.ts.current_offset();
         let token = self.ts.peek();
-        match token {
+        let ty = match token {
             Some(TokenKind::KwInt) => {
                 self.ts.expect(&TokenKind::KwInt, "int")?;
-                Ok(Ty::Int)
+                Ty::Int
             }
             Some(TokenKind::KwVoid) => {
                 self.ts.expect(&TokenKind::KwVoid, "void")?;
-                Ok(Ty::Void)
+                Ty::Void
             }
             Some(TokenKind::KwBool) => {
                 self.ts.expect(&TokenKind::KwBool, "bool")?;
-                Ok(Ty::Bool)
+                Ty::Bool
             }
             Some(TokenKind::KwString) => {
                 self.ts.expect(&TokenKind::KwString, "string")?;
-                Ok(Ty::Str)
+                Ty::Str
             }
-            _ => Err(self.ts.unexpected("type keyword")),
-        }
+            _ => return Err(self.ts.unexpected("type keyword")),
+        };
+        Ok((ty, self.ts.span_consumed_from(start)))
     }
 
     fn parse_param_list(&mut self) -> ParseResult<Vec<Param>> {
@@ -187,9 +210,14 @@ impl Parser {
     }
 
     fn parse_param(&mut self) -> ParseResult<Param> {
-        let ty = self.parse_type_keyword()?;
-        let name = self.ts.expect_ident()?;
-        Ok(Param { name, ty })
+        let (ty, ty_span) = self.parse_type_keyword()?;
+        let (name, name_span) = self.ts.expect_ident()?;
+        Ok(Param {
+            name,
+            name_span,
+            ty,
+            ty_span,
+        })
     }
 
     fn parse_body(&mut self) -> ParseResult<Vec<Stmt>> {
@@ -203,7 +231,8 @@ impl Parser {
     }
 
     fn parse_stmt(&mut self) -> ParseResult<Stmt> {
-        match self.ts.peek() {
+        let start = self.ts.current_offset();
+        let mut stmt = match self.ts.peek() {
             Some(TokenKind::KwIf) => self.parse_if(),
             Some(TokenKind::KwWhile) => self.parse_while(),
             _ => {
@@ -211,21 +240,29 @@ impl Parser {
                 self.ts.expect(&TokenKind::Semicolon, "`;`")?;
                 Ok(stmt)
             }
-        }
+        }?;
+        stmt.span = self.ts.span_consumed_from(start);
+        Ok(stmt)
     }
 
     fn parse_stmt_inner(&mut self) -> ParseResult<Stmt> {
         match self.ts.peek() {
             Some(TokenKind::KwReturn) => self.parse_return(),
             Some(TokenKind::KwBreak) => {
+                let start = self.ts.current_offset();
                 self.ts.advance();
-                Ok(Stmt::new(self.ids.alloc(), StmtKind::Break))
+                Ok(Stmt::new(
+                    self.ids.alloc(),
+                    StmtKind::Break,
+                    self.ts.span_consumed_from(start),
+                ))
             }
             Some(TokenKind::Ident(_)) => self.parse_assign_or_expr_stmt(),
-            Some(TokenKind::KwSysCall) => Ok(Stmt::new(
-                self.ids.alloc(),
-                StmtKind::ExprStmt(self.parse_syscall()?),
-            )),
+            Some(TokenKind::KwSysCall) => {
+                let expr = self.parse_syscall()?;
+                let span = expr.span;
+                Ok(Stmt::new(self.ids.alloc(), StmtKind::ExprStmt(expr), span))
+            }
             Some(TokenKind::KwPause) => self.parse_pause(),
             Some(TokenKind::KwInt | TokenKind::KwBool | TokenKind::KwString) => {
                 self.parse_var_decl()
@@ -235,14 +272,20 @@ impl Parser {
     }
 
     fn parse_pause(&mut self) -> ParseResult<Stmt> {
+        let start = self.ts.current_offset();
         self.ts.advance();
         self.ts.expect(&TokenKind::LParen, "`(`")?;
         let expr = self.parse_expr(0)?;
         self.ts.expect(&TokenKind::RParen, "`)`")?;
-        Ok(Stmt::new(self.ids.alloc(), StmtKind::Pause(expr)))
+        Ok(Stmt::new(
+            self.ids.alloc(),
+            StmtKind::Pause(expr),
+            self.ts.span_consumed_from(start),
+        ))
     }
 
     fn parse_if(&mut self) -> ParseResult<Stmt> {
+        let start = self.ts.current_offset();
         self.ts.expect(&TokenKind::KwIf, "`if`")?;
         self.ts.expect(&TokenKind::LParen, "`(`")?;
         let cond = self.parse_expr(0)?;
@@ -263,10 +306,12 @@ impl Parser {
                 then_body,
                 else_body,
             },
+            self.ts.span_consumed_from(start),
         ))
     }
 
     fn parse_while(&mut self) -> ParseResult<Stmt> {
+        let start = self.ts.current_offset();
         self.ts.expect(&TokenKind::KwWhile, "`while`")?;
         self.ts.expect(&TokenKind::LParen, "`(`")?;
 
@@ -276,7 +321,11 @@ impl Parser {
 
         let body = self.parse_block()?;
 
-        Ok(Stmt::new(self.ids.alloc(), StmtKind::While { cond, body }))
+        Ok(Stmt::new(
+            self.ids.alloc(),
+            StmtKind::While { cond, body },
+            self.ts.span_consumed_from(start),
+        ))
     }
 
     fn parse_block(&mut self) -> ParseResult<Vec<Stmt>> {
@@ -289,8 +338,9 @@ impl Parser {
     }
 
     fn parse_var_decl(&mut self) -> ParseResult<Stmt> {
-        let ty = self.parse_type_keyword()?;
-        let name = self.ts.expect_ident()?;
+        let start = self.ts.current_offset();
+        let (ty, ty_span) = self.parse_type_keyword()?;
+        let (name, name_span) = self.ts.expect_ident()?;
         let init = if self.ts.eat(&TokenKind::Eq) {
             Some(self.parse_expr(0)?)
         } else {
@@ -298,40 +348,56 @@ impl Parser {
         };
         Ok(Stmt::new(
             self.ids.alloc(),
-            StmtKind::VarDecl { name, ty, init },
+            StmtKind::VarDecl {
+                name,
+                name_span,
+                ty,
+                ty_span,
+                init,
+            },
+            self.ts.span_consumed_from(start),
         ))
     }
 
     fn parse_assign_or_expr_stmt(&mut self) -> ParseResult<Stmt> {
-        let name = self.ts.expect_ident()?;
+        let start = self.ts.current_offset();
+        let (name, name_span) = self.ts.expect_ident()?;
         if self.ts.eat(&TokenKind::Eq) {
             let expr = self.parse_expr(0)?;
             Ok(Stmt::new(
                 self.ids.alloc(),
                 StmtKind::Assign {
-                    target: Expr::new(self.ids.alloc(), ExprKind::Var(name)),
+                    target: Expr::new(self.ids.alloc(), ExprKind::Var(name), name_span),
                     expr,
                 },
+                self.ts.span_consumed_from(start),
             ))
         } else if self.ts.peek() == Some(&TokenKind::LParen) {
-            let call = self.parse_call(name)?;
-            Ok(Stmt::new(self.ids.alloc(), StmtKind::ExprStmt(call)))
+            let call = self.parse_call(name, name_span)?;
+            let span = call.span;
+            Ok(Stmt::new(self.ids.alloc(), StmtKind::ExprStmt(call), span))
         } else {
             Err(self.ts.unexpected("assignment or call statement"))
         }
     }
 
     fn parse_return(&mut self) -> ParseResult<Stmt> {
+        let start = self.ts.current_offset();
         self.ts.expect(&TokenKind::KwReturn, "`return`")?;
 
         if self.ts.peek() == Some(&TokenKind::Semicolon) {
-            return Ok(Stmt::new(self.ids.alloc(), StmtKind::Return(None)));
+            return Ok(Stmt::new(
+                self.ids.alloc(),
+                StmtKind::Return(None),
+                self.ts.span_consumed_from(start),
+            ));
         }
 
         let expr = self.parse_expr(0)?;
         Ok(Stmt::new(
             self.ids.alloc(),
             StmtKind::Return(Option::from(expr)),
+            self.ts.span_consumed_from(start),
         ))
     }
 
@@ -357,6 +423,7 @@ impl Parser {
             }
             self.ts.advance();
             let rhs = self.parse_expr(bp + 1)?;
+            let span = lhs.span.cover(rhs.span);
 
             lhs = Expr::new(
                 self.ids.alloc(),
@@ -365,6 +432,7 @@ impl Parser {
                     lhs: Box::new(lhs),
                     rhs: Box::new(rhs),
                 },
+                span,
             );
         }
 
@@ -372,6 +440,7 @@ impl Parser {
     }
     //TODO: cleanup logic in parser general, so less duplications
     fn parse_syscall(&mut self) -> ParseResult<Expr> {
+        let start = self.ts.current_offset();
         self.ts.advance();
         self.ts.expect(&TokenKind::LParen, "`(`")?;
         let mut args = Vec::new();
@@ -379,10 +448,15 @@ impl Parser {
             args.push(self.parse_expr(0)?);
             self.ts.eat(&TokenKind::Comma);
         }
-        Ok(Expr::new(self.ids.alloc(), ExprKind::SysCall { args }))
+        Ok(Expr::new(
+            self.ids.alloc(),
+            ExprKind::SysCall { args },
+            self.ts.span_consumed_from(start),
+        ))
     }
 
     fn parse_unary(&mut self, op: UnaryOp) -> ParseResult<Expr> {
+        let start = self.ts.current_offset();
         self.ts.advance();
         let expr = self.parse_expr(6)?;
 
@@ -392,51 +466,72 @@ impl Parser {
                 op,
                 expr: Box::new(expr),
             },
+            self.ts.span_consumed_from(start),
         ))
     }
 
     fn parse_bool_literal(&mut self) -> ParseResult<Expr> {
+        let start = self.ts.current_offset();
         match self.ts.advance() {
-            Some(TokenKind::BoolLit(b)) => Ok(Expr::new(self.ids.alloc(), ExprKind::BoolLit(*b))),
+            Some(TokenKind::BoolLit(b)) => Ok(Expr::new(
+                self.ids.alloc(),
+                ExprKind::BoolLit(*b),
+                self.ts.span_consumed_from(start),
+            )),
             _ => Err(self.ts.unexpected("boolean literal")),
         }
     }
 
     fn parse_int_literal(&mut self) -> ParseResult<Expr> {
+        let start = self.ts.current_offset();
         match self.ts.advance() {
-            Some(TokenKind::IntLit(n)) => Ok(Expr::new(self.ids.alloc(), ExprKind::IntLit(*n))),
+            Some(TokenKind::IntLit(n)) => Ok(Expr::new(
+                self.ids.alloc(),
+                ExprKind::IntLit(*n),
+                self.ts.span_consumed_from(start),
+            )),
             _ => Err(self.ts.unexpected("`integer literal`")),
         }
     }
     fn parse_string_literal(&mut self) -> ParseResult<Expr> {
+        let start = self.ts.current_offset();
         match self.ts.advance() {
-            Some(TokenKind::StrLit(n)) => {
-                Ok(Expr::new(self.ids.alloc(), ExprKind::StringLit(n.clone())))
-            }
+            Some(TokenKind::StrLit(n)) => Ok(Expr::new(
+                self.ids.alloc(),
+                ExprKind::StringLit(n.clone()),
+                self.ts.span_consumed_from(start),
+            )),
             _ => Err(self.ts.unexpected("`string literal`")),
         }
     }
     fn parse_group(&mut self) -> ParseResult<Expr> {
+        let start = self.ts.current_offset();
         self.ts.advance();
-        let expr = self.parse_expr(0)?;
+        let mut expr = self.parse_expr(0)?;
         self.ts.expect(&TokenKind::RParen, "`)`")?;
+        expr.span = self.ts.span_consumed_from(start);
         Ok(expr)
     }
 
     fn parse_identifier(&mut self) -> ParseResult<Expr> {
-        let name = self.ts.expect_ident()?;
+        let (name, name_span) = self.ts.expect_ident()?;
         match self.ts.peek() {
-            Some(TokenKind::LParen) => self.parse_call(name),
-            _ => Ok(Expr::new(self.ids.alloc(), ExprKind::Var(name))),
+            Some(TokenKind::LParen) => self.parse_call(name, name_span),
+            _ => Ok(Expr::new(self.ids.alloc(), ExprKind::Var(name), name_span)),
         }
     }
 
-    fn parse_call(&mut self, name: String) -> ParseResult<Expr> {
+    fn parse_call(&mut self, name: String, name_span: Span) -> ParseResult<Expr> {
         self.ts.advance();
         let args = self.parse_arg_list()?;
         Ok(Expr::new(
             self.ids.alloc(),
-            ExprKind::Call { callee: name, args },
+            ExprKind::Call {
+                callee: name,
+                callee_span: name_span,
+                args,
+            },
+            self.ts.span_consumed_from(name_span.start()),
         ))
     }
     fn parse_arg_list(&mut self) -> ParseResult<Vec<Expr>> {

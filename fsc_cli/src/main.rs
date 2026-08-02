@@ -2,7 +2,8 @@ mod cli;
 
 use clap::Parser;
 use cli::{BuildArgs, Cli, Command};
-use fsc_compiler::{CompileRequest, compile, render_diagnostics};
+use fsc_compiler::{CompileRequest, compile};
+use fsc_diagnostics::render_diagnostics;
 use std::fs;
 use std::process::ExitCode;
 
@@ -37,7 +38,10 @@ fn build(args: BuildArgs) -> Result<(), ()> {
 
     let request = CompileRequest::new(&source, script_name);
     let artifact = compile(request).map_err(|failure| {
-        eprint!("{}", failure.render(source_name, &source));
+        eprint!(
+            "{}",
+            render_diagnostics(failure.diagnostics(), source_name, &source)
+        );
     })?;
 
     let rendered = render_diagnostics(artifact.diagnostics(), source_name, &source);

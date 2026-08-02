@@ -1,5 +1,6 @@
 use crate::error::{SemaError, SemaResult};
 use crate::symbol::{ParamInfo, Symbol, SymbolId, SymbolKind, SymbolTable};
+use fsc_diagnostics::Span;
 use fsc_parse::ast;
 use fsc_parse::ast::NodeId;
 use std::collections::HashMap;
@@ -41,7 +42,12 @@ enum ScopeKind {
 #[derive(Debug)]
 struct Scope {
     kind: ScopeKind,
-    map: HashMap<String, SymbolId>,
+    map: HashMap<String, ScopeEntry>,
+}
+#[derive(Debug, Clone, Copy)]
+struct ScopeEntry {
+    symbol: SymbolId,
+    declaration_span: Span,
 }
 #[derive(Debug)]
 pub struct ScopeStack {
@@ -104,25 +110,38 @@ impl ScopeStack {
         self.scopes.pop();
     }
 
-    fn declare(&mut self, name: &str, sym_id: SymbolId) -> SemaResult<()> {
+    fn declare(&mut self, name: &str, sym_id: SymbolId, name_span: Span) -> SemaResult<()> {
         let current = self.scopes.last_mut();
         let Some(scope) = current else {
             unreachable!("unreachable initialized with at least one scope")
         };
-        if scope.map.contains_key(name) {
-            return Err(SemaError::DuplicateDeclaration(name.to_string()));
+        if let Some(original) = scope.map.get(name) {
+            return Err(SemaError::DuplicateDeclaration {
+                name: name.to_string(),
+                duplicate_span: name_span,
+                original_span: original.declaration_span,
+            });
         }
-        scope.map.insert(name.to_string(), sym_id);
+        scope.map.insert(
+            name.to_string(),
+            ScopeEntry {
+                symbol: sym_id,
+                declaration_span: name_span,
+            },
+        );
         Ok(())
     }
 
-    fn lookup(&self, name: &str) -> SemaResult<SymbolId> {
+    fn lookup(&self, name: &str, reference_span: Span) -> SemaResult<SymbolId> {
         for scope in self.scopes.iter().rev() {
-            if let Some(&id) = scope.map.get(name) {
-                return Ok(id);
+            if let Some(entry) = scope.map.get(name) {
+                return Ok(entry.symbol);
             }
         }
-        Err(SemaError::UndeclaredName(name.to_string()))
+        Err(SemaError::UndeclaredName {
+            name: name.to_string(),
+            reference_span,
+        })
     }
 }
 
@@ -138,18 +157,22 @@ pub fn declare_items(
             for param in func.params.iter() {
                 params.push(ParamInfo {
                     name: param.name.clone(),
+                    name_span: param.name_span,
                     ty: param.ty.clone(),
+                    type_span: param.ty_span,
                 });
             }
             let fn_sym_id = symbols.insert(Symbol {
                 name: func.name.clone(),
+                name_span: func.name_span,
                 ty: func.ret_ty.clone(),
+                type_span: func.ret_ty_span,
                 kind: SymbolKind::Function {
                     ret_ty: func.ret_ty.clone(),
                     params,
                 },
             });
-            scope.declare(&func.name, fn_sym_id)?;
+            scope.declare(&func.name, fn_sym_id, func.name_span)?;
         }
     }
     Ok(())
@@ -164,12 +187,14 @@ pub fn resolve_params(
     for (index, param) in params.iter().enumerate() {
         let sym_id = symbol_table.insert(Symbol {
             name: param.name.clone(),
+            name_span: param.name_span,
             ty: param.ty.clone(),
+            type_span: param.type_span,
             kind: SymbolKind::Param {
                 index: index as u32,
             },
         });
-        scope.declare(&param.name, sym_id)?;
+        scope.declare(&param.name, sym_id, param.name_span)?;
         params_in_order.push(sym_id);
     }
     Ok(params_in_order)
@@ -182,7 +207,7 @@ pub fn resolve_fn(
 ) -> SemaResult<ResolveOutput> {
     scope.enter_function_scope();
     let mut resolutions = Resolutions::new();
-    let fn_symbol_id = scope.lookup(&func.name)?;
+    let fn_symbol_id = scope.lookup(&func.name, func.name_span)?;
     let (params, ..) = match symbols.get(fn_symbol_id).kind.clone() {
         SymbolKind::Function { params, ret_ty } => (params, ret_ty),
         _ => todo!(),
@@ -225,16 +250,24 @@ fn resolve_stmt(
             Ok(())
         }
 
-        ast::StmtKind::VarDecl { name, ty, init } => {
+        ast::StmtKind::VarDecl {
+            name,
+            name_span,
+            ty,
+            ty_span,
+            init,
+        } => {
             if let Some(e) = init {
                 resolve_expr(e, scope, resolutions)?;
             }
             let sym_id = symbols.insert(Symbol {
                 name: name.clone(),
+                name_span: *name_span,
                 ty: ty.clone(),
+                type_span: *ty_span,
                 kind: SymbolKind::Local,
             });
-            scope.declare(name, sym_id)?;
+            scope.declare(name, sym_id, *name_span)?;
             resolutions.insert(stmt.id, sym_id);
             Ok(())
         }
@@ -296,7 +329,7 @@ fn resolve_expr(
         }
 
         ast::ExprKind::Var(name) => {
-            let sym_id = scope.lookup(name)?;
+            let sym_id = scope.lookup(name, expr.span)?;
             resolutions.insert(expr.id, sym_id);
             Ok(())
         }
@@ -308,8 +341,12 @@ fn resolve_expr(
 
         ast::ExprKind::Unary { expr: inner, .. } => resolve_expr(inner, scope, resolutions),
 
-        ast::ExprKind::Call { callee, args } => {
-            let sym_id = scope.lookup(callee)?;
+        ast::ExprKind::Call {
+            callee,
+            callee_span,
+            args,
+        } => {
+            let sym_id = scope.lookup(callee, *callee_span)?;
             resolutions.insert(expr.id, sym_id);
             for arg in args {
                 resolve_expr(arg, scope, resolutions)?;

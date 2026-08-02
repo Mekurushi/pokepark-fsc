@@ -16,12 +16,16 @@ pub fn infer_expr(expr: &Expr, resolved: &ResolveOutput) -> SemaResult<Ty> {
         ExprKind::BinOp { op, lhs, rhs } => infer_binop(op, lhs, rhs, resolved),
 
         ExprKind::Unary { op, expr } => infer_unary(op, expr, resolved),
-        ExprKind::Call { .. } => {
+        ExprKind::Call { callee_span, .. } => {
             let sym_id = resolved.resolutions.symbol(expr.id);
             let sym = resolved.symbols.get(sym_id);
             match &sym.kind {
                 SymbolKind::Function { ret_ty, .. } => Ok(ret_ty.clone()),
-                _ => Err(SemaError::NotCallable(sym.name.clone())),
+                _ => Err(SemaError::NotCallable {
+                    name: sym.name.clone(),
+                    callee_span: *callee_span,
+                    declaration_span: sym.name_span,
+                }),
             }
         }
         // TODO: check this again; always Int and caller interprets?
@@ -33,12 +37,16 @@ fn infer_binop(op: &BinOp, lhs: &Expr, rhs: &Expr, resolved: &ResolveOutput) -> 
     let rty = infer_expr(rhs, resolved)?;
 
     if lty == Ty::Void || rty == Ty::Void {
-        return Err(SemaError::VoidInValuePosition);
+        return Err(SemaError::VoidInValuePosition {
+            span: if lty == Ty::Void { lhs.span } else { rhs.span },
+        });
     }
     if lty != rty {
         return Err(SemaError::TypeMismatch {
             expected: lty,
             found: rty,
+            span: rhs.span,
+            expected_span: Some(lhs.span),
         });
     }
 
@@ -62,6 +70,8 @@ fn infer_unary(op: &UnaryOp, expr: &Expr, resolved: &ResolveOutput) -> SemaResul
                 return Err(SemaError::TypeMismatch {
                     expected: Ty::Int,
                     found: ty,
+                    span: expr.span,
+                    expected_span: None,
                 });
             }
             Ok(ty)
@@ -69,7 +79,7 @@ fn infer_unary(op: &UnaryOp, expr: &Expr, resolved: &ResolveOutput) -> SemaResul
         UnaryOp::Not => {
             let ty = infer_expr(expr, resolved)?;
             if ty == Ty::Void {
-                return Err(SemaError::VoidInValuePosition);
+                return Err(SemaError::VoidInValuePosition { span: expr.span });
             }
             Ok(Ty::Bool)
         }

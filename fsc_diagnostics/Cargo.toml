@@ -1,11 +1,10 @@
 [package]
-name = "fsc_parse"
+name = "fsc_diagnostics"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-fsc_diagnostics = { path = "../fsc_diagnostics" }
-logos = "0.16.1"
+annotate-snippets = "0.12.16"
 
 [lints]
 workspace = true
