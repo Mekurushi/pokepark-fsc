@@ -12,6 +12,14 @@ pub enum AssemblerError {
 
 pub type AssemblerResult<T> = Result<T, AssemblerError>;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BinaryReadError {
+    FileTooShort { minimum: usize, actual: usize },
+    InvalidB40 { location: String, value: u32 },
+}
+
+pub type BinaryReadResult<T> = Result<T, BinaryReadError>;
+
 impl std::fmt::Display for AssemblerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -34,3 +42,21 @@ impl std::fmt::Display for AssemblerError {
         }
     }
 }
+
+impl std::fmt::Display for BinaryReadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::FileTooShort { minimum, actual } => {
+                write!(
+                    f,
+                    "FSB is too short: expected at least {minimum} bytes, got {actual}"
+                )
+            }
+            Self::InvalidB40 { location, value } => {
+                write!(f, "invalid B40 value {value:#x} in {location}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for BinaryReadError {}

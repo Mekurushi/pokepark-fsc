@@ -1,5 +1,4 @@
-use crate::error::{AssemblerError, AssemblerResult};
-use std::string::FromUtf8Error;
+use crate::error::{AssemblerError, AssemblerResult, BinaryReadError, BinaryReadResult};
 const B40_ALPHABET: &[u8; 40] = b" 0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_-/";
 
 fn encode_b40_uint(s: &[u8]) -> AssemblerResult<u32> {
@@ -34,17 +33,20 @@ pub fn encode_b40(name: &str) -> AssemblerResult<[u8; 8]> {
     out[4..8].copy_from_slice(&second.to_be_bytes());
     Ok(out)
 }
-fn decode_b40_uint(mut val: u32) -> Result<String, FromUtf8Error> {
+fn decode_b40_uint(mut val: u32) -> BinaryReadResult<String> {
+    let encoded = val;
     let mut chars = [0u8; 6];
     for i in (0..6).rev() {
         let idx = (val % 40) as usize;
         chars[i] = B40_ALPHABET[idx];
         val /= 40;
     }
-    String::from_utf8(chars.to_vec())
+    String::from_utf8(chars.to_vec()).map_err(|_| BinaryReadError::InvalidB40 {
+        location: "B40 string segment".to_string(),
+        value: encoded,
+    })
 }
-#[allow(unused)]
-pub fn decode_b40(bytes: [u8; 8]) -> Result<String, FromUtf8Error> {
+pub fn decode_b40(bytes: [u8; 8]) -> BinaryReadResult<String> {
     let a = u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
     let b = u32::from_be_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
     let mut result = decode_b40_uint(a)?;
