@@ -16,6 +16,9 @@ pub type AssemblerResult<T> = Result<T, AssemblerError>;
 pub enum BinaryReadError {
     FileTooShort { minimum: usize, actual: usize },
     InvalidB40 { location: String, value: u32 },
+    InvalidSectionLayout,
+    InvalidSymbolTableSize { size: usize },
+    InvalidSymbolOffset { offset: u32 },
 }
 
 pub type BinaryReadResult<T> = Result<T, BinaryReadError>;
@@ -54,6 +57,16 @@ impl std::fmt::Display for BinaryReadError {
             }
             Self::InvalidB40 { location, value } => {
                 write!(f, "invalid B40 value {value:#x} in {location}")
+            }
+            Self::InvalidSectionLayout => f.write_str("FSB section pointers are invalid"),
+            Self::InvalidSymbolTableSize { size } => {
+                write!(f, "FSB symbol table size {size} is not a multiple of 12")
+            }
+            Self::InvalidSymbolOffset { offset } => {
+                write!(
+                    f,
+                    "FSB symbol offset {offset:#x} is outside the code section"
+                )
             }
         }
     }
