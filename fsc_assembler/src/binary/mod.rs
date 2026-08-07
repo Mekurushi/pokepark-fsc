@@ -87,6 +87,19 @@ impl FscriptBinary {
             string_table,
         ))
     }
+
+    pub fn code_len(&self) -> usize {
+        self.code.len()
+    }
+
+    pub fn replace_code_word(&mut self, offset: u32, word: [u8; 4]) {
+        let index = offset as usize;
+        self.code[index..index + 4].copy_from_slice(&word);
+    }
+
+    pub fn append_code(&mut self, code: Vec<u8>) {
+        self.code.extend(code);
+    }
 }
 
 #[cfg(test)]

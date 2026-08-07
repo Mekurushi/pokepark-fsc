@@ -209,6 +209,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "fsc_patcher"
+version = "0.1.0"
+dependencies = [
+ "fsc_assembler",
+]
+
+[[package]]
 name = "fsc_sema"
 version = "0.1.0"
 dependencies = [

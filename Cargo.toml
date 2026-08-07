@@ -7,6 +7,7 @@ members = [
     "fsc_compiler",
     "fsc_diagnostics",
     "fsc_parse",
+    "fsc_patcher",
     "fsc_sema",
 ]
 resolver = "2"
