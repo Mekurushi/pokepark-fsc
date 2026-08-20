@@ -1,7 +1,7 @@
 mod cli;
 
 use clap::Parser;
-use cli::{BuildArgs, Cli, Command};
+use cli::{BuildArgs, Cli, Command, PatchArgs};
 use fsc_compiler::{CompileRequest, compile};
 use fsc_diagnostics::render_diagnostics;
 use std::fs;
@@ -18,7 +18,47 @@ fn main() -> ExitCode {
 fn run(cli: Cli) -> Result<(), ()> {
     match cli.command {
         Command::Build(args) => build(args),
+        Command::Patch(args) => patch(args),
     }
+}
+
+fn patch(args: PatchArgs) -> Result<(), ()> {
+    let patch_source = fs::read_to_string(&args.patch).map_err(|error| {
+        eprintln!(
+            "error: could not read patch source {}: {error}",
+            args.patch.display()
+        );
+    })?;
+    let original_binary = fs::read(&args.original).map_err(|error| {
+        eprintln!(
+            "error: could not read original FSB {}: {error}",
+            args.original.display()
+        );
+    })?;
+    let symbols_source = fs::read_to_string(&args.symbols).map_err(|error| {
+        eprintln!(
+            "error: could not read symbol table {}: {error}",
+            args.symbols.display()
+        );
+    })?;
+    let symbols = fsc_patcher::parse_symbol_table(&symbols_source).map_err(|error| {
+        eprintln!(
+            "error: could not parse symbol table {}: {error}",
+            args.symbols.display()
+        );
+    })?;
+
+    let request = fsc_patcher::PatchRequest::new(
+        &patch_source,
+        &original_binary,
+        &symbols,
+        args.base_address,
+    );
+    let _patched_binary = fsc_patcher::patch(request).map_err(|error| {
+        eprintln!("error: {error}");
+    })?;
+
+    Ok(())
 }
 
 fn build(args: BuildArgs) -> Result<(), ()> {

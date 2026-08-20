@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 fsc_assembler = { path = "../fsc_assembler" }
+toml = "1.1.4"
 
 [lints]
 workspace = true
