@@ -48,13 +48,8 @@ fn patch(args: PatchArgs) -> Result<(), ()> {
         );
     })?;
 
-    let request = fsc_patcher::PatchRequest::new(
-        &patch_source,
-        &original_binary,
-        &symbols,
-        args.base_address,
-    );
-    let _patched_binary = fsc_patcher::patch(request).map_err(|error| {
+    let request = fsc_patcher::PatchRequest::new(&patch_source, &original_binary, &symbols);
+    let _artifact = fsc_patcher::patch(request).map_err(|error| {
         eprintln!("error: {error}");
     })?;
 

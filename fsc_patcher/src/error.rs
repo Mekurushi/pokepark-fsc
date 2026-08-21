@@ -1,3 +1,6 @@
+use fsc_assembler::error::BinaryReadError;
+use fsc_diagnostics::Diagnostic;
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum PatchError {
     UnalignedCode,
@@ -26,22 +29,58 @@ impl std::error::Error for PatchError {}
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum PatchFailure {
+    InvalidOriginalBinary(BinaryReadError),
+    InvalidPatchSource(Vec<Diagnostic>),
     NotImplemented,
 }
 
 impl std::fmt::Display for PatchFailure {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::InvalidOriginalBinary(error) => {
+                write!(f, "could not read original FSB: {error}")
+            }
+            Self::InvalidPatchSource(_) => f.write_str("patch source contains errors"),
             Self::NotImplemented => f.write_str("patching is not implemented yet"),
         }
     }
 }
 
-impl std::error::Error for PatchFailure {}
+impl std::error::Error for PatchFailure {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::InvalidOriginalBinary(error) => Some(error),
+            Self::InvalidPatchSource(_) | Self::NotImplemented => None,
+        }
+    }
+}
+
+impl From<BinaryReadError> for PatchFailure {
+    fn from(error: BinaryReadError) -> Self {
+        Self::InvalidOriginalBinary(error)
+    }
+}
 
 #[derive(Debug)]
 pub struct SymbolTableParseError {
     pub(crate) source: toml::de::Error,
+}
+
+#[derive(Debug)]
+pub struct SymbolTableSerializeError {
+    pub(crate) source: toml::ser::Error,
+}
+
+impl std::fmt::Display for SymbolTableSerializeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.source.fmt(f)
+    }
+}
+
+impl std::error::Error for SymbolTableSerializeError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.source)
+    }
 }
 
 impl std::fmt::Display for SymbolTableParseError {

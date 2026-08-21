@@ -8,6 +8,8 @@ mod header;
 pub mod string_table;
 pub mod symbol_table;
 
+pub const CODE_SECTION_FILE_OFFSET: u32 = HEADER_SIZE;
+
 pub struct FscriptBinary {
     script_name: String,
     pub(crate) code: Vec<u8>,
@@ -31,7 +33,7 @@ impl FscriptBinary {
     }
 
     pub fn serialize(&self) -> AssemblerResult<Vec<u8>> {
-        let code_ptr = HEADER_SIZE;
+        let code_ptr = CODE_SECTION_FILE_OFFSET;
         let symbol_table_ptr = code_ptr
             + u32::try_from(self.code.len())
                 .map_err(|_err| AssemblerError::SectionTooLarge("code"))?;

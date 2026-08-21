@@ -5,6 +5,9 @@ edition = "2024"
 
 [dependencies]
 fsc_assembler = { path = "../fsc_assembler" }
+fsc_diagnostics = { path = "../fsc_diagnostics" }
+fsc_parse = { path = "../fsc_parse" }
+serde = { version = "1", features = ["derive"] }
 toml = "1.1.4"
 
 [lints]
