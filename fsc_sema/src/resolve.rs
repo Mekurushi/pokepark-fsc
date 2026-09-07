@@ -152,27 +152,48 @@ pub fn declare_items(
 ) -> SemaResult<()> {
     scope.enter_file_scope();
     for item in &script.items {
-        if let ast::Item::FuncDef(func) = item {
-            let mut params: Vec<ParamInfo> = Vec::new();
-            for param in func.params.iter() {
-                params.push(ParamInfo {
-                    name: param.name.clone(),
-                    name_span: param.name_span,
-                    ty: param.ty.clone(),
-                    type_span: param.ty_span,
-                });
+        let header = match item {
+            ast::Item::FuncDef(func) => &func.header,
+            ast::Item::FuncDecl(declaration) => {
+                validate_unique_params(&declaration.header.params)?;
+                &declaration.header
             }
-            let fn_sym_id = symbols.insert(Symbol {
-                name: func.name.clone(),
-                name_span: func.name_span,
-                ty: func.ret_ty.clone(),
-                type_span: func.ret_ty_span,
-                kind: SymbolKind::Function {
-                    ret_ty: func.ret_ty.clone(),
-                    params,
-                },
+        };
+        let params = header
+            .params
+            .iter()
+            .map(|param| ParamInfo {
+                name: param.name.clone(),
+                name_span: param.name_span,
+                ty: param.ty.clone(),
+                type_span: param.ty_span,
+            })
+            .collect();
+        let fn_sym_id = symbols.insert(Symbol {
+            name: header.name.clone(),
+            name_span: header.name_span,
+            ty: header.ret_ty.clone(),
+            type_span: header.ret_ty_span,
+            kind: SymbolKind::Function {
+                ret_ty: header.ret_ty.clone(),
+                params,
+            },
+        });
+        scope.declare(&header.name, fn_sym_id, header.name_span)?;
+    }
+    Ok(())
+}
+
+//TODO: resolve concern mixup between check, infer and resolve
+fn validate_unique_params(params: &[ast::Param]) -> SemaResult<()> {
+    let mut declarations = HashMap::new();
+    for param in params {
+        if let Some(original_span) = declarations.insert(&param.name, param.name_span) {
+            return Err(SemaError::DuplicateDeclaration {
+                name: param.name.clone(),
+                duplicate_span: param.name_span,
+                original_span,
             });
-            scope.declare(&func.name, fn_sym_id, func.name_span)?;
         }
     }
     Ok(())
@@ -207,7 +228,7 @@ pub fn resolve_fn(
 ) -> SemaResult<ResolveOutput> {
     scope.enter_function_scope();
     let mut resolutions = Resolutions::new();
-    let fn_symbol_id = scope.lookup(&func.name, func.name_span)?;
+    let fn_symbol_id = scope.lookup(&func.header.name, func.header.name_span)?;
     let (params, ..) = match symbols.get(fn_symbol_id).kind.clone() {
         SymbolKind::Function { params, ret_ty } => (params, ret_ty),
         _ => todo!(),

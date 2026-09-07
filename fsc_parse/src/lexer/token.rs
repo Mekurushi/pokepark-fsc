@@ -41,6 +41,9 @@ pub enum TokenKind {
     #[token("static", priority = 10)]
     KwStatic,
 
+    #[token("extern", priority = 10)]
+    KwExtern,
+
     // --- misc ---
     #[token("SysCall", priority = 10)]
     KwSysCall,
@@ -142,6 +145,7 @@ impl TokenKind {
             Self::KwReturn => "`return`",
             Self::KwBreak => "`break`",
             Self::KwStatic => "`static`",
+            Self::KwExtern => "`extern`",
             Self::KwSysCall => "`SysCall`",
             Self::KwPause => "`Pause`",
             Self::BoolLit(_) => "`boolean literal`",

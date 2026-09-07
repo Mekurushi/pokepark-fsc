@@ -5,7 +5,12 @@ use fsc_diagnostics::Span;
 use fsc_parse::ast::{self, Ty};
 
 pub fn check_fn(func: &ast::FuncDef, resolved: &ResolveOutput) -> SemaResult<()> {
-    check_stmts(&func.body, &func.ret_ty, func.ret_ty_span, resolved)
+    check_stmts(
+        &func.body,
+        &func.header.ret_ty,
+        func.header.ret_ty_span,
+        resolved,
+    )
 }
 
 fn check_stmts(

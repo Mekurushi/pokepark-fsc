@@ -19,7 +19,7 @@ pub fn analyze(script: &ast::Script) -> SemaResult<hir::Script> {
     let items = script
         .items
         .iter()
-        .map(|item| analyze_item(item, &mut symbols, &mut scope))
+        .filter_map(|item| analyze_item(item, &mut symbols, &mut scope))
         .collect::<SemaResult<Vec<_>>>()?;
 
     Ok(hir::Script { items })
@@ -39,10 +39,11 @@ fn analyze_item(
     item: &ast::Item,
     symbol_table: &mut SymbolTable,
     scope: &mut ScopeStack,
-) -> SemaResult<hir::Item> {
+) -> Option<SemaResult<hir::Item>> {
     match item {
         ast::Item::FuncDef(func) => {
-            Ok(hir::Item::FuncDef(analyze_func(func, symbol_table, scope)?))
+            Some(analyze_func(func, symbol_table, scope).map(hir::Item::FuncDef))
         }
+        ast::Item::FuncDecl(_) => None,
     }
 }

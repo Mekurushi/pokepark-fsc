@@ -7,6 +7,7 @@ edition = "2024"
 fsc_assembler = { path = "../fsc_assembler" }
 fsc_diagnostics = { path = "../fsc_diagnostics" }
 fsc_parse = { path = "../fsc_parse" }
+fsc_sema = { path = "../fsc_sema" }
 serde = { version = "1", features = ["derive"] }
 toml = "1.1.4"
 

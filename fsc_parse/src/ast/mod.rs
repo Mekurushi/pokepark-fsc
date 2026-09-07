@@ -124,20 +124,32 @@ pub struct Param {
 }
 
 #[derive(Debug, Clone)]
-pub struct FuncDef {
-    pub id: NodeId,
+pub struct FunctionHeader {
     pub name: String,
     pub name_span: Span,
     pub params: Vec<Param>,
     pub ret_ty: Ty,
     pub ret_ty_span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct FuncDef {
+    pub id: NodeId,
+    pub header: FunctionHeader,
     pub body: Vec<Stmt>,
     pub exported: bool,
 }
 
 #[derive(Debug, Clone)]
+pub struct FuncDecl {
+    pub id: NodeId,
+    pub header: FunctionHeader,
+}
+
+#[derive(Debug, Clone)]
 pub enum Item {
     FuncDef(FuncDef),
+    FuncDecl(FuncDecl),
 }
 
 #[derive(Debug, Clone)]

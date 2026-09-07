@@ -1,5 +1,7 @@
 pub(crate) mod error;
-use crate::ast::{BinOp, Expr, ExprKind, FuncDef, Item, Param, Stmt, Ty, UnaryOp};
+use crate::ast::{
+    BinOp, Expr, ExprKind, FuncDecl, FuncDef, FunctionHeader, Item, Param, Stmt, Ty, UnaryOp,
+};
 use crate::ast::{NodeId, StmtKind};
 use crate::lexer::token::{Token, TokenKind};
 use crate::parser::error::{ParseError, ParseResult};
@@ -135,6 +137,7 @@ impl Parser {
     }
     pub fn parse_item(&mut self) -> ParseResult<Item> {
         match self.ts.peek() {
+            Some(TokenKind::KwExtern) => Ok(Item::FuncDecl(self.parse_function_declaration()?)),
             Some(
                 TokenKind::KwStatic
                 | TokenKind::KwInt
@@ -151,26 +154,43 @@ impl Parser {
 
     fn parse_function(&mut self) -> ParseResult<FuncDef> {
         let exported = !self.ts.eat(&TokenKind::KwStatic); // static = private
-        let (ret_ty, ret_ty_span) = self.parse_type_keyword()?;
-        // function name
-        let (name, name_span) = self.ts.expect_ident()?;
-
-        // parameters
-        self.ts.expect(&TokenKind::LParen, "`(`")?;
-        let params = self.parse_param_list()?;
+        let header = self.parse_function_header()?;
 
         // body
         self.ts.expect(&TokenKind::LBrace, "`{`")?;
         let body = self.parse_body()?;
         Ok(FuncDef {
             id: self.ids.alloc(),
+            header,
+            body,
+            exported,
+        })
+    }
+
+    fn parse_function_declaration(&mut self) -> ParseResult<FuncDecl> {
+        self.ts.expect(&TokenKind::KwExtern, "`extern`")?;
+        let header = self.parse_function_header()?;
+        self.ts.expect(&TokenKind::Semicolon, "`;`")?;
+
+        Ok(FuncDecl {
+            id: self.ids.alloc(),
+            header,
+        })
+    }
+
+    fn parse_function_header(&mut self) -> ParseResult<FunctionHeader> {
+        let (ret_ty, ret_ty_span) = self.parse_type_keyword()?;
+        let (name, name_span) = self.ts.expect_ident()?;
+
+        self.ts.expect(&TokenKind::LParen, "`(`")?;
+        let params = self.parse_param_list()?;
+
+        Ok(FunctionHeader {
             name,
             name_span,
             params,
             ret_ty,
             ret_ty_span,
-            body,
-            exported,
         })
     }
 

@@ -40,7 +40,7 @@ impl Layout {
 
 pub fn lower_fn(func: &FuncDef, resolved: &ResolveOutput) -> SemaResult<hir::FuncDef> {
     let mut layout = Layout::new();
-    let param_count = func.params.len() as i16;
+    let param_count = func.header.params.len() as i16;
 
     for &sym_id in &resolved.params_in_order {
         let symbol = resolved.symbols.get(sym_id);
@@ -52,9 +52,9 @@ pub fn lower_fn(func: &FuncDef, resolved: &ResolveOutput) -> SemaResult<hir::Fun
     let frame = FrameLayout::new(param_count, layout.local_count);
 
     Ok(hir::FuncDef {
-        name: func.name.clone(),
+        name: func.header.name.clone(),
         exported: func.exported,
-        ret_ty: lower_ty(&func.ret_ty),
+        ret_ty: lower_ty(&func.header.ret_ty),
         frame,
         body,
     })

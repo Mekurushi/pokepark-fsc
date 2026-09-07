@@ -31,6 +31,8 @@ impl std::error::Error for PatchError {}
 pub enum PatchFailure {
     InvalidOriginalBinary(BinaryReadError),
     InvalidPatchSource(Vec<Diagnostic>),
+    InvalidFunctionAddress { function_name: String, address: u32 },
+    MissingExternalSymbol { function_name: String },
     NotImplemented,
 }
 
@@ -41,6 +43,17 @@ impl std::fmt::Display for PatchFailure {
                 write!(f, "could not read original FSB: {error}")
             }
             Self::InvalidPatchSource(_) => f.write_str("patch source contains errors"),
+            Self::InvalidFunctionAddress {
+                function_name,
+                address,
+            } => write!(
+                f,
+                "function '{function_name}' has invalid address {address:#x}"
+            ),
+            Self::MissingExternalSymbol { function_name } => write!(
+                f,
+                "external function '{function_name}' is missing from the symbol table"
+            ),
             Self::NotImplemented => f.write_str("patching is not implemented yet"),
         }
     }
@@ -50,7 +63,10 @@ impl std::error::Error for PatchFailure {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::InvalidOriginalBinary(error) => Some(error),
-            Self::InvalidPatchSource(_) | Self::NotImplemented => None,
+            Self::InvalidPatchSource(_)
+            | Self::InvalidFunctionAddress { .. }
+            | Self::MissingExternalSymbol { .. }
+            | Self::NotImplemented => None,
         }
     }
 }

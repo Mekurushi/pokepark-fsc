@@ -222,6 +222,7 @@ dependencies = [
  "fsc_assembler",
  "fsc_diagnostics",
  "fsc_parse",
+ "fsc_sema",
  "serde",
  "toml",
 ]

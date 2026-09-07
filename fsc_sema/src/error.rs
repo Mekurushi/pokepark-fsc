@@ -36,6 +36,13 @@ pub enum SemaError {
         callee_span: Span,
         declaration_span: Span,
     },
+    ArgumentCountMismatch {
+        name: String,
+        expected: usize,
+        found: usize,
+        call_span: Span,
+        declaration_span: Span,
+    },
 }
 
 impl std::fmt::Display for SemaError {
@@ -70,6 +77,15 @@ impl std::fmt::Display for SemaError {
             Self::NotCallable { name, .. } => {
                 write!(f, "function is not callable {name}")
             }
+            Self::ArgumentCountMismatch {
+                name,
+                expected,
+                found,
+                ..
+            } => write!(
+                f,
+                "function `{name}` expects {expected} arguments, but {found} were provided"
+            ),
         }
     }
 }
@@ -130,6 +146,18 @@ impl From<SemaError> for Diagnostic {
                     declaration_span,
                     "this value is declared here",
                 )),
+            SemaError::ArgumentCountMismatch {
+                expected,
+                found,
+                call_span,
+                declaration_span,
+                ..
+            } => diagnostic
+                .with_label(Label::primary(
+                    call_span,
+                    format!("expected {expected} arguments, found {found}"),
+                ))
+                .with_label(Label::secondary(declaration_span, "function declared here")),
         }
     }
 }
