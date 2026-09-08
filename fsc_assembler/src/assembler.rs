@@ -411,6 +411,7 @@ impl Assembler {
 
     // --- lstr (0x13) ---
     pub fn emit_lstr(&mut self, s: &str) -> AssemblerResult<()> {
+        self.string_table.intern(s)?;
         self.push_relocation(s, RelocationKind::String);
         self.emit(InsnWord::new(Opcode::LStr as u8).build());
 

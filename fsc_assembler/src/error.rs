@@ -8,6 +8,7 @@ pub enum AssemblerError {
     LabelOutsideFunction(String),
     InvalidStringTable,
     StringTableFull,
+    UndefinedString(String),
     SectionTooLarge(&'static str),
 }
 
@@ -43,6 +44,9 @@ impl std::fmt::Display for AssemblerError {
                 f.write_str("string table is not null-terminated UTF-8")
             }
             AssemblerError::StringTableFull => f.write_str("string table capacity exceeded"),
+            AssemblerError::UndefinedString(value) => {
+                write!(f, "undefined string '{value}'")
+            }
             AssemblerError::SectionTooLarge(section) => {
                 write!(f, "section '{section}' exceeds maximum size")
             }

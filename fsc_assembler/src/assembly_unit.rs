@@ -2,7 +2,7 @@ use crate::assembler::{Opcode, Relocation, RelocationKind};
 use crate::binary::FscriptBinary;
 use crate::binary::symbol_table::BinarySymbolTable;
 use crate::encoding::{InsnWord, calculate_call_operand};
-use crate::error::AssemblerResult;
+use crate::error::{AssemblerError, AssemblerResult};
 use crate::string_table::StringTable;
 use crate::symbol_table::SymbolTable;
 
@@ -61,7 +61,12 @@ impl AssemblyUnit {
                     self.code[idx + 1] = operand_bytes[1];
                 }
                 RelocationKind::String => {
-                    let string_offset = self.string_table.intern(&relocation.symbol)?;
+                    let string_offset =
+                        self.string_table
+                            .lookup(&relocation.symbol)
+                            .ok_or_else(|| {
+                                AssemblerError::UndefinedString(relocation.symbol.clone())
+                            })?;
                     let instruction = InsnWord::new(Opcode::LStr as u8)
                         .imm(string_offset)
                         .build()

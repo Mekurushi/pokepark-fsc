@@ -62,6 +62,10 @@ impl StringTable {
         Ok(offset)
     }
 
+    pub fn lookup(&self, s: &str) -> Option<u32> {
+        self.index.get(s).copied()
+    }
+
     pub fn into_binary(self) -> BinaryStringTable {
         BinaryStringTable::new(self.buffer)
     }
