@@ -49,8 +49,25 @@ fn patch(args: PatchArgs) -> Result<(), ()> {
     })?;
 
     let request = fsc_patcher::PatchRequest::new(&patch_source, &original_binary, &symbols);
-    let _artifact = fsc_patcher::patch(request).map_err(|error| {
+    let artifact = fsc_patcher::patch(request).map_err(|error| {
         eprintln!("error: {error}");
+    })?;
+    let symbols_output =
+        fsc_patcher::serialize_symbol_table(artifact.symbols()).map_err(|error| {
+            eprintln!("error: could not serialize output symbol table: {error}");
+        })?;
+
+    fs::write(&args.output, artifact.binary()).map_err(|error| {
+        eprintln!(
+            "error: could not write patched FSB {}: {error}",
+            args.output.display()
+        );
+    })?;
+    fs::write(&args.symbols_output, symbols_output).map_err(|error| {
+        eprintln!(
+            "error: could not write output symbol table {}: {error}",
+            args.symbols_output.display()
+        );
     })?;
 
     Ok(())

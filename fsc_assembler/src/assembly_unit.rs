@@ -1,7 +1,7 @@
 use crate::assembler::{Opcode, Relocation, RelocationKind};
-use crate::binary::symbol_table::BinarySymbolTable;
 use crate::binary::FscriptBinary;
-use crate::encoding::{calculate_call_operand, InsnWord};
+use crate::binary::symbol_table::BinarySymbolTable;
+use crate::encoding::{InsnWord, calculate_call_operand, encode_relative_jump};
 use crate::error::{AssemblerError, AssemblerResult};
 use crate::string_table::StringTable;
 use crate::symbol_table::{Scope, SymbolTable};
@@ -46,6 +46,10 @@ impl AssemblyUnit {
         ))
     }
 
+    pub fn function_offset(&self, name: &str) -> Option<u32> {
+        self.symbol_table.function_offset(name)
+    }
+
     fn rebase(mut self, offset: u32) -> AssemblerResult<Self> {
         let code_len =
             u32::try_from(self.code.len()).map_err(|_error| AssemblerError::AddressOverflow)?;
@@ -80,6 +84,50 @@ impl AssemblyUnit {
         self.relocations.extend(other.relocations);
 
         Ok(self)
+    }
+
+    pub fn rename_function(&mut self, current_name: &str, new_name: &str) -> AssemblerResult<()> {
+        self.symbol_table.rename_function(current_name, new_name)?;
+
+        for relocation in &mut self.relocations {
+            match &mut relocation.kind {
+                RelocationKind::Global if relocation.symbol == current_name => {
+                    new_name.clone_into(&mut relocation.symbol);
+                }
+                RelocationKind::Local(function) if function == current_name => {
+                    new_name.clone_into(function);
+                }
+                RelocationKind::Global | RelocationKind::Local(_) | RelocationKind::String => {}
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn make_function_private(&mut self, name: &str) -> AssemblerResult<()> {
+        self.symbol_table.make_function_private(name)
+    }
+
+    pub fn define_private_function(&mut self, name: &str, offset: u32) -> AssemblerResult<()> {
+        self.symbol_table
+            .define(name.to_owned(), offset, Scope::Private)
+    }
+
+    pub fn redirect(&mut self, entry_offset: u32, target_offset: u32) -> AssemblerResult<()> {
+        for offset in [entry_offset, target_offset] {
+            if !offset.is_multiple_of(4)
+                || offset
+                    .checked_add(4)
+                    .is_none_or(|end| end as usize > self.code.len())
+            {
+                return Err(AssemblerError::InvalidCodeOffset(offset));
+            }
+        }
+
+        let jump = encode_relative_jump(entry_offset, target_offset)?;
+        let entry_index = entry_offset as usize;
+        self.code[entry_index..entry_index + 4].copy_from_slice(&jump);
+        Ok(())
     }
 
     pub fn into_binary(mut self, script_name: String) -> AssemblerResult<FscriptBinary> {

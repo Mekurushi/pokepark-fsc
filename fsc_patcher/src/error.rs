@@ -1,39 +1,23 @@
-use fsc_assembler::error::BinaryReadError;
+use fsc_assembler::error::{AssemblerError, BinaryReadError};
 use fsc_diagnostics::Diagnostic;
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum PatchError {
-    UnalignedCode,
-    InvalidEntryOffset(u32),
-    JumpOutOfRange { entry: u32, target: u32 },
-}
-
-impl std::fmt::Display for PatchError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::UnalignedCode => f.write_str("FSB code and appended code must be 4-byte aligned"),
-            Self::InvalidEntryOffset(offset) => {
-                write!(
-                    f,
-                    "function entry offset {offset:#x} is outside the FSB code section"
-                )
-            }
-            Self::JumpOutOfRange { entry, target } => {
-                write!(f, "entry jump is out of range ({entry:#x} -> {target:#x})")
-            }
-        }
-    }
-}
-
-impl std::error::Error for PatchError {}
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum PatchFailure {
     InvalidOriginalBinary(BinaryReadError),
     InvalidPatchSource(Vec<Diagnostic>),
-    InvalidFunctionAddress { function_name: String, address: u32 },
-    MissingExternalSymbol { function_name: String },
-    NotImplemented,
+    Assembly(AssemblerError),
+    InvalidFunctionAddress {
+        function_name: String,
+        address: u32,
+    },
+    ConflictingExternalSymbol {
+        function_name: String,
+        embedded_offset: u32,
+        external_offset: u32,
+    },
+    MissingExternalSymbol {
+        function_name: String,
+    },
 }
 
 impl std::fmt::Display for PatchFailure {
@@ -43,6 +27,7 @@ impl std::fmt::Display for PatchFailure {
                 write!(f, "could not read original FSB: {error}")
             }
             Self::InvalidPatchSource(_) => f.write_str("patch source contains errors"),
+            Self::Assembly(error) => write!(f, "could not assemble patch: {error}"),
             Self::InvalidFunctionAddress {
                 function_name,
                 address,
@@ -50,11 +35,18 @@ impl std::fmt::Display for PatchFailure {
                 f,
                 "function '{function_name}' has invalid address {address:#x}"
             ),
+            Self::ConflictingExternalSymbol {
+                function_name,
+                embedded_offset,
+                external_offset,
+            } => write!(
+                f,
+                "external function '{function_name}' resolves to code offset {external_offset:#x}, but the embedded symbol resolves to {embedded_offset:#x}"
+            ),
             Self::MissingExternalSymbol { function_name } => write!(
                 f,
                 "external function '{function_name}' is missing from the symbol table"
             ),
-            Self::NotImplemented => f.write_str("patching is not implemented yet"),
         }
     }
 }
@@ -63,10 +55,11 @@ impl std::error::Error for PatchFailure {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::InvalidOriginalBinary(error) => Some(error),
+            Self::Assembly(error) => Some(error),
             Self::InvalidPatchSource(_)
             | Self::InvalidFunctionAddress { .. }
-            | Self::MissingExternalSymbol { .. }
-            | Self::NotImplemented => None,
+            | Self::ConflictingExternalSymbol { .. }
+            | Self::MissingExternalSymbol { .. } => None,
         }
     }
 }
@@ -74,6 +67,12 @@ impl std::error::Error for PatchFailure {
 impl From<BinaryReadError> for PatchFailure {
     fn from(error: BinaryReadError) -> Self {
         Self::InvalidOriginalBinary(error)
+    }
+}
+
+impl From<AssemblerError> for PatchFailure {
+    fn from(error: AssemblerError) -> Self {
+        Self::Assembly(error)
     }
 }
 

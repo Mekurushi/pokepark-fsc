@@ -1,27 +1,20 @@
 use crate::{ExternalSymbolTable, PatchFailure};
-use fsc_assembler::binary::{CODE_SECTION_FILE_OFFSET, FscriptBinary};
-use fsc_parse::ast::{FuncDecl, FuncDef, Item, Script};
+use fsc_assembler::binary::{FscriptBinary, CODE_SECTION_FILE_OFFSET};
+use fsc_assembler::{Assembler, AssemblyUnit};
+use fsc_diagnostics::{Diagnostic, Stage};
+use fsc_parse::ast::{FuncDef, Item, Script};
 
-#[allow(dead_code)]
 struct ClassifiedFunction<'a> {
     function: &'a FuncDef,
     patch_kind: FunctionPatchKind,
 }
 
-#[allow(dead_code)]
 enum FunctionPatchKind {
     Replacement {
-        original_address: u32,
         entry_offset: u32,
+        generated_name: String,
     },
     Custom,
-}
-
-#[allow(dead_code)]
-struct ExternalFunction<'a> {
-    declaration: &'a FuncDecl,
-    address: u32,
-    entry_offset: u32,
 }
 
 fn classify_functions<'a>(
@@ -48,8 +41,9 @@ fn classify_functions<'a>(
                         code_len,
                     )?;
                     FunctionPatchKind::Replacement {
-                        original_address,
                         entry_offset,
+                        // using $ to ensure uniqueness, because it can't be used by the normal flow
+                        generated_name: format!("$patch$replacement${}", function.header.name),
                     }
                 }
                 None => FunctionPatchKind::Custom,
@@ -91,37 +85,29 @@ fn function_entry_offset(
     Ok(entry_offset)
 }
 
-fn validate_external_declarations<'a>(
-    script: &'a Script,
+fn validate_external_declarations(
+    script: &Script,
     symbols: &ExternalSymbolTable,
     code_len: usize,
-) -> Result<Vec<ExternalFunction<'a>>, PatchFailure> {
-    script
-        .items
-        .iter()
-        .filter_map(|item| match item {
-            Item::FuncDef(_) => None,
-            Item::FuncDecl(declaration) => Some(declaration),
-        })
-        .map(|declaration| {
-            let address = symbols
-                .get_function(&declaration.header.name)
-                .ok_or_else(|| PatchFailure::MissingExternalSymbol {
-                    function_name: declaration.header.name.clone(),
-                })?;
-            let entry_offset = function_entry_offset(
-                &declaration.header.name,
-                address,
-                symbols.base_address(),
-                code_len,
-            )?;
-            Ok(ExternalFunction {
-                declaration,
-                address,
-                entry_offset,
-            })
-        })
-        .collect()
+) -> Result<(), PatchFailure> {
+    for declaration in script.items.iter().filter_map(|item| match item {
+        Item::FuncDef(_) => None,
+        Item::FuncDecl(declaration) => Some(declaration),
+    }) {
+        let address = symbols
+            .get_function(&declaration.header.name)
+            .ok_or_else(|| PatchFailure::MissingExternalSymbol {
+                function_name: declaration.header.name.clone(),
+            })?;
+        function_entry_offset(
+            &declaration.header.name,
+            address,
+            symbols.base_address(),
+            code_len,
+        )?;
+    }
+
+    Ok(())
 }
 
 pub struct PatchRequest<'a> {
@@ -167,12 +153,118 @@ impl PatchArtifact {
 
 pub fn patch(request: PatchRequest<'_>) -> Result<PatchArtifact, PatchFailure> {
     let binary = FscriptBinary::deserialize(request.original_binary)?;
+    let original_code_len = binary.code_len();
     let script = fsc_parse::parse(request.patch_source)
         .map_err(|error| PatchFailure::InvalidPatchSource(error.into_diagnostics()))?;
-    let _functions = classify_functions(&script, request.symbols, binary.code_len())?;
-    let _hir = fsc_sema::analyze(&script)
+    let functions = classify_functions(&script, request.symbols, original_code_len)?;
+    let hir = fsc_sema::analyze(&script)
         .map_err(|error| PatchFailure::InvalidPatchSource(vec![error.into()]))?;
-    let _external_functions =
-        validate_external_declarations(&script, request.symbols, binary.code_len())?;
-    Err(PatchFailure::NotImplemented)
+    validate_external_declarations(&script, request.symbols, original_code_len)?;
+
+    let (script_name, mut original_unit) = AssemblyUnit::from_binary(binary)?;
+    let mut assembler = Assembler::new();
+    fsc_codegen::compile(&hir, &mut assembler).map_err(|error| {
+        PatchFailure::InvalidPatchSource(vec![Diagnostic::error(Stage::Codegen, error.to_string())])
+    })?;
+    let mut patch_unit = assembler.into_unit();
+
+    prepare_replacements(&functions, &mut patch_unit)?;
+    install_external_symbols(&mut original_unit, request.symbols, original_code_len)?;
+
+    let mut merged_unit = original_unit.merge(patch_unit)?;
+    install_redirects(&mut merged_unit, &functions)?;
+    let output_symbols = build_output_symbols(request.symbols, &functions, &merged_unit)?;
+    let binary = merged_unit.into_binary(script_name)?.serialize()?;
+
+    Ok(PatchArtifact {
+        binary,
+        symbols: output_symbols,
+    })
+}
+
+fn prepare_replacements(
+    functions: &[ClassifiedFunction<'_>],
+    patch_unit: &mut AssemblyUnit,
+) -> Result<(), PatchFailure> {
+    for classified in functions {
+        let FunctionPatchKind::Replacement { generated_name, .. } = &classified.patch_kind else {
+            continue;
+        };
+        let original_name = &classified.function.header.name;
+        patch_unit.rename_function(original_name, generated_name)?;
+        patch_unit.make_function_private(generated_name)?;
+    }
+
+    Ok(())
+}
+
+fn install_external_symbols(
+    original_unit: &mut AssemblyUnit,
+    symbols: &ExternalSymbolTable,
+    code_len: usize,
+) -> Result<(), PatchFailure> {
+    for (name, address) in symbols.functions() {
+        let external_offset =
+            function_entry_offset(name, address, symbols.base_address(), code_len)?;
+        if let Some(embedded_offset) = original_unit.function_offset(name) {
+            if embedded_offset != external_offset {
+                return Err(PatchFailure::ConflictingExternalSymbol {
+                    function_name: name.to_owned(),
+                    embedded_offset,
+                    external_offset,
+                });
+            }
+        } else {
+            original_unit.define_private_function(name, external_offset)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn install_redirects(
+    merged_unit: &mut AssemblyUnit,
+    functions: &[ClassifiedFunction<'_>],
+) -> Result<(), PatchFailure> {
+    for classified in functions {
+        let FunctionPatchKind::Replacement {
+            entry_offset,
+            generated_name,
+        } = &classified.patch_kind
+        else {
+            continue;
+        };
+        let target_offset = merged_unit.function_offset(generated_name).ok_or_else(|| {
+            fsc_assembler::error::AssemblerError::UndefinedSymbol(generated_name.clone())
+        })?;
+        merged_unit.redirect(*entry_offset, target_offset)?;
+    }
+
+    Ok(())
+}
+
+fn build_output_symbols(
+    input_symbols: &ExternalSymbolTable,
+    functions: &[ClassifiedFunction<'_>],
+    merged_unit: &AssemblyUnit,
+) -> Result<ExternalSymbolTable, PatchFailure> {
+    let mut output = input_symbols.clone();
+
+    for classified in functions {
+        if !matches!(classified.patch_kind, FunctionPatchKind::Custom) {
+            continue;
+        }
+        let name = &classified.function.header.name;
+        let offset = merged_unit
+            .function_offset(name)
+            .ok_or_else(|| fsc_assembler::error::AssemblerError::UndefinedSymbol(name.clone()))?;
+        let address = input_symbols
+            .base_address()
+            .checked_add(CODE_SECTION_FILE_OFFSET)
+            .and_then(|code_address| code_address.checked_add(offset))
+            .ok_or(fsc_assembler::error::AssemblerError::AddressOverflow)?;
+        output.insert_function(name.clone(), address);
+    }
+
+    Ok(output)
 }

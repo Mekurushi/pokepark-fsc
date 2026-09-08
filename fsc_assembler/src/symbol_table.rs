@@ -65,6 +65,13 @@ impl SymbolTable {
         self.symbols.get(&format!("{function}.{label}"))
     }
 
+    pub(crate) fn function_offset(&self, name: &str) -> Option<u32> {
+        self.symbols
+            .get(name)
+            .filter(|symbol| matches!(symbol.scope, Scope::Export | Scope::Private))
+            .map(|symbol| symbol.offset)
+    }
+
     pub fn resolve_global(&self, name: &str) -> AssemblerResult<&Symbol> {
         self.lookup(name)
             .ok_or_else(|| AssemblerError::UndefinedSymbol(name.to_string()))
@@ -102,6 +109,76 @@ impl SymbolTable {
                 return Err(AssemblerError::DuplicateSymbol(symbol.name));
             }
             self.symbols.insert(key, symbol);
+        }
+        Ok(())
+    }
+
+    pub(crate) fn rename_function(
+        &mut self,
+        current_name: &str,
+        new_name: &str,
+    ) -> AssemblerResult<()> {
+        if current_name == new_name {
+            return self
+                .symbols
+                .contains_key(current_name)
+                .then_some(())
+                .ok_or_else(|| AssemblerError::UndefinedSymbol(current_name.to_owned()));
+        }
+        if !self.symbols.contains_key(current_name) {
+            return Err(AssemblerError::UndefinedSymbol(current_name.to_owned()));
+        }
+        if self.symbols.contains_key(new_name) {
+            return Err(AssemblerError::DuplicateSymbol(new_name.to_owned()));
+        }
+
+        let renamed_locals = self
+            .symbols
+            .iter()
+            .filter_map(|(key, symbol)| match &symbol.scope {
+                Scope::Local(function) if function == current_name => {
+                    Some((key.clone(), format!("{new_name}.{}", symbol.name)))
+                }
+                Scope::Export | Scope::Private | Scope::Local(_) => None,
+            })
+            .collect::<Vec<_>>();
+        if let Some((_, duplicate)) = renamed_locals
+            .iter()
+            .find(|(_, renamed)| self.symbols.contains_key(renamed))
+        {
+            return Err(AssemblerError::DuplicateSymbol(duplicate.clone()));
+        }
+
+        let mut function = self
+            .symbols
+            .remove(current_name)
+            .ok_or_else(|| AssemblerError::UndefinedSymbol(current_name.to_owned()))?;
+        new_name.clone_into(&mut function.name);
+        self.symbols.insert(new_name.to_owned(), function);
+
+        for (current_key, new_key) in renamed_locals {
+            let mut local = self
+                .symbols
+                .remove(&current_key)
+                .ok_or_else(|| AssemblerError::UndefinedSymbol(current_key.clone()))?;
+            local.scope = Scope::Local(new_name.to_owned());
+            self.symbols.insert(new_key, local);
+        }
+
+        Ok(())
+    }
+
+    pub(crate) fn make_function_private(&mut self, name: &str) -> AssemblerResult<()> {
+        let symbol = self
+            .symbols
+            .get_mut(name)
+            .ok_or_else(|| AssemblerError::UndefinedSymbol(name.to_owned()))?;
+        match symbol.scope {
+            Scope::Export => symbol.scope = Scope::Private,
+            Scope::Private => {}
+            Scope::Local(_) => {
+                return Err(AssemblerError::UndefinedSymbol(name.to_owned()));
+            }
         }
         Ok(())
     }

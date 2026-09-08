@@ -1,8 +1,9 @@
 // Assembler Error
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum AssemblerError {
     AddressOverflow,
     InvalidB40Char(char),
+    InvalidCodeOffset(u32),
     OperandOutOfRange(i32),
     UndefinedSymbol(String),
     DuplicateSymbol(String),
@@ -34,6 +35,12 @@ impl std::fmt::Display for AssemblerError {
                 f,
                 "invalid character '{c}' in script name, allowed: ' 0-9 A-Z _ - /`"
             ),
+            AssemblerError::InvalidCodeOffset(offset) => {
+                write!(
+                    f,
+                    "code offset {offset:#x} is unaligned or outside the code section"
+                )
+            }
             AssemblerError::OperandOutOfRange(n) => {
                 write!(f, "operand {n:#x} out of 16-bit signed range")
             }
@@ -55,6 +62,8 @@ impl std::fmt::Display for AssemblerError {
         }
     }
 }
+
+impl std::error::Error for AssemblerError {}
 
 impl std::fmt::Display for BinaryReadError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

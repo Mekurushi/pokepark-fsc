@@ -220,6 +220,7 @@ name = "fsc_patcher"
 version = "0.1.0"
 dependencies = [
  "fsc_assembler",
+ "fsc_codegen",
  "fsc_diagnostics",
  "fsc_parse",
  "fsc_sema",
