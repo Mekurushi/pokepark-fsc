@@ -80,4 +80,29 @@ impl SymbolTable {
             .values()
             .filter(|s| matches!(s.scope, Scope::Export))
     }
+
+    pub(crate) fn rebase(&mut self, offset: u32) -> AssemblerResult<()> {
+        if self
+            .symbols
+            .values()
+            .any(|symbol| symbol.offset.checked_add(offset).is_none())
+        {
+            return Err(AssemblerError::AddressOverflow);
+        }
+
+        for symbol in self.symbols.values_mut() {
+            symbol.offset += offset;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn merge(&mut self, other: Self) -> AssemblerResult<()> {
+        for (key, symbol) in other.symbols {
+            if self.symbols.contains_key(&key) {
+                return Err(AssemblerError::DuplicateSymbol(symbol.name));
+            }
+            self.symbols.insert(key, symbol);
+        }
+        Ok(())
+    }
 }

@@ -66,6 +66,21 @@ impl StringTable {
         self.index.get(s).copied()
     }
 
+    pub(crate) fn merge(&mut self, other: &Self) -> AssemblerResult<()> {
+        let mut start = 0;
+        for (end, byte) in other.buffer.iter().enumerate() {
+            if *byte != 0 {
+                continue;
+            }
+
+            let value = std::str::from_utf8(&other.buffer[start..end])
+                .map_err(|_error| AssemblerError::InvalidStringTable)?;
+            self.intern(value)?;
+            start = end + 1;
+        }
+        Ok(())
+    }
+
     pub fn into_binary(self) -> BinaryStringTable {
         BinaryStringTable::new(self.buffer)
     }

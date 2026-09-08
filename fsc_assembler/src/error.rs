@@ -1,6 +1,7 @@
 // Assembler Error
 #[derive(Debug)]
 pub enum AssemblerError {
+    AddressOverflow,
     InvalidB40Char(char),
     OperandOutOfRange(i32),
     UndefinedSymbol(String),
@@ -28,6 +29,7 @@ pub type BinaryReadResult<T> = Result<T, BinaryReadError>;
 impl std::fmt::Display for AssemblerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            AssemblerError::AddressOverflow => f.write_str("code address exceeds 32-bit range"),
             AssemblerError::InvalidB40Char(c) => write!(
                 f,
                 "invalid character '{c}' in script name, allowed: ' 0-9 A-Z _ - /`"

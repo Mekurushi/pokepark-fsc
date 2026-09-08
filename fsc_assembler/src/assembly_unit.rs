@@ -1,7 +1,7 @@
 use crate::assembler::{Opcode, Relocation, RelocationKind};
-use crate::binary::FscriptBinary;
 use crate::binary::symbol_table::BinarySymbolTable;
-use crate::encoding::{InsnWord, calculate_call_operand};
+use crate::binary::FscriptBinary;
+use crate::encoding::{calculate_call_operand, InsnWord};
 use crate::error::{AssemblerError, AssemblerResult};
 use crate::string_table::StringTable;
 use crate::symbol_table::{Scope, SymbolTable};
@@ -44,6 +44,42 @@ impl AssemblyUnit {
                 Vec::new(),
             ),
         ))
+    }
+
+    fn rebase(mut self, offset: u32) -> AssemblerResult<Self> {
+        let code_len =
+            u32::try_from(self.code.len()).map_err(|_error| AssemblerError::AddressOverflow)?;
+        offset
+            .checked_add(code_len)
+            .ok_or(AssemblerError::AddressOverflow)?;
+
+        if self
+            .relocations
+            .iter()
+            .any(|relocation| relocation.code_offset.checked_add(offset).is_none())
+        {
+            return Err(AssemblerError::AddressOverflow);
+        }
+
+        self.symbol_table.rebase(offset)?;
+        for relocation in &mut self.relocations {
+            relocation.code_offset += offset;
+        }
+
+        Ok(self)
+    }
+
+    pub fn merge(mut self, other: Self) -> AssemblerResult<Self> {
+        let offset =
+            u32::try_from(self.code.len()).map_err(|_error| AssemblerError::AddressOverflow)?;
+        let other = other.rebase(offset)?;
+
+        self.symbol_table.merge(other.symbol_table)?;
+        self.string_table.merge(&other.string_table)?;
+        self.code.extend(other.code);
+        self.relocations.extend(other.relocations);
+
+        Ok(self)
     }
 
     pub fn into_binary(mut self, script_name: String) -> AssemblerResult<FscriptBinary> {
