@@ -22,6 +22,30 @@ impl StringTable {
         }
     }
 
+    pub fn from_binary(table: BinaryStringTable) -> AssemblerResult<Self> {
+        let buffer = table.into_buffer();
+        if !buffer.is_empty() && !buffer.ends_with(&[0]) {
+            return Err(AssemblerError::InvalidStringTable);
+        }
+
+        let mut index = HashMap::new();
+        let mut start = 0;
+        for (end, byte) in buffer.iter().enumerate() {
+            if *byte != 0 {
+                continue;
+            }
+
+            let value = std::str::from_utf8(&buffer[start..end])
+                .map_err(|_error| AssemblerError::InvalidStringTable)?;
+            let offset =
+                u32::try_from(start).map_err(|_error| AssemblerError::InvalidStringTable)?;
+            index.entry(value.to_owned()).or_insert(offset);
+            start = end + 1;
+        }
+
+        Ok(Self { buffer, index })
+    }
+
     pub fn intern(&mut self, s: &str) -> AssemblerResult<u32> {
         if let Some(&offset) = self.index.get(s) {
             return Ok(offset);

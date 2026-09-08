@@ -6,6 +6,7 @@ pub enum AssemblerError {
     UndefinedSymbol(String),
     DuplicateSymbol(String),
     LabelOutsideFunction(String),
+    InvalidStringTable,
     StringTableFull,
     SectionTooLarge(&'static str),
 }
@@ -37,6 +38,9 @@ impl std::fmt::Display for AssemblerError {
             AssemblerError::DuplicateSymbol(name) => write!(f, "duplicated symbol '{name}'"),
             AssemblerError::LabelOutsideFunction(name) => {
                 write!(f, "label '{name}' outside of function")
+            }
+            AssemblerError::InvalidStringTable => {
+                f.write_str("string table is not null-terminated UTF-8")
             }
             AssemblerError::StringTableFull => f.write_str("string table capacity exceeded"),
             AssemblerError::SectionTooLarge(section) => {

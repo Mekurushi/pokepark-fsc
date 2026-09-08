@@ -17,4 +17,8 @@ impl BinaryStringTable {
         buf.extend_from_slice(self.string_table.as_slice());
         Ok(buf)
     }
+
+    pub(crate) fn into_buffer(self) -> Vec<u8> {
+        self.string_table
+    }
 }
