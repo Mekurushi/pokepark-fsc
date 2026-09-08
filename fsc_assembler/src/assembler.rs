@@ -1,6 +1,6 @@
+use crate::assembly_unit::AssemblyUnit;
 use crate::binary::FscriptBinary;
-use crate::binary::symbol_table::BinarySymbolTable;
-use crate::encoding::{InsnWord, calculate_call_operand};
+use crate::encoding::InsnWord;
 use crate::error::{AssemblerError, AssemblerResult};
 use crate::string_table::StringTable;
 use crate::symbol_table::{Scope, SymbolTable};
@@ -140,15 +140,16 @@ pub enum ConvSubtype {
     FtoI = 1,
 }
 
-enum RelocationKind {
+pub(crate) enum RelocationKind {
     Global,
     Local(String),
+    String,
 }
 
-struct Relocation {
-    code_offset: u32,
-    symbol: String,
-    kind: RelocationKind,
+pub(crate) struct Relocation {
+    pub(crate) code_offset: u32,
+    pub(crate) symbol: String,
+    pub(crate) kind: RelocationKind,
 }
 
 pub struct Assembler {
@@ -410,8 +411,8 @@ impl Assembler {
 
     // --- lstr (0x13) ---
     pub fn emit_lstr(&mut self, s: &str) -> AssemblerResult<()> {
-        let str_offset = self.string_table.intern(s)?;
-        self.emit(InsnWord::new(Opcode::LStr as u8).imm(str_offset).build());
+        self.push_relocation(s, RelocationKind::String);
+        self.emit(InsnWord::new(Opcode::LStr as u8).build());
 
         Ok(())
     }
@@ -932,42 +933,18 @@ impl Assembler {
         );
         Ok(())
     }
-    // --- finalize ---
-    pub fn finalize(mut self, script_name: String) -> AssemblerResult<FscriptBinary> {
-        self.state = EmitState::Idle;
-        self.apply_relocations()?;
-        let binary_symbol_table = self.build_binary_symbol_table();
-
-        Ok(FscriptBinary::new(
-            script_name,
+    pub fn into_unit(self) -> AssemblyUnit {
+        AssemblyUnit::new(
             self.code,
-            binary_symbol_table,
-            self.string_table.into_binary(),
-        ))
-    }
-    fn apply_relocations(&mut self) -> AssemblerResult<()> {
-        for relocation in &mut self.relocations {
-            let target = match &relocation.kind {
-                RelocationKind::Global => self.symbol_table.resolve_global(&relocation.symbol)?,
-                RelocationKind::Local(function) => self
-                    .symbol_table
-                    .resolve_local(function, &relocation.symbol)?,
-            };
-            let operand = calculate_call_operand(relocation.code_offset, target.offset)?;
-            let operand_bytes = operand.to_be_bytes();
-            let idx = relocation.code_offset as usize;
-            self.code[idx] = operand_bytes[0];
-            self.code[idx + 1] = operand_bytes[1];
-        }
-        Ok(())
+            self.symbol_table,
+            self.string_table,
+            self.relocations,
+        )
     }
 
-    fn build_binary_symbol_table(&self) -> BinarySymbolTable {
-        let mut table = BinarySymbolTable::new();
-        for symbol in self.symbol_table.exports() {
-            table.add(symbol.name.clone(), symbol.offset);
-        }
-        table
+    // --- finalize ---
+    pub fn finalize(self, script_name: String) -> AssemblerResult<FscriptBinary> {
+        self.into_unit().into_binary(script_name)
     }
 }
 
