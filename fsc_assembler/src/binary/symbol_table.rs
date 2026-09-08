@@ -91,4 +91,10 @@ impl BinarySymbolTable {
             .map_err(|_err| AssemblerError::SectionTooLarge("Symbol_Table"))?
             * SYMBOL_ENTRY_SIZE as u32)
     }
+
+    pub(crate) fn into_entries(self) -> impl Iterator<Item = (String, u32)> {
+        self.entries
+            .into_iter()
+            .map(|entry| (entry.name, entry.offset))
+    }
 }

@@ -94,6 +94,15 @@ impl FscriptBinary {
         self.code.len()
     }
 
+    pub(crate) fn into_parts(self) -> (String, Vec<u8>, BinarySymbolTable, BinaryStringTable) {
+        (
+            self.script_name,
+            self.code,
+            self.symbol_table,
+            self.string_table,
+        )
+    }
+
     pub fn replace_code_word(&mut self, offset: u32, word: [u8; 4]) {
         let index = offset as usize;
         self.code[index..index + 4].copy_from_slice(&word);

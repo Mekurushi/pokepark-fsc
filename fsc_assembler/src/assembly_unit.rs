@@ -4,7 +4,7 @@ use crate::binary::symbol_table::BinarySymbolTable;
 use crate::encoding::{InsnWord, calculate_call_operand};
 use crate::error::{AssemblerError, AssemblerResult};
 use crate::string_table::StringTable;
-use crate::symbol_table::SymbolTable;
+use crate::symbol_table::{Scope, SymbolTable};
 
 pub struct AssemblyUnit {
     pub(crate) code: Vec<u8>,
@@ -26,6 +26,24 @@ impl AssemblyUnit {
             string_table,
             relocations,
         }
+    }
+
+    pub fn from_binary(binary: FscriptBinary) -> AssemblerResult<(String, Self)> {
+        let (script_name, code, binary_symbols, binary_strings) = binary.into_parts();
+        let mut symbol_table = SymbolTable::new();
+        for (name, offset) in binary_symbols.into_entries() {
+            symbol_table.define(name, offset, Scope::Export)?;
+        }
+
+        Ok((
+            script_name,
+            Self::new(
+                code,
+                symbol_table,
+                StringTable::from_binary(binary_strings)?,
+                Vec::new(),
+            ),
+        ))
     }
 
     pub fn into_binary(mut self, script_name: String) -> AssemblerResult<FscriptBinary> {
