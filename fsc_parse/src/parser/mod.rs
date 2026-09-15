@@ -141,6 +141,7 @@ impl Parser {
             Some(
                 TokenKind::KwStatic
                 | TokenKind::KwInt
+                | TokenKind::KwFloat
                 | TokenKind::KwVoid
                 | TokenKind::KwBool
                 | TokenKind::KwString,
@@ -201,6 +202,10 @@ impl Parser {
             Some(TokenKind::KwInt) => {
                 self.ts.expect(&TokenKind::KwInt, "int")?;
                 Ty::Int
+            }
+            Some(TokenKind::KwFloat) => {
+                self.ts.expect(&TokenKind::KwFloat, "float")?;
+                Ty::Float
             }
             Some(TokenKind::KwVoid) => {
                 self.ts.expect(&TokenKind::KwVoid, "void")?;
@@ -284,9 +289,9 @@ impl Parser {
                 Ok(Stmt::new(self.ids.alloc(), StmtKind::ExprStmt(expr), span))
             }
             Some(TokenKind::KwPause) => self.parse_pause(),
-            Some(TokenKind::KwInt | TokenKind::KwBool | TokenKind::KwString) => {
-                self.parse_var_decl()
-            }
+            Some(
+                TokenKind::KwInt | TokenKind::KwFloat | TokenKind::KwBool | TokenKind::KwString,
+            ) => self.parse_var_decl(),
             _ => Err(self.ts.unexpected("statement")),
         }
     }
@@ -424,6 +429,7 @@ impl Parser {
     fn parse_expr(&mut self, min_bp: u8) -> ParseResult<Expr> {
         let mut lhs = match self.ts.peek() {
             Some(TokenKind::IntLit(_)) => self.parse_int_literal(),
+            Some(TokenKind::FloatLit(_)) => self.parse_float_literal(),
             Some(TokenKind::BoolLit(_)) => self.parse_bool_literal(),
             Some(TokenKind::StrLit(_)) => self.parse_string_literal(),
             Some(TokenKind::Ident(_)) => self.parse_identifier(),
@@ -511,6 +517,17 @@ impl Parser {
                 self.ts.span_consumed_from(start),
             )),
             _ => Err(self.ts.unexpected("`integer literal`")),
+        }
+    }
+    fn parse_float_literal(&mut self) -> ParseResult<Expr> {
+        let start = self.ts.current_offset();
+        match self.ts.advance() {
+            Some(TokenKind::FloatLit(n)) => Ok(Expr::new(
+                self.ids.alloc(),
+                ExprKind::FloatLit(*n),
+                self.ts.span_consumed_from(start),
+            )),
+            _ => Err(self.ts.unexpected("`float literal`")),
         }
     }
     fn parse_string_literal(&mut self) -> ParseResult<Expr> {

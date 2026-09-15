@@ -12,6 +12,9 @@ pub enum TokenKind {
     #[token("int", priority = 10)]
     KwInt,
 
+    #[token("float", priority = 10)]
+    KwFloat,
+
     #[token("void", priority = 10)]
     KwVoid,
 
@@ -61,6 +64,14 @@ pub enum TokenKind {
     s[1..s.len()-1].to_string() // strip quotes
 })]
     StrLit(String),
+
+    // --- Numeric literals ---
+    #[regex(
+        r"(?:[0-9]+\.[0-9]*|\.[0-9]+)(?:[eE][+-]?[0-9]+)?|[0-9]+[eE][+-]?[0-9]+",
+        |lex| lex.slice().parse::<f32>().ok(),
+        priority = 4
+    )]
+    FloatLit(f32),
 
     // --- Integer literals ---
     /// Hexadecimal integer; higher priority so it's not splitting
@@ -136,6 +147,7 @@ impl TokenKind {
     pub fn description(&self) -> &'static str {
         match self {
             Self::KwInt => "`int`",
+            Self::KwFloat => "`float`",
             Self::KwVoid => "`void`",
             Self::KwBool => "`boolean`",
             Self::KwString => "`string`",
@@ -150,6 +162,7 @@ impl TokenKind {
             Self::KwPause => "`Pause`",
             Self::BoolLit(_) => "`boolean literal`",
             Self::IntLit(_) => "`integer literal`",
+            Self::FloatLit(_) => "`float literal`",
             Self::StrLit(_) => "`string literal`",
             Self::Ident(_) => "`identifier`",
             Self::Plus => "`+`",

@@ -6,6 +6,7 @@ pub struct NodeId(pub u32);
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Ty {
     Int,
+    Float,
     Void,
     Bool,
     Str,
@@ -45,6 +46,7 @@ pub struct Expr {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExprKind {
     IntLit(i32),
+    FloatLit(f32),
     BoolLit(bool),
     StringLit(String),
 

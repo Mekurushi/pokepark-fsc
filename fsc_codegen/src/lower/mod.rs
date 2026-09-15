@@ -157,6 +157,9 @@ pub fn lower_expr(expr: &Expr, label_ctx: &mut LabelCtx, asm: &mut Assembler) ->
         Expr::IntLit { value, .. } => {
             emit_int_lit(*value, asm);
         }
+        Expr::FloatLit { value, .. } => {
+            asm.emit_push_imm(value.to_bits());
+        }
         Expr::BoolLit { value, .. } => {
             if *value {
                 asm.emit_push(1);
@@ -179,11 +182,11 @@ pub fn lower_expr(expr: &Expr, label_ctx: &mut LabelCtx, asm: &mut Assembler) ->
         Expr::Unary {
             op,
             expr: expression,
-            ty: _ty,
+            ty,
         } => {
             // TODO: optimize push literal directly
             lower_expr(expression, label_ctx, asm)?;
-            emit_unary(op, asm);
+            emit_unary(op, ty, asm);
         }
         Expr::BinOp { op, lhs, rhs, .. } if matches!(op, BinOp::And | BinOp::Or) => match op {
             BinOp::And => emit_and_short_circuit(lhs, rhs, label_ctx, asm)?,
@@ -312,43 +315,67 @@ fn emit_binop(op: &BinOp, operand_ty: &Ty, asm: &mut Assembler) {
     match op {
         BinOp::Add => match operand_ty {
             Ty::Int => asm.emit_add(),
+            Ty::Float => asm.emit_fadd(),
             Ty::Bool => unreachable!("add on bool"),
             Ty::Void => unreachable!("add on void"),
             Ty::Str => unreachable!("add on str"),
         },
         BinOp::Sub => match operand_ty {
             Ty::Int => asm.emit_sub(),
+            Ty::Float => asm.emit_fsub(),
             Ty::Bool => unreachable!("sub on bool"),
             Ty::Void => unreachable!("sub on void"),
             Ty::Str => unreachable!("sub on str"),
         },
         BinOp::Mul => match operand_ty {
             Ty::Int => asm.emit_mul(),
+            Ty::Float => asm.emit_fmul(),
             Ty::Bool => unreachable!("mul on bool"),
             Ty::Void => unreachable!("mul on void"),
             Ty::Str => unreachable!("mul on str"),
         },
         BinOp::Div => match operand_ty {
             Ty::Int => asm.emit_div(),
+            Ty::Float => asm.emit_fdiv(),
             Ty::Bool => unreachable!("div on bool"),
             Ty::Void => unreachable!("div on void"),
             Ty::Str => unreachable!("div on str"),
         },
 
-        BinOp::Eq => asm.emit_eq(),
-        BinOp::Neq => asm.emit_neq(),
-        BinOp::Gt => asm.emit_gt(),
-        BinOp::Ge => asm.emit_ge(),
-        BinOp::Lt => asm.emit_lt(),
-        BinOp::Le => asm.emit_le(),
+        BinOp::Eq => match operand_ty {
+            Ty::Float => asm.emit_feq(),
+            _ => asm.emit_eq(),
+        },
+        BinOp::Neq => match operand_ty {
+            Ty::Float => asm.emit_fneq(),
+            _ => asm.emit_neq(),
+        },
+        BinOp::Gt => match operand_ty {
+            Ty::Float => asm.emit_fgt(),
+            _ => asm.emit_gt(),
+        },
+        BinOp::Ge => match operand_ty {
+            Ty::Float => asm.emit_fge(),
+            _ => asm.emit_ge(),
+        },
+        BinOp::Lt => match operand_ty {
+            Ty::Float => asm.emit_flt(),
+            _ => asm.emit_lt(),
+        },
+        BinOp::Le => match operand_ty {
+            Ty::Float => asm.emit_fle(),
+            _ => asm.emit_le(),
+        },
 
         BinOp::And | BinOp::Or => unreachable!("should be in short circuit logic"),
     }
 }
 
-fn emit_unary(op: &UnaryOp, asm: &mut Assembler) {
-    match op {
-        UnaryOp::Not => asm.emit_eq0(), // logical not
-        UnaryOp::Neg => asm.emit_neg(),
+fn emit_unary(op: &UnaryOp, operand_ty: &Ty, asm: &mut Assembler) {
+    match (op, operand_ty) {
+        (UnaryOp::Not, Ty::Bool) => asm.emit_eq0(),
+        (UnaryOp::Neg, Ty::Int) => asm.emit_neg(),
+        (UnaryOp::Neg, Ty::Float) => asm.emit_fneg(),
+        _ => unreachable!("invalid unary operation reached code generation"),
     }
 }

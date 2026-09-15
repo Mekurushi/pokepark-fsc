@@ -138,6 +138,10 @@ fn lower_expr(expr: &Expr, resolved: &ResolveOutput, layout: &mut Layout) -> Sem
             value: *v,
             ty: hir::Ty::Int,
         }),
+        ast::ExprKind::FloatLit(v) => Ok(hir::Expr::FloatLit {
+            value: *v,
+            ty: hir::Ty::Float,
+        }),
         ast::ExprKind::StringLit(v) => Ok(hir::Expr::StrLit {
             value: v.clone(),
             ty: hir::Ty::Int,
@@ -236,6 +240,7 @@ fn extract_syscall_u16(expr: &Expr) -> SemaResult<u16> {
 fn lower_ty(ty: &ast::Ty) -> hir::Ty {
     match ty {
         ast::Ty::Int => hir::Ty::Int,
+        ast::Ty::Float => hir::Ty::Float,
         ast::Ty::Void => hir::Ty::Void,
         ast::Ty::Bool => hir::Ty::Bool,
         ast::Ty::Str => hir::Ty::Str,

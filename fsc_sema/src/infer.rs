@@ -7,6 +7,7 @@ use fsc_parse::ast::{BinOp, Expr, ExprKind, Ty, UnaryOp};
 pub fn infer_expr(expr: &Expr, resolved: &ResolveOutput) -> SemaResult<Ty> {
     match &expr.kind {
         ExprKind::IntLit(_) => Ok(Ty::Int),
+        ExprKind::FloatLit(_) => Ok(Ty::Float),
         ExprKind::BoolLit(_) => Ok(Ty::Bool),
         ExprKind::StringLit(_) => Ok(Ty::Str),
 
@@ -98,7 +99,7 @@ fn infer_unary(op: &UnaryOp, expr: &Expr, resolved: &ResolveOutput) -> SemaResul
     match op {
         UnaryOp::Neg => {
             let ty = infer_expr(expr, resolved)?;
-            if ty != Ty::Int {
+            if !matches!(ty, Ty::Int | Ty::Float) {
                 return Err(SemaError::TypeMismatch {
                     expected: Ty::Int,
                     found: ty,

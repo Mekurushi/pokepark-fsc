@@ -345,9 +345,10 @@ fn resolve_expr(
     resolutions: &mut Resolutions,
 ) -> SemaResult<()> {
     match &expr.kind {
-        ast::ExprKind::IntLit(_) | ast::ExprKind::BoolLit(_) | ast::ExprKind::StringLit(_) => {
-            Ok(())
-        }
+        ast::ExprKind::IntLit(_)
+        | ast::ExprKind::FloatLit(_)
+        | ast::ExprKind::BoolLit(_)
+        | ast::ExprKind::StringLit(_) => Ok(()),
 
         ast::ExprKind::Var(name) => {
             let sym_id = scope.lookup(name, expr.span)?;

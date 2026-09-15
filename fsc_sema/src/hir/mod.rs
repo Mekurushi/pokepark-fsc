@@ -2,6 +2,7 @@ use crate::frame::{FrameLayout, StackSlot};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Ty {
     Int,
+    Float,
     Void,
     Bool,
     Str,
@@ -36,6 +37,11 @@ pub enum BinOp {
 pub enum Expr {
     IntLit {
         value: i32,
+        ty: Ty,
+    },
+
+    FloatLit {
+        value: f32,
         ty: Ty,
     },
 
@@ -85,6 +91,7 @@ impl Expr {
     pub fn ty(&self) -> &Ty {
         match self {
             Self::IntLit { ty, .. }
+            | Self::FloatLit { ty, .. }
             | Self::Var { ty, .. }
             | Self::BinOp { ty, .. }
             | Self::BoolLit { ty, .. }

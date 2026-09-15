@@ -248,6 +248,7 @@ fn build_output_symbols(
     functions: &[ClassifiedFunction<'_>],
     merged_unit: &AssemblyUnit,
 ) -> Result<ExternalSymbolTable, PatchFailure> {
+    // TODO: rethink symbol output
     let mut output = input_symbols.clone();
 
     for classified in functions {
