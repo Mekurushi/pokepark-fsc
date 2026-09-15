@@ -41,6 +41,39 @@ fn build_renders_compiler_failures() {
     assert!(!invalid_input.with_extension("fsb").exists());
 }
 
+#[test]
+fn check_validates_without_writing_an_artifact() {
+    let temp = tempfile::tempdir().expect("temporary directory should be creatable");
+    let input = temp.path().join("checked.fsc");
+    fs::write(&input, "void main() { return; }").expect("test input should be writable");
+
+    let result = Command::new(env!("CARGO_BIN_EXE_fsc"))
+        .args(["check", path_str(&input)])
+        .output()
+        .expect("CLI should run");
+
+    assert!(result.status.success(), "{}", stderr(&result));
+    assert!(!input.with_extension("fsb").exists());
+}
+
+#[test]
+fn check_renders_frontend_failures() {
+    let temp = tempfile::tempdir().expect("temporary directory should be creatable");
+    let input = temp.path().join("invalid.fsc");
+    fs::write(&input, "void main() { return true; }").expect("test input should be writable");
+
+    let result = Command::new(env!("CARGO_BIN_EXE_fsc"))
+        .args(["check", path_str(&input)])
+        .output()
+        .expect("CLI should run");
+    let error = stderr(&result);
+
+    assert!(!result.status.success());
+    assert!(error.contains("invalid.fsc"), "{error}");
+    assert!(error.contains("return type mismatch"), "{error}");
+    assert!(!input.with_extension("fsb").exists());
+}
+
 fn path_str(path: &Path) -> &str {
     path.to_str().expect("test path should be UTF-8")
 }

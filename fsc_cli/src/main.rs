@@ -1,8 +1,8 @@
 mod cli;
 
 use clap::Parser;
-use cli::{BuildArgs, Cli, Command, PatchArgs};
-use fsc_compiler::{CompileRequest, compile};
+use cli::{BuildArgs, CheckArgs, Cli, Command, PatchArgs};
+use fsc_compiler::{CompileRequest, check, compile};
 use fsc_diagnostics::render_diagnostics;
 use std::fs;
 use std::process::ExitCode;
@@ -18,8 +18,26 @@ fn main() -> ExitCode {
 fn run(cli: Cli) -> Result<(), ()> {
     match cli.command {
         Command::Build(args) => build(args),
+        Command::Check(args) => check_file(args),
         Command::Patch(args) => patch(args),
     }
+}
+
+fn check_file(args: CheckArgs) -> Result<(), ()> {
+    let source = fs::read_to_string(&args.input).map_err(|error| {
+        eprintln!("error: could not read {}: {error}", args.input.display());
+    })?;
+    let Some(source_name) = args.input.file_name().and_then(|name| name.to_str()) else {
+        eprintln!("error: input path does not have a valid UTF-8 file name");
+        return Err(());
+    };
+
+    check(&source).map_err(|failure| {
+        eprint!(
+            "{}",
+            render_diagnostics(failure.diagnostics(), source_name, &source)
+        );
+    })
 }
 
 fn patch(args: PatchArgs) -> Result<(), ()> {

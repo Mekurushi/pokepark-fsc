@@ -42,11 +42,7 @@ impl CompileArtifact {
 }
 
 pub fn compile(request: CompileRequest<'_>) -> Result<CompileArtifact, CompileFailure> {
-    let script = fsc_parse::parse(request.source)
-        .map_err(|error| CompileFailure::from_diagnostics(error.into_diagnostics()))?;
-
-    let hir = fsc_sema::analyze(&script)
-        .map_err(|error| CompileFailure::from_diagnostic(Diagnostic::from(error)))?;
+    let hir = analyze_source(request.source)?;
 
     let mut assembler = Assembler::new();
     fsc_codegen::compile(&hir, &mut assembler).map_err(|error| {
@@ -64,6 +60,19 @@ pub fn compile(request: CompileRequest<'_>) -> Result<CompileArtifact, CompileFa
         // TODO: collect successful-stage warnings
         diagnostics: Vec::new(),
     })
+}
+
+pub fn check(source: &str) -> Result<(), CompileFailure> {
+    analyze_source(source)?;
+    Ok(())
+}
+
+fn analyze_source(source: &str) -> Result<fsc_sema::hir::Script, CompileFailure> {
+    let script = fsc_parse::parse(source)
+        .map_err(|error| CompileFailure::from_diagnostics(error.into_diagnostics()))?;
+
+    fsc_sema::analyze(&script)
+        .map_err(|error| CompileFailure::from_diagnostic(Diagnostic::from(error)))
 }
 
 fn assembly_failure(error: impl std::fmt::Display) -> CompileFailure {
