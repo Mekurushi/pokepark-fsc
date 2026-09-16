@@ -1,0 +1,16 @@
+[package]
+name = "fsc_lsp"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "fsc-lsp"
+path = "src/main.rs"
+
+[dependencies]
+lsp-server = "0.10.0"
+lsp-types = "0.97.0"
+serde_json = "1"
+
+[lints]
+workspace = true

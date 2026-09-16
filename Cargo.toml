@@ -6,6 +6,7 @@ members = [
     "fsc_codegen",
     "fsc_compiler",
     "fsc_diagnostics",
+    "fsc_lsp",
     "fsc_parse",
     "fsc_patcher",
     "fsc_sema",
