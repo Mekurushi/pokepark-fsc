@@ -1,6 +1,8 @@
 mod render;
+mod render_json;
 
 pub use render::render_diagnostics;
+pub use render_json::render_diagnostics_json;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Stage {

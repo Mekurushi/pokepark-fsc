@@ -1,4 +1,4 @@
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
@@ -29,6 +29,15 @@ pub enum Command {
 pub struct CheckArgs {
     #[arg(value_name = "INPUT")]
     pub input: PathBuf,
+
+    #[arg(long, value_enum, default_value_t = DiagnosticFormat::Human)]
+    pub diagnostic_format: DiagnosticFormat,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum DiagnosticFormat {
+    Human,
+    Json,
 }
 
 #[derive(Debug, Args)]

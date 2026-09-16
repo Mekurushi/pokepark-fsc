@@ -1,9 +1,9 @@
 mod cli;
 
 use clap::Parser;
-use cli::{BuildArgs, CheckArgs, Cli, Command, PatchArgs};
+use cli::{BuildArgs, CheckArgs, Cli, Command, DiagnosticFormat, PatchArgs};
 use fsc_compiler::{CompileRequest, check, compile};
-use fsc_diagnostics::render_diagnostics;
+use fsc_diagnostics::{Diagnostic, render_diagnostics, render_diagnostics_json};
 use std::fs;
 use std::process::ExitCode;
 
@@ -32,12 +32,38 @@ fn check_file(args: CheckArgs) -> Result<(), ()> {
         return Err(());
     };
 
-    check(&source).map_err(|failure| {
-        eprint!(
-            "{}",
-            render_diagnostics(failure.diagnostics(), source_name, &source)
-        );
-    })
+    match check(&source) {
+        Ok(()) => render_check_diagnostics(args.diagnostic_format, &[], source_name, &source),
+        Err(failure) => {
+            render_check_diagnostics(
+                args.diagnostic_format,
+                failure.diagnostics(),
+                source_name,
+                &source,
+            )?;
+            Err(())
+        }
+    }
+}
+
+fn render_check_diagnostics(
+    format: DiagnosticFormat,
+    diagnostics: &[Diagnostic],
+    source_name: &str,
+    source: &str,
+) -> Result<(), ()> {
+    match format {
+        DiagnosticFormat::Human => {
+            eprint!("{}", render_diagnostics(diagnostics, source_name, source));
+        }
+        DiagnosticFormat::Json => {
+            let rendered = render_diagnostics_json(diagnostics, source_name).map_err(|error| {
+                eprintln!("error: could not serialize diagnostics as JSON: {error}");
+            })?;
+            print!("{rendered}");
+        }
+    }
+    Ok(())
 }
 
 fn patch(args: PatchArgs) -> Result<(), ()> {
