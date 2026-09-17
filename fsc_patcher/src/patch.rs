@@ -1,5 +1,5 @@
 use crate::{ExternalSymbolTable, PatchFailure};
-use fsc_assembler::binary::{FscriptBinary, CODE_SECTION_FILE_OFFSET};
+use fsc_assembler::binary::{CODE_SECTION_FILE_OFFSET, FscriptBinary};
 use fsc_assembler::{Assembler, AssemblyUnit};
 use fsc_diagnostics::{Diagnostic, Stage};
 use fsc_parse::ast::{FuncDef, Item, Script};

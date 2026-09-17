@@ -1,3 +1,8 @@
+mod documents;
+mod notifications;
+
+use crate::documents::Documents;
+use crate::notifications::handle_notification;
 use lsp_server::{Connection, ErrorCode, Message, Response};
 use lsp_types::{ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind};
 use std::error::Error;
@@ -20,8 +25,9 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     log::info!("shutting down server");
     Ok(())
 }
-
 fn main_loop(connection: &Connection) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let mut documents = Documents::new();
+
     for message in &connection.receiver {
         match message {
             Message::Request(request) => {
@@ -36,8 +42,13 @@ fn main_loop(connection: &Connection) -> Result<(), Box<dyn Error + Send + Sync>
                 );
                 connection.sender.send(Message::Response(response))?;
             }
-            // TODO: notification handling
-            Message::Notification(_) | Message::Response(_) => {}
+            Message::Notification(notification) => {
+                let method = notification.method.clone();
+                if let Err(error) = handle_notification(notification, &mut documents) {
+                    log::warn!("ignoring {method} notification: {error}");
+                }
+            }
+            Message::Response(_) => {}
         }
     }
     Ok(())
