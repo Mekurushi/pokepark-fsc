@@ -3,7 +3,9 @@ use lsp_types::{ServerCapabilities, TextDocumentSyncCapability, TextDocumentSync
 use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
-    // TODO: logging setup
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn"))
+        .try_init()?;
+    log::info!("starting FSC language server");
 
     let (connection, io_threads) = Connection::stdio();
     let capabilities = ServerCapabilities {
@@ -15,6 +17,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     main_loop(&connection)?;
     drop(connection);
     io_threads.join()?;
+    log::info!("shutting down server");
     Ok(())
 }
 
