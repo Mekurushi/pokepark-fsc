@@ -1,3 +1,5 @@
+use crate::line_index::LineIndex;
+use lsp_types::Position;
 use lsp_types::{DidChangeTextDocumentParams, TextDocumentItem, Uri};
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
@@ -5,6 +7,7 @@ use std::collections::hash_map::Entry;
 pub(crate) struct Document {
     text: String,
     version: i32,
+    line_index: LineIndex,
 }
 
 impl Document {
@@ -14,6 +17,10 @@ impl Document {
 
     pub(crate) const fn version(&self) -> i32 {
         self.version
+    }
+
+    pub(crate) fn position(&self, byte_offset: usize) -> Option<Position> {
+        self.line_index.position(byte_offset)
     }
 }
 
@@ -31,6 +38,7 @@ impl Documents {
 
     pub(crate) fn open(&mut self, item: TextDocumentItem) -> &Document {
         let document = Document {
+            line_index: LineIndex::new(&item.text),
             text: item.text,
             version: item.version,
         };
@@ -46,15 +54,15 @@ impl Documents {
     pub(crate) fn change(
         &mut self,
         params: DidChangeTextDocumentParams,
-    ) -> Result<&Document, ChangeError> {
+    ) -> Result<&Document, DocumentError> {
         let identifier = params.text_document;
         let document = self
             .entries
             .get_mut(&identifier.uri)
-            .ok_or(ChangeError::DocumentNotOpen)?;
+            .ok_or(DocumentError::DocumentNotOpen)?;
 
         if identifier.version <= document.version {
-            return Err(ChangeError::StaleVersion {
+            return Err(DocumentError::StaleVersion {
                 current: document.version,
                 received: identifier.version,
             });
@@ -65,11 +73,11 @@ impl Documents {
             .iter()
             .any(|change| change.range.is_some() || change.range_length.is_some())
         {
-            return Err(ChangeError::UnexpectedIncrementalChange);
+            return Err(DocumentError::UnexpectedIncrementalChange);
         }
 
-        // we need the last change while using FullSync
         if let Some(change) = params.content_changes.last() {
+            document.line_index = LineIndex::new(&change.text);
             document.text.clone_from(&change.text);
         }
         document.version = identifier.version;
@@ -82,13 +90,13 @@ impl Documents {
 }
 
 #[derive(Debug)]
-pub(crate) enum ChangeError {
+pub(crate) enum DocumentError {
     DocumentNotOpen,
     StaleVersion { current: i32, received: i32 },
     UnexpectedIncrementalChange,
 }
 
-impl std::fmt::Display for ChangeError {
+impl std::fmt::Display for DocumentError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::DocumentNotOpen => formatter.write_str("document is not open"),
@@ -103,4 +111,4 @@ impl std::fmt::Display for ChangeError {
     }
 }
 
-impl std::error::Error for ChangeError {}
+impl std::error::Error for DocumentError {}
