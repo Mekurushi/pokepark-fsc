@@ -1,3 +1,5 @@
 /target
 .idea
 *.fsb
+/editors/vscode/node_modules/
+/editors/vscode/out/
