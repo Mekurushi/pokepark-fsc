@@ -1,3 +1,4 @@
+use crate::checked::CheckedScript;
 use crate::error::{SemaError, SemaResult};
 use crate::frame::{FrameLayout, StackSlot};
 use crate::hir;
@@ -43,7 +44,17 @@ impl Layout {
     }
 }
 
-pub fn lower_fn(func: &FuncDef, resolved: &ResolveOutput) -> SemaResult<hir::FuncDef> {
+pub(crate) fn lower_script(checked: CheckedScript) -> SemaResult<hir::Script> {
+    let items = checked
+        .functions
+        .into_iter()
+        .map(|checked| lower_fn(&checked.function, &checked.resolved).map(hir::Item::FuncDef))
+        .collect::<SemaResult<_>>()?;
+
+    Ok(hir::Script { items })
+}
+
+fn lower_fn(func: &FuncDef, resolved: &ResolveOutput) -> SemaResult<hir::FuncDef> {
     let mut layout = Layout::new();
     let param_count = func.header.params.len() as i16;
 

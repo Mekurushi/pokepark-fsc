@@ -2,10 +2,10 @@ use crate::{ExternalSymbolTable, PatchFailure};
 use fsc_assembler::binary::{CODE_SECTION_FILE_OFFSET, FscriptBinary};
 use fsc_assembler::{Assembler, AssemblyUnit};
 use fsc_diagnostics::{Diagnostic, Stage};
-use fsc_parse::ast::{FuncDef, Item, Script};
+use fsc_parse::ast::{Item, Script};
 
-struct ClassifiedFunction<'a> {
-    function: &'a FuncDef,
+struct ClassifiedFunction {
+    function_name: String,
     patch_kind: FunctionPatchKind,
 }
 
@@ -17,11 +17,11 @@ enum FunctionPatchKind {
     Custom,
 }
 
-fn classify_functions<'a>(
-    script: &'a Script,
+fn classify_functions(
+    script: &Script,
     symbols: &ExternalSymbolTable,
     code_len: usize,
-) -> Result<Vec<ClassifiedFunction<'a>>, PatchFailure> {
+) -> Result<Vec<ClassifiedFunction>, PatchFailure> {
     script
         .items
         .iter()
@@ -50,7 +50,7 @@ fn classify_functions<'a>(
             };
 
             Ok(ClassifiedFunction {
-                function,
+                function_name: function.header.name.clone(),
                 patch_kind,
             })
         })
@@ -158,9 +158,11 @@ pub fn patch(request: PatchRequest<'_>) -> Result<PatchArtifact, PatchFailure> {
     let script = fsc_parse::parse(request.patch_source)
         .map_err(|error| PatchFailure::InvalidPatchSource(error.into_diagnostics()))?;
     let functions = classify_functions(&script, request.symbols, original_code_len)?;
-    let hir = fsc_sema::analyze(&script)
+    let checked = fsc_sema::check(script)
         .map_err(|error| PatchFailure::InvalidPatchSource(vec![error.into()]))?;
-    validate_external_declarations(&script, request.symbols, original_code_len)?;
+    validate_external_declarations(checked.ast(), request.symbols, original_code_len)?;
+    let hir = fsc_sema::lower(checked)
+        .map_err(|error| PatchFailure::InvalidPatchSource(vec![error.into()]))?;
 
     let (script_name, mut original_unit) = AssemblyUnit::from_binary(binary)?;
     let mut assembler = Assembler::new();
@@ -184,14 +186,14 @@ pub fn patch(request: PatchRequest<'_>) -> Result<PatchArtifact, PatchFailure> {
 }
 
 fn prepare_replacements(
-    functions: &[ClassifiedFunction<'_>],
+    functions: &[ClassifiedFunction],
     patch_unit: &mut AssemblyUnit,
 ) -> Result<(), PatchFailure> {
     for classified in functions {
         let FunctionPatchKind::Replacement { generated_name, .. } = &classified.patch_kind else {
             continue;
         };
-        let original_name = &classified.function.header.name;
+        let original_name = &classified.function_name;
         patch_unit.rename_function(original_name, generated_name)?;
         patch_unit.make_function_private(generated_name)?;
     }
@@ -225,7 +227,7 @@ fn install_external_symbols(
 
 fn install_redirects(
     merged_unit: &mut AssemblyUnit,
-    functions: &[ClassifiedFunction<'_>],
+    functions: &[ClassifiedFunction],
 ) -> Result<(), PatchFailure> {
     for classified in functions {
         let FunctionPatchKind::Replacement {
@@ -246,7 +248,7 @@ fn install_redirects(
 
 fn build_output_symbols(
     input_symbols: &ExternalSymbolTable,
-    functions: &[ClassifiedFunction<'_>],
+    functions: &[ClassifiedFunction],
     merged_unit: &AssemblyUnit,
 ) -> Result<ExternalSymbolTable, PatchFailure> {
     // TODO: rethink symbol output
@@ -256,7 +258,7 @@ fn build_output_symbols(
         if !matches!(classified.patch_kind, FunctionPatchKind::Custom) {
             continue;
         }
-        let name = &classified.function.header.name;
+        let name = &classified.function_name;
         let offset = merged_unit
             .function_offset(name)
             .ok_or_else(|| fsc_assembler::error::AssemblerError::UndefinedSymbol(name.clone()))?;

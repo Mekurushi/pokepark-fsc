@@ -42,7 +42,9 @@ impl CompileArtifact {
 }
 
 pub fn compile(request: CompileRequest<'_>) -> Result<CompileArtifact, CompileFailure> {
-    let hir = analyze_source(request.source)?;
+    let checked = check_source(request.source)?;
+    let hir = fsc_sema::lower(checked)
+        .map_err(|error| CompileFailure::from_diagnostic(Diagnostic::from(error)))?;
 
     let mut assembler = Assembler::new();
     fsc_codegen::compile(&hir, &mut assembler).map_err(|error| {
@@ -63,15 +65,15 @@ pub fn compile(request: CompileRequest<'_>) -> Result<CompileArtifact, CompileFa
 }
 
 pub fn check(source: &str) -> Result<(), CompileFailure> {
-    analyze_source(source)?;
+    check_source(source)?;
     Ok(())
 }
 
-fn analyze_source(source: &str) -> Result<fsc_sema::hir::Script, CompileFailure> {
+fn check_source(source: &str) -> Result<fsc_sema::CheckedScript, CompileFailure> {
     let script = fsc_parse::parse(source)
         .map_err(|error| CompileFailure::from_diagnostics(error.into_diagnostics()))?;
 
-    fsc_sema::analyze(&script)
+    fsc_sema::check(script)
         .map_err(|error| CompileFailure::from_diagnostic(Diagnostic::from(error)))
 }
 

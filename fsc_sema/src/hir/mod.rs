@@ -1,3 +1,7 @@
+mod lower;
+
+pub(crate) use lower::lower_script;
+
 use crate::frame::{FrameLayout, StackSlot};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Ty {

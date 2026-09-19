@@ -4,47 +4,36 @@ use crate::symbol::SymbolTable;
 use fsc_parse::ast;
 
 mod check;
+mod checked;
 mod error;
 pub mod frame;
 pub mod hir;
 mod infer;
-mod lower;
 mod resolve;
 mod symbol;
 
-pub fn analyze(script: &ast::Script) -> SemaResult<hir::Script> {
+pub use checked::{CheckedFunction, CheckedScript};
+
+pub fn check(script: ast::Script) -> SemaResult<CheckedScript> {
     let mut scope = ScopeStack::new();
     let mut symbols = SymbolTable::new();
-    declare_items(script, &mut scope, &mut symbols)?;
-    let items = script
-        .items
-        .iter()
-        .filter_map(|item| analyze_item(item, &mut symbols, &mut scope))
-        .collect::<SemaResult<Vec<_>>>()?;
+    declare_items(&script, &mut scope, &mut symbols)?;
 
-    Ok(hir::Script { items })
-}
-
-fn analyze_func(
-    func: &ast::FuncDef,
-    symbol_table: &mut SymbolTable,
-    scope: &mut ScopeStack,
-) -> SemaResult<hir::FuncDef> {
-    let resolved = resolve::resolve_fn(func, symbol_table, scope)?;
-    check::check_fn(func, &resolved)?;
-    lower::lower_fn(func, &resolved)
-}
-
-fn analyze_item(
-    item: &ast::Item,
-    symbol_table: &mut SymbolTable,
-    scope: &mut ScopeStack,
-) -> Option<SemaResult<hir::Item>> {
-    match item {
-        ast::Item::FuncDef(func) => {
-            Some(analyze_func(func, symbol_table, scope).map(hir::Item::FuncDef))
+    let mut functions = Vec::new();
+    for item in &script.items {
+        if let ast::Item::FuncDef(function) = item {
+            let resolved = resolve::resolve_fn(function, &mut symbols, &mut scope)?;
+            check::check_fn(function, &resolved)?;
+            functions.push(CheckedFunction {
+                function: function.clone(),
+                resolved,
+            });
         }
-        ast::Item::FuncDecl(_) => None,
-        ast::Item::ConstDecl(_) => None,
     }
+
+    Ok(CheckedScript { script, functions })
+}
+
+pub fn lower(checked: CheckedScript) -> SemaResult<hir::Script> {
+    hir::lower_script(checked)
 }
