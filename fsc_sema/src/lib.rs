@@ -3,6 +3,7 @@ use crate::resolve::{ScopeStack, declare_items};
 use crate::symbol::SymbolTable;
 use fsc_parse::ast;
 
+mod bind;
 mod check;
 mod checked;
 mod error;
@@ -12,6 +13,7 @@ mod infer;
 mod resolve;
 mod symbol;
 
+pub use bind::{BindError, BindErrors, BoundScript, ConfigValue, ConfigValues, bind_configs};
 pub use checked::{CheckedFunction, CheckedScript};
 
 pub fn check(script: ast::Script) -> SemaResult<CheckedScript> {
@@ -38,6 +40,6 @@ pub fn check(script: ast::Script) -> SemaResult<CheckedScript> {
     })
 }
 
-pub fn lower(checked: CheckedScript) -> SemaResult<hir::Script> {
-    hir::lower_script(checked)
+pub fn lower(bound: BoundScript) -> SemaResult<hir::Script> {
+    hir::lower_script(bound)
 }

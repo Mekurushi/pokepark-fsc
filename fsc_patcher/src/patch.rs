@@ -1,4 +1,4 @@
-use crate::{ExternalSymbolTable, PatchFailure};
+use crate::{ConfigValues, ExternalSymbolTable, PatchFailure};
 use fsc_assembler::binary::{CODE_SECTION_FILE_OFFSET, FscriptBinary};
 use fsc_assembler::{Assembler, AssemblyUnit};
 use fsc_diagnostics::{Diagnostic, Stage};
@@ -27,7 +27,7 @@ fn classify_functions(
         .iter()
         .filter_map(|item| match item {
             Item::FuncDef(function) => Some(function),
-            Item::FuncDecl(_) | Item::ConstDecl(_) => None,
+            Item::FuncDecl(_) | Item::ConstDecl(_) | Item::ConfigDecl(_) => None,
         })
         .map(|function| {
             let patch_kind = match symbols.get_function(&function.header.name) {
@@ -93,7 +93,7 @@ fn validate_external_declarations(
     for declaration in script.items.iter().filter_map(|item| match item {
         Item::FuncDef(_) => None,
         Item::FuncDecl(declaration) => Some(declaration),
-        Item::ConstDecl(_) => None,
+        Item::ConstDecl(_) | Item::ConfigDecl(_) => None,
     }) {
         let address = symbols
             .get_function(&declaration.header.name)
@@ -117,6 +117,7 @@ pub struct PatchRequest<'a> {
     // keeping symbols as typed input so it's independent of the used file format, so we're not
     // too strongly bound to one specific format
     pub symbols: &'a ExternalSymbolTable,
+    pub config_values: &'a ConfigValues,
 }
 
 impl<'a> PatchRequest<'a> {
@@ -124,11 +125,13 @@ impl<'a> PatchRequest<'a> {
         patch_source: &'a str,
         original_binary: &'a [u8],
         symbols: &'a ExternalSymbolTable,
+        config_values: &'a ConfigValues,
     ) -> Self {
         Self {
             patch_source,
             original_binary,
             symbols,
+            config_values,
         }
     }
 }
@@ -161,7 +164,9 @@ pub fn patch(request: PatchRequest<'_>) -> Result<PatchArtifact, PatchFailure> {
     let checked = fsc_sema::check(script)
         .map_err(|error| PatchFailure::InvalidPatchSource(vec![error.into()]))?;
     validate_external_declarations(checked.ast(), request.symbols, original_code_len)?;
-    let hir = fsc_sema::lower(checked)
+    let bound = fsc_sema::bind_configs(checked, request.config_values)
+        .map_err(|errors| PatchFailure::InvalidPatchSource(errors.into_diagnostics()))?;
+    let hir = fsc_sema::lower(bound)
         .map_err(|error| PatchFailure::InvalidPatchSource(vec![error.into()]))?;
 
     let (script_name, mut original_unit) = AssemblyUnit::from_binary(binary)?;

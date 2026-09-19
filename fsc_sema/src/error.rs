@@ -47,12 +47,25 @@ pub enum SemaError {
         ty: Ty,
         type_span: Span,
     },
+    InvalidConfigType {
+        ty: Ty,
+        type_span: Span,
+    },
     ConstantInitializerMustBeLiteral {
         initializer_span: Span,
     },
     AssignmentToConstant {
         name: String,
         assignment_span: Span,
+        declaration_span: Span,
+    },
+    AssignmentToConfig {
+        name: String,
+        assignment_span: Span,
+        declaration_span: Span,
+    },
+    MissingConfigValue {
+        name: String,
         declaration_span: Span,
     },
     NotAValue {
@@ -106,11 +119,20 @@ impl std::fmt::Display for SemaError {
             Self::InvalidConstantType { ty, .. } => {
                 write!(f, "constants cannot have type `{ty:?}`")
             }
+            Self::InvalidConfigType { ty, .. } => {
+                write!(f, "configs cannot have type `{ty:?}`")
+            }
             Self::ConstantInitializerMustBeLiteral { .. } => {
                 write!(f, "constant initializer must be a literal")
             }
             Self::AssignmentToConstant { name, .. } => {
                 write!(f, "cannot assign to constant `{name}`")
+            }
+            Self::AssignmentToConfig { name, .. } => {
+                write!(f, "cannot assign to config `{name}`")
+            }
+            Self::MissingConfigValue { name, .. } => {
+                write!(f, "missing bound value for config `{name}`")
             }
             Self::NotAValue { name, .. } => {
                 write!(f, "`{name}` is not a value")
@@ -190,6 +212,9 @@ impl From<SemaError> for Diagnostic {
             SemaError::InvalidConstantType { ty, type_span } => diagnostic.with_label(
                 Label::primary(type_span, format!("`{ty:?}` cannot be used for a constant")),
             ),
+            SemaError::InvalidConfigType { ty, type_span } => diagnostic.with_label(
+                Label::primary(type_span, format!("`{ty:?}` cannot be used for a config")),
+            ),
             SemaError::ConstantInitializerMustBeLiteral { initializer_span } => {
                 diagnostic.with_label(Label::primary(initializer_span, "not a literal expression"))
             }
@@ -200,6 +225,19 @@ impl From<SemaError> for Diagnostic {
             } => diagnostic
                 .with_label(Label::primary(assignment_span, "assigned here"))
                 .with_label(Label::secondary(declaration_span, "constant declared here")),
+            SemaError::AssignmentToConfig {
+                assignment_span,
+                declaration_span,
+                ..
+            } => diagnostic
+                .with_label(Label::primary(assignment_span, "assigned here"))
+                .with_label(Label::secondary(declaration_span, "config declared here")),
+            SemaError::MissingConfigValue {
+                declaration_span, ..
+            } => diagnostic.with_label(Label::primary(
+                declaration_span,
+                "this config was not bound before lowering",
+            )),
             SemaError::NotAValue {
                 reference_span,
                 declaration_span,

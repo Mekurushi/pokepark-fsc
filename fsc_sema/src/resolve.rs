@@ -157,9 +157,32 @@ pub fn declare_items(
                 declare_function(&declaration.header, scope, symbols)?;
             }
             ast::Item::ConstDecl(constant) => declare_constant(constant, scope, symbols)?,
+            ast::Item::ConfigDecl(config) => declare_config(config, scope, symbols)?,
         }
     }
     Ok(())
+}
+
+fn declare_config(
+    config: &ast::ConfigDecl,
+    scope: &mut ScopeStack,
+    symbols: &mut SymbolTable,
+) -> SemaResult<()> {
+    if config.ty == ast::Ty::Void {
+        return Err(SemaError::InvalidConfigType {
+            ty: config.ty.clone(),
+            type_span: config.ty_span,
+        });
+    }
+
+    let symbol = symbols.insert(Symbol {
+        name: config.name.clone(),
+        name_span: config.name_span,
+        ty: config.ty.clone(),
+        type_span: config.ty_span,
+        kind: SymbolKind::Config,
+    });
+    scope.declare(&config.name, symbol, config.name_span)
 }
 
 fn declare_function(

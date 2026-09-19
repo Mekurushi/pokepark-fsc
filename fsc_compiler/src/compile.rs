@@ -1,3 +1,4 @@
+use crate::ConfigValues;
 use crate::diagnostic::CompileFailure;
 use fsc_assembler::Assembler;
 use fsc_diagnostics::{Diagnostic, Stage};
@@ -6,14 +7,20 @@ use fsc_diagnostics::{Diagnostic, Stage};
 pub struct CompileRequest<'src> {
     pub source: &'src str,
     pub script_name: &'src str,
+    pub config_values: &'src ConfigValues,
 }
 
 impl<'src> CompileRequest<'src> {
     #[must_use]
-    pub const fn new(source: &'src str, script_name: &'src str) -> Self {
+    pub const fn new(
+        source: &'src str,
+        script_name: &'src str,
+        config_values: &'src ConfigValues,
+    ) -> Self {
         Self {
             source,
             script_name,
+            config_values,
         }
     }
 }
@@ -43,7 +50,9 @@ impl CompileArtifact {
 
 pub fn compile(request: CompileRequest<'_>) -> Result<CompileArtifact, CompileFailure> {
     let checked = check_source(request.source)?;
-    let hir = fsc_sema::lower(checked)
+    let bound = fsc_sema::bind_configs(checked, request.config_values)
+        .map_err(|errors| CompileFailure::from_diagnostics(errors.into_diagnostics()))?;
+    let hir = fsc_sema::lower(bound)
         .map_err(|error| CompileFailure::from_diagnostic(Diagnostic::from(error)))?;
 
     let mut assembler = Assembler::new();

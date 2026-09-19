@@ -1,6 +1,6 @@
 #![allow(clippy::expect_used)]
 
-use fsc_compiler::{CompileRequest, compile};
+use fsc_compiler::{CompileRequest, ConfigValues, compile};
 use std::fs;
 use std::path::Path;
 use std::process::Command;
@@ -19,7 +19,7 @@ fn build_writes_the_compiler_output() {
         .expect("CLI should run");
 
     assert!(result.status.success(), "{}", stderr(&result));
-    let expected = compile(CompileRequest::new(source, "sample"))
+    let expected = compile(CompileRequest::new(source, "sample", &ConfigValues::new()))
         .expect("facade compilation should succeed")
         .into_bytes();
     assert_eq!(fs::read(output).expect("output should exist"), expected);

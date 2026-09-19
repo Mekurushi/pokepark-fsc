@@ -158,10 +158,19 @@ pub struct ConstDecl {
 }
 
 #[derive(Debug, Clone)]
+pub struct ConfigDecl {
+    pub name: String,
+    pub name_span: Span,
+    pub ty: Ty,
+    pub ty_span: Span,
+}
+
+#[derive(Debug, Clone)]
 pub enum Item {
     FuncDef(FuncDef),
     FuncDecl(FuncDecl),
     ConstDecl(ConstDecl),
+    ConfigDecl(ConfigDecl),
 }
 
 #[derive(Debug, Clone)]

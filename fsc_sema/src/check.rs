@@ -65,12 +65,22 @@ fn check_stmt(
         ast::StmtKind::Assign { target, expr } => {
             let sym_id = resolutions.symbol(target.id);
             let symbol = symbols.get(sym_id);
-            if matches!(symbol.kind, crate::symbol::SymbolKind::Const { .. }) {
-                return Err(SemaError::AssignmentToConstant {
-                    name: symbol.name.clone(),
-                    assignment_span: target.span,
-                    declaration_span: symbol.name_span,
-                });
+            match symbol.kind {
+                crate::symbol::SymbolKind::Const { .. } => {
+                    return Err(SemaError::AssignmentToConstant {
+                        name: symbol.name.clone(),
+                        assignment_span: target.span,
+                        declaration_span: symbol.name_span,
+                    });
+                }
+                crate::symbol::SymbolKind::Config => {
+                    return Err(SemaError::AssignmentToConfig {
+                        name: symbol.name.clone(),
+                        assignment_span: target.span,
+                        declaration_span: symbol.name_span,
+                    });
+                }
+                _ => {}
             }
             let decl_ty = &symbol.ty;
             let found = infer::infer_expr(expr, resolutions, symbols)?;

@@ -1,3 +1,4 @@
+use crate::bind::BoundScript;
 use crate::checked::CheckedScript;
 use crate::error::{SemaError, SemaResult};
 use crate::frame::{FrameLayout, StackSlot};
@@ -44,7 +45,8 @@ impl Layout {
     }
 }
 
-pub(crate) fn lower_script(checked: CheckedScript) -> SemaResult<hir::Script> {
+pub(crate) fn lower_script(bound: BoundScript) -> SemaResult<hir::Script> {
+    let BoundScript(checked) = bound;
     let CheckedScript {
         functions, symbols, ..
     } = checked;
@@ -202,6 +204,10 @@ fn lower_expr(
             let sym = symbols.get(sym_id);
             match &sym.kind {
                 SymbolKind::Const { value } => Ok(lower_const_value(value)),
+                SymbolKind::Config => Err(SemaError::MissingConfigValue {
+                    name: sym.name.clone(),
+                    declaration_span: sym.name_span,
+                }),
                 SymbolKind::Param { index } => {
                     let slot = layout.slot_for(sym_id, StackBinding::Param { index: *index });
                     Ok(hir::Expr::Var {
@@ -289,6 +295,11 @@ fn stack_binding(
             assignment_span: reference_span,
             declaration_span: symbol.name_span,
         }),
+        SymbolKind::Config => Err(SemaError::AssignmentToConfig {
+            name: symbol.name.clone(),
+            assignment_span: reference_span,
+            declaration_span: symbol.name_span,
+        }),
         SymbolKind::Function { .. } => Err(SemaError::NotAValue {
             name: symbol.name.clone(),
             reference_span,
@@ -317,6 +328,7 @@ fn lower_const_value(value: &ConstValue) -> hir::Expr {
         },
     }
 }
+
 pub fn extract_syscall(args: &[Expr]) -> SemaResult<(u8, u16)> {
     if args.len() < 3 {
         todo!("Syscall called with too few arguments");

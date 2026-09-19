@@ -45,6 +45,7 @@ pub enum SymbolKind {
     Param { index: u32 },
     Local,
     Const { value: ConstValue },
+    Config,
     Function { ret_ty: Ty, params: Vec<ParamInfo> },
 }
 #[derive(Default)]
@@ -71,5 +72,20 @@ impl SymbolTable {
             Some(symbol) => symbol,
             None => todo!("Symbol not found"), //TODO: explicit error
         }
+    }
+
+    pub fn get_mut(&mut self, id: SymbolId) -> &mut Symbol {
+        let symbol = self.symbols.get_mut(id.0 as usize);
+        match symbol {
+            Some(symbol) => symbol,
+            None => todo!("Symbol not found"), //TODO: explicit error
+        }
+    }
+
+    pub(crate) fn iter(&self) -> impl Iterator<Item = (SymbolId, &Symbol)> {
+        self.symbols
+            .iter()
+            .enumerate()
+            .map(|(index, symbol)| (SymbolId(index as u32), symbol))
     }
 }

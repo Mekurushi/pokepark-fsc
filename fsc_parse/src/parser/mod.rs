@@ -1,7 +1,7 @@
 pub(crate) mod error;
 use crate::ast::{
-    BinOp, ConstDecl, Expr, ExprKind, FuncDecl, FuncDef, FunctionHeader, Item, Param, Stmt, Ty,
-    UnaryOp,
+    BinOp, ConfigDecl, ConstDecl, Expr, ExprKind, FuncDecl, FuncDef, FunctionHeader, Item, Param,
+    Stmt, Ty, UnaryOp,
 };
 use crate::ast::{NodeId, StmtKind};
 use crate::lexer::token::{Token, TokenKind};
@@ -140,6 +140,7 @@ impl Parser {
         match self.ts.peek() {
             Some(TokenKind::KwExtern) => Ok(Item::FuncDecl(self.parse_function_declaration()?)),
             Some(TokenKind::KwConst) => Ok(Item::ConstDecl(self.parse_const_declaration()?)),
+            Some(TokenKind::KwConfig) => Ok(Item::ConfigDecl(self.parse_config_declaration()?)),
             Some(
                 TokenKind::KwStatic
                 | TokenKind::KwInt
@@ -195,6 +196,20 @@ impl Parser {
             ty,
             ty_span,
             initializer,
+        })
+    }
+
+    fn parse_config_declaration(&mut self) -> ParseResult<ConfigDecl> {
+        self.ts.expect(&TokenKind::KwConfig, "`config`")?;
+        let (ty, ty_span) = self.parse_type_keyword()?;
+        let (name, name_span) = self.ts.expect_ident()?;
+        self.ts.expect(&TokenKind::Semicolon, "`;`")?;
+
+        Ok(ConfigDecl {
+            name,
+            name_span,
+            ty,
+            ty_span,
         })
     }
 

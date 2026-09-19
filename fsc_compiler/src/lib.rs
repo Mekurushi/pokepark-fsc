@@ -3,3 +3,4 @@ mod diagnostic;
 
 pub use compile::{CompileArtifact, CompileRequest, check, compile};
 pub use diagnostic::CompileFailure;
+pub use fsc_sema::{ConfigValue, ConfigValues};

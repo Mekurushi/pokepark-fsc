@@ -1,6 +1,6 @@
 #![allow(clippy::expect_used)]
 
-use fsc_compiler::{CompileRequest, check, compile};
+use fsc_compiler::{CompileRequest, ConfigValues, check, compile};
 use fsc_diagnostics::{LabelStyle, Severity, Span, Stage, render_diagnostics};
 
 const VALID_SOURCE: &str = "void main() { return; }";
@@ -10,14 +10,18 @@ fn checks_source_without_assembling_it() {
     let source = "extern void unavailable(); void main() { unavailable(); return; }";
 
     check(source).expect("frontend-valid source should pass checking");
-    compile(CompileRequest::new(source, "main"))
+    compile(CompileRequest::new(source, "main", &ConfigValues::new()))
         .expect_err("building should still report the unresolved external symbol");
 }
 
 #[test]
 fn compiles_source_to_an_fsb_artifact() {
-    let artifact =
-        compile(CompileRequest::new(VALID_SOURCE, "main")).expect("valid source should compile");
+    let artifact = compile(CompileRequest::new(
+        VALID_SOURCE,
+        "main",
+        &ConfigValues::new(),
+    ))
+    .expect("valid source should compile");
 
     assert!(artifact.bytes().len() > 32);
     assert_eq!(&artifact.bytes()[0..4], &32_u32.to_be_bytes());
@@ -27,7 +31,7 @@ fn compiles_source_to_an_fsb_artifact() {
 #[test]
 fn parse_failure_retains_source_location() {
     let source = "void main() { return; }\n}\n";
-    let failure = compile(CompileRequest::new(source, "broken"))
+    let failure = compile(CompileRequest::new(source, "broken", &ConfigValues::new()))
         .expect_err("an unmatched closing brace should fail");
     let diagnostic = &failure.diagnostics()[0];
 
@@ -43,8 +47,8 @@ fn parse_failure_retains_source_location() {
 #[test]
 fn semantic_failure_is_normalized() {
     let source = "void main() { missing(); return; }";
-    let failure =
-        compile(CompileRequest::new(source, "main")).expect_err("undeclared call should fail");
+    let failure = compile(CompileRequest::new(source, "main", &ConfigValues::new()))
+        .expect_err("undeclared call should fail");
     let diagnostic = &failure.diagnostics()[0];
 
     assert_eq!(diagnostic.stage(), Stage::Semantic);
@@ -54,8 +58,12 @@ fn semantic_failure_is_normalized() {
 
 #[test]
 fn invalid_script_name_is_an_assembly_failure() {
-    let failure = compile(CompileRequest::new(VALID_SOURCE, "main!"))
-        .expect_err("invalid B40 name should fail during serialization");
+    let failure = compile(CompileRequest::new(
+        VALID_SOURCE,
+        "main!",
+        &ConfigValues::new(),
+    ))
+    .expect_err("invalid B40 name should fail during serialization");
     let diagnostic = &failure.diagnostics()[0];
 
     assert_eq!(diagnostic.stage(), Stage::Assembly);
@@ -65,7 +73,7 @@ fn invalid_script_name_is_an_assembly_failure() {
 #[test]
 fn all_lexer_failures_survive_in_source_order() {
     let source = "void main() { @ # return; }";
-    let failure = compile(CompileRequest::new(source, "broken"))
+    let failure = compile(CompileRequest::new(source, "broken", &ConfigValues::new()))
         .expect_err("unknown characters should fail lexing");
     let diagnostics = failure.diagnostics();
 
@@ -78,8 +86,8 @@ fn all_lexer_failures_survive_in_source_order() {
 #[test]
 fn duplicate_declaration_labels_duplicate_before_original() {
     let source = "void main(int value, int value) { return; }";
-    let failure =
-        compile(CompileRequest::new(source, "main")).expect_err("duplicate parameters should fail");
+    let failure = compile(CompileRequest::new(source, "main", &ConfigValues::new()))
+        .expect_err("duplicate parameters should fail");
     let labels = failure.diagnostics()[0].labels();
 
     assert_eq!(labels.len(), 2);
@@ -92,7 +100,7 @@ fn duplicate_declaration_labels_duplicate_before_original() {
 #[test]
 fn type_mismatch_points_to_expression_and_declared_type() {
     let source = "void main() { int value = true; return; }";
-    let failure = compile(CompileRequest::new(source, "main"))
+    let failure = compile(CompileRequest::new(source, "main", &ConfigValues::new()))
         .expect_err("invalid initializer should fail checking");
     let labels = failure.diagnostics()[0].labels();
 
@@ -106,7 +114,7 @@ fn type_mismatch_points_to_expression_and_declared_type() {
 #[test]
 fn unexpected_eof_uses_an_empty_span_at_source_end() {
     let source = "void main(";
-    let failure = compile(CompileRequest::new(source, "broken"))
+    let failure = compile(CompileRequest::new(source, "broken", &ConfigValues::new()))
         .expect_err("unfinished parameter list should fail parsing");
     let label = &failure.diagnostics()[0].labels()[0];
 

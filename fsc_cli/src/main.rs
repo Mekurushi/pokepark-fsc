@@ -2,8 +2,8 @@ mod cli;
 
 use clap::Parser;
 use cli::{BuildArgs, CheckArgs, Cli, Command, DiagnosticFormat, PatchArgs};
-use fsc_compiler::{CompileRequest, check, compile};
-use fsc_diagnostics::{Diagnostic, render_diagnostics, render_diagnostics_json};
+use fsc_compiler::{check, compile, CompileRequest};
+use fsc_diagnostics::{render_diagnostics, render_diagnostics_json, Diagnostic};
 use std::fs;
 use std::process::ExitCode;
 
@@ -92,7 +92,10 @@ fn patch(args: PatchArgs) -> Result<(), ()> {
         );
     })?;
 
-    let request = fsc_patcher::PatchRequest::new(&patch_source, &original_binary, &symbols);
+    // TODO: add config support
+    let config_values = fsc_patcher::ConfigValues::new();
+    let request =
+        fsc_patcher::PatchRequest::new(&patch_source, &original_binary, &symbols, &config_values);
     let artifact = fsc_patcher::patch(request).map_err(|error| {
         eprintln!("error: {error}");
     })?;
@@ -132,7 +135,9 @@ fn build(args: BuildArgs) -> Result<(), ()> {
         return Err(());
     };
 
-    let request = CompileRequest::new(&source, script_name);
+    // TODO: add config support
+    let config_values = fsc_compiler::ConfigValues::new();
+    let request = CompileRequest::new(&source, script_name, &config_values);
     let artifact = compile(request).map_err(|failure| {
         eprint!(
             "{}",
