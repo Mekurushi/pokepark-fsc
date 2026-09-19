@@ -57,6 +57,13 @@ fn check_stmt(
         ast::StmtKind::Assign { target, expr } => {
             let sym_id = resolved.resolutions.symbol(target.id);
             let symbol = resolved.symbols.get(sym_id);
+            if matches!(symbol.kind, crate::symbol::SymbolKind::Const { .. }) {
+                return Err(SemaError::AssignmentToConstant {
+                    name: symbol.name.clone(),
+                    assignment_span: target.span,
+                    declaration_span: symbol.name_span,
+                });
+            }
             let decl_ty = &symbol.ty;
             let found = infer::infer_expr(expr, resolved)?;
             check_assignable(decl_ty, &found, expr.span, Some(symbol.type_span))

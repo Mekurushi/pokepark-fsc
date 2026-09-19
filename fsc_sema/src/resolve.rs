@@ -1,5 +1,6 @@
+use crate::check::check_assignable;
 use crate::error::{SemaError, SemaResult};
-use crate::symbol::{ParamInfo, Symbol, SymbolId, SymbolKind, SymbolTable};
+use crate::symbol::{ConstValue, ParamInfo, Symbol, SymbolId, SymbolKind, SymbolTable};
 use fsc_diagnostics::Span;
 use fsc_parse::ast;
 use fsc_parse::ast::NodeId;
@@ -152,36 +153,86 @@ pub fn declare_items(
 ) -> SemaResult<()> {
     scope.enter_file_scope();
     for item in &script.items {
-        let header = match item {
-            ast::Item::FuncDef(func) => &func.header,
+        match item {
+            ast::Item::FuncDef(func) => {
+                declare_function(&func.header, scope, symbols)?;
+            }
             ast::Item::FuncDecl(declaration) => {
                 validate_unique_params(&declaration.header.params)?;
-                &declaration.header
+                declare_function(&declaration.header, scope, symbols)?;
             }
-        };
-        let params = header
-            .params
-            .iter()
-            .map(|param| ParamInfo {
-                name: param.name.clone(),
-                name_span: param.name_span,
-                ty: param.ty.clone(),
-                type_span: param.ty_span,
-            })
-            .collect();
-        let fn_sym_id = symbols.insert(Symbol {
-            name: header.name.clone(),
-            name_span: header.name_span,
-            ty: header.ret_ty.clone(),
-            type_span: header.ret_ty_span,
-            kind: SymbolKind::Function {
-                ret_ty: header.ret_ty.clone(),
-                params,
-            },
-        });
-        scope.declare(&header.name, fn_sym_id, header.name_span)?;
+            ast::Item::ConstDecl(constant) => declare_constant(constant, scope, symbols)?,
+        }
     }
     Ok(())
+}
+
+fn declare_function(
+    header: &ast::FunctionHeader,
+    scope: &mut ScopeStack,
+    symbols: &mut SymbolTable,
+) -> SemaResult<()> {
+    let params = header
+        .params
+        .iter()
+        .map(|param| ParamInfo {
+            name: param.name.clone(),
+            name_span: param.name_span,
+            ty: param.ty.clone(),
+            type_span: param.ty_span,
+        })
+        .collect();
+    let symbol = symbols.insert(Symbol {
+        name: header.name.clone(),
+        name_span: header.name_span,
+        ty: header.ret_ty.clone(),
+        type_span: header.ret_ty_span,
+        kind: SymbolKind::Function {
+            ret_ty: header.ret_ty.clone(),
+            params,
+        },
+    });
+    scope.declare(&header.name, symbol, header.name_span)
+}
+
+fn declare_constant(
+    constant: &ast::ConstDecl,
+    scope: &mut ScopeStack,
+    symbols: &mut SymbolTable,
+) -> SemaResult<()> {
+    if constant.ty == ast::Ty::Void {
+        return Err(SemaError::InvalidConstantType {
+            ty: constant.ty.clone(),
+            type_span: constant.ty_span,
+        });
+    }
+
+    let value = match &constant.initializer.kind {
+        ast::ExprKind::IntLit(value) => ConstValue::Int(*value),
+        ast::ExprKind::FloatLit(value) => ConstValue::Float(*value),
+        ast::ExprKind::BoolLit(value) => ConstValue::Bool(*value),
+        ast::ExprKind::StringLit(value) => ConstValue::Str(value.clone()),
+        _ => {
+            return Err(SemaError::ConstantInitializerMustBeLiteral {
+                initializer_span: constant.initializer.span,
+            });
+        }
+    };
+    check_assignable(
+        &constant.ty,
+        &value.ty(),
+        constant.initializer.span,
+        Some(constant.ty_span),
+    )?;
+
+    let symbol = symbols.insert(Symbol {
+        name: constant.name.clone(),
+        name_span: constant.name_span,
+        ty: constant.ty.clone(),
+        type_span: constant.ty_span,
+        kind: SymbolKind::Const { value },
+    });
+    scope.declare(&constant.name, symbol, constant.name_span)
 }
 
 //TODO: resolve concern mixup between check, infer and resolve

@@ -45,5 +45,6 @@ fn analyze_item(
             Some(analyze_func(func, symbol_table, scope).map(hir::Item::FuncDef))
         }
         ast::Item::FuncDecl(_) => None,
+        ast::Item::ConstDecl(_) => None,
     }
 }

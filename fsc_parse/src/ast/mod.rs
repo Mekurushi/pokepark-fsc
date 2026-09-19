@@ -149,9 +149,19 @@ pub struct FuncDecl {
 }
 
 #[derive(Debug, Clone)]
+pub struct ConstDecl {
+    pub name: String,
+    pub name_span: Span,
+    pub ty: Ty,
+    pub ty_span: Span,
+    pub initializer: Expr,
+}
+
+#[derive(Debug, Clone)]
 pub enum Item {
     FuncDef(FuncDef),
     FuncDecl(FuncDecl),
+    ConstDecl(ConstDecl),
 }
 
 #[derive(Debug, Clone)]

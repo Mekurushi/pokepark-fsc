@@ -21,10 +21,30 @@ pub struct ParamInfo {
     pub type_span: Span,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum ConstValue {
+    Int(i32),
+    Float(f32),
+    Bool(bool),
+    Str(String),
+}
+
+impl ConstValue {
+    pub(crate) fn ty(&self) -> Ty {
+        match self {
+            Self::Int(_) => Ty::Int,
+            Self::Float(_) => Ty::Float,
+            Self::Bool(_) => Ty::Bool,
+            Self::Str(_) => Ty::Str,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum SymbolKind {
     Param { index: u32 },
     Local,
+    Const { value: ConstValue },
     Function { ret_ty: Ty, params: Vec<ParamInfo> },
 }
 #[derive(Default, Clone)]

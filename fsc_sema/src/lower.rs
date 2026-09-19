@@ -1,9 +1,9 @@
-use crate::error::SemaResult;
+use crate::error::{SemaError, SemaResult};
 use crate::frame::{FrameLayout, StackSlot};
 use crate::hir;
 use crate::infer::infer_expr;
 use crate::resolve::ResolveOutput;
-use crate::symbol::{SymbolId, SymbolKind};
+use crate::symbol::{ConstValue, Symbol, SymbolId, SymbolKind};
 use fsc_parse::ast::{self, Expr, FuncDef, Stmt};
 use std::collections::HashMap;
 
@@ -11,6 +11,12 @@ use std::collections::HashMap;
 struct Layout {
     slots: HashMap<SymbolId, StackSlot>,
     local_count: i16,
+}
+
+#[derive(Clone, Copy)]
+enum StackBinding {
+    Param { index: u32 },
+    Local,
 }
 
 impl Layout {
@@ -21,17 +27,16 @@ impl Layout {
         }
     }
 
-    fn slot_for(&mut self, sym_id: SymbolId, kind: &SymbolKind) -> StackSlot {
+    fn slot_for(&mut self, sym_id: SymbolId, binding: StackBinding) -> StackSlot {
         if let Some(&slot) = self.slots.get(&sym_id) {
             return slot;
         }
-        let slot = match kind {
-            SymbolKind::Param { index } => StackSlot(*index as i16),
-            SymbolKind::Local => {
+        let slot = match binding {
+            StackBinding::Param { index } => StackSlot(index as i16),
+            StackBinding::Local => {
                 self.local_count += 1;
                 StackSlot(-self.local_count)
             }
-            SymbolKind::Function { .. } => todo!(),
         };
         self.slots.insert(sym_id, slot);
         slot
@@ -44,7 +49,8 @@ pub fn lower_fn(func: &FuncDef, resolved: &ResolveOutput) -> SemaResult<hir::Fun
 
     for &sym_id in &resolved.params_in_order {
         let symbol = resolved.symbols.get(sym_id);
-        layout.slot_for(sym_id, &symbol.kind);
+        let binding = stack_binding(symbol, symbol.name_span)?;
+        layout.slot_for(sym_id, binding);
     }
 
     let body = lower_stmts(&func.body, resolved, &mut layout)?;
@@ -87,7 +93,8 @@ fn lower_stmt(stmt: &Stmt, resolved: &ResolveOutput, layout: &mut Layout) -> Sem
             // TODO: rethink statement NOdeId resolution
             let sym_id = resolved.resolutions.symbol(stmt.id);
             let sym = resolved.symbols.get(sym_id);
-            let slot = layout.slot_for(sym_id, &sym.kind);
+            let binding = stack_binding(sym, stmt.span)?;
+            let slot = layout.slot_for(sym_id, binding);
 
             Ok(hir::Stmt::VarDecl {
                 name: name.clone(),
@@ -100,7 +107,8 @@ fn lower_stmt(stmt: &Stmt, resolved: &ResolveOutput, layout: &mut Layout) -> Sem
         ast::StmtKind::Assign { target, expr } => {
             let sym_id = resolved.resolutions.symbol(target.id);
             let sym = resolved.symbols.get(sym_id);
-            let slot = layout.slot_for(sym_id, &sym.kind);
+            let binding = stack_binding(sym, target.span)?;
+            let slot = layout.slot_for(sym_id, binding);
 
             Ok(hir::Stmt::Assign {
                 slot,
@@ -155,12 +163,30 @@ fn lower_expr(expr: &Expr, resolved: &ResolveOutput, layout: &mut Layout) -> Sem
         ast::ExprKind::Var(_name) => {
             let sym_id = resolved.resolutions.symbol(expr.id);
             let sym = resolved.symbols.get(sym_id);
-            let slot = layout.slot_for(sym_id, &sym.kind);
-            Ok(hir::Expr::Var {
-                name: sym.name.clone(),
-                slot,
-                ty: lower_ty(&sym.ty),
-            })
+            match &sym.kind {
+                SymbolKind::Const { value } => Ok(lower_const_value(value)),
+                SymbolKind::Param { index } => {
+                    let slot = layout.slot_for(sym_id, StackBinding::Param { index: *index });
+                    Ok(hir::Expr::Var {
+                        name: sym.name.clone(),
+                        slot,
+                        ty: lower_ty(&sym.ty),
+                    })
+                }
+                SymbolKind::Local => {
+                    let slot = layout.slot_for(sym_id, StackBinding::Local);
+                    Ok(hir::Expr::Var {
+                        name: sym.name.clone(),
+                        slot,
+                        ty: lower_ty(&sym.ty),
+                    })
+                }
+                SymbolKind::Function { .. } => Err(SemaError::NotAValue {
+                    name: sym.name.clone(),
+                    reference_span: expr.span,
+                    declaration_span: sym.name_span,
+                }),
+            }
         }
 
         ast::ExprKind::BinOp { op, lhs, rhs } => {
@@ -211,6 +237,47 @@ fn lower_expr(expr: &Expr, resolved: &ResolveOutput, layout: &mut Layout) -> Sem
                 ty: hir::Ty::Int,
             })
         }
+    }
+}
+
+fn stack_binding(
+    symbol: &Symbol,
+    reference_span: fsc_diagnostics::Span,
+) -> SemaResult<StackBinding> {
+    match symbol.kind {
+        SymbolKind::Param { index } => Ok(StackBinding::Param { index }),
+        SymbolKind::Local => Ok(StackBinding::Local),
+        SymbolKind::Const { .. } => Err(SemaError::AssignmentToConstant {
+            name: symbol.name.clone(),
+            assignment_span: reference_span,
+            declaration_span: symbol.name_span,
+        }),
+        SymbolKind::Function { .. } => Err(SemaError::NotAValue {
+            name: symbol.name.clone(),
+            reference_span,
+            declaration_span: symbol.name_span,
+        }),
+    }
+}
+
+fn lower_const_value(value: &ConstValue) -> hir::Expr {
+    match value {
+        ConstValue::Int(value) => hir::Expr::IntLit {
+            value: *value,
+            ty: hir::Ty::Int,
+        },
+        ConstValue::Float(value) => hir::Expr::FloatLit {
+            value: *value,
+            ty: hir::Ty::Float,
+        },
+        ConstValue::Bool(value) => hir::Expr::BoolLit {
+            value: *value,
+            ty: hir::Ty::Bool,
+        },
+        ConstValue::Str(value) => hir::Expr::StrLit {
+            value: value.clone(),
+            ty: hir::Ty::Int,
+        },
     }
 }
 pub fn extract_syscall(args: &[Expr]) -> SemaResult<(u8, u16)> {

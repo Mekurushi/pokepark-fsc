@@ -13,7 +13,15 @@ pub fn infer_expr(expr: &Expr, resolved: &ResolveOutput) -> SemaResult<Ty> {
 
         ExprKind::Var(_) => {
             let sym_id = resolved.resolutions.symbol(expr.id);
-            Ok(resolved.symbols.get(sym_id).ty.clone())
+            let symbol = resolved.symbols.get(sym_id);
+            if matches!(symbol.kind, SymbolKind::Function { .. }) {
+                return Err(SemaError::NotAValue {
+                    name: symbol.name.clone(),
+                    reference_span: expr.span,
+                    declaration_span: symbol.name_span,
+                });
+            }
+            Ok(symbol.ty.clone())
         }
         ExprKind::BinOp { op, lhs, rhs } => infer_binop(op, lhs, rhs, resolved),
 

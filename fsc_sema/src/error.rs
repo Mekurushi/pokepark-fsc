@@ -43,6 +43,23 @@ pub enum SemaError {
         call_span: Span,
         declaration_span: Span,
     },
+    InvalidConstantType {
+        ty: Ty,
+        type_span: Span,
+    },
+    ConstantInitializerMustBeLiteral {
+        initializer_span: Span,
+    },
+    AssignmentToConstant {
+        name: String,
+        assignment_span: Span,
+        declaration_span: Span,
+    },
+    NotAValue {
+        name: String,
+        reference_span: Span,
+        declaration_span: Span,
+    },
 }
 
 impl std::fmt::Display for SemaError {
@@ -86,6 +103,18 @@ impl std::fmt::Display for SemaError {
                 f,
                 "function `{name}` expects {expected} arguments, but {found} were provided"
             ),
+            Self::InvalidConstantType { ty, .. } => {
+                write!(f, "constants cannot have type `{ty:?}`")
+            }
+            Self::ConstantInitializerMustBeLiteral { .. } => {
+                write!(f, "constant initializer must be a literal")
+            }
+            Self::AssignmentToConstant { name, .. } => {
+                write!(f, "cannot assign to constant `{name}`")
+            }
+            Self::NotAValue { name, .. } => {
+                write!(f, "`{name}` is not a value")
+            }
         }
     }
 }
@@ -157,6 +186,26 @@ impl From<SemaError> for Diagnostic {
                     call_span,
                     format!("expected {expected} arguments, found {found}"),
                 ))
+                .with_label(Label::secondary(declaration_span, "function declared here")),
+            SemaError::InvalidConstantType { ty, type_span } => diagnostic.with_label(
+                Label::primary(type_span, format!("`{ty:?}` cannot be used for a constant")),
+            ),
+            SemaError::ConstantInitializerMustBeLiteral { initializer_span } => {
+                diagnostic.with_label(Label::primary(initializer_span, "not a literal expression"))
+            }
+            SemaError::AssignmentToConstant {
+                assignment_span,
+                declaration_span,
+                ..
+            } => diagnostic
+                .with_label(Label::primary(assignment_span, "assigned here"))
+                .with_label(Label::secondary(declaration_span, "constant declared here")),
+            SemaError::NotAValue {
+                reference_span,
+                declaration_span,
+                ..
+            } => diagnostic
+                .with_label(Label::primary(reference_span, "used as a value here"))
                 .with_label(Label::secondary(declaration_span, "function declared here")),
         }
     }

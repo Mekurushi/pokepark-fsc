@@ -1,6 +1,7 @@
 pub(crate) mod error;
 use crate::ast::{
-    BinOp, Expr, ExprKind, FuncDecl, FuncDef, FunctionHeader, Item, Param, Stmt, Ty, UnaryOp,
+    BinOp, ConstDecl, Expr, ExprKind, FuncDecl, FuncDef, FunctionHeader, Item, Param, Stmt, Ty,
+    UnaryOp,
 };
 use crate::ast::{NodeId, StmtKind};
 use crate::lexer::token::{Token, TokenKind};
@@ -138,6 +139,7 @@ impl Parser {
     pub fn parse_item(&mut self) -> ParseResult<Item> {
         match self.ts.peek() {
             Some(TokenKind::KwExtern) => Ok(Item::FuncDecl(self.parse_function_declaration()?)),
+            Some(TokenKind::KwConst) => Ok(Item::ConstDecl(self.parse_const_declaration()?)),
             Some(
                 TokenKind::KwStatic
                 | TokenKind::KwInt
@@ -176,6 +178,23 @@ impl Parser {
         Ok(FuncDecl {
             id: self.ids.alloc(),
             header,
+        })
+    }
+
+    fn parse_const_declaration(&mut self) -> ParseResult<ConstDecl> {
+        self.ts.expect(&TokenKind::KwConst, "`const`")?;
+        let (ty, ty_span) = self.parse_type_keyword()?;
+        let (name, name_span) = self.ts.expect_ident()?;
+        self.ts.expect(&TokenKind::Eq, "`=`")?;
+        let initializer = self.parse_expr(0)?;
+        self.ts.expect(&TokenKind::Semicolon, "`;`")?;
+
+        Ok(ConstDecl {
+            name,
+            name_span,
+            ty,
+            ty_span,
+            initializer,
         })
     }
 
