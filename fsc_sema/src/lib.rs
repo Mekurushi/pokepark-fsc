@@ -22,16 +22,20 @@ pub fn check(script: ast::Script) -> SemaResult<CheckedScript> {
     let mut functions = Vec::new();
     for item in &script.items {
         if let ast::Item::FuncDef(function) = item {
-            let resolved = resolve::resolve_fn(function, &mut symbols, &mut scope)?;
-            check::check_fn(function, &resolved)?;
+            let resolutions = resolve::resolve_fn(function, &mut symbols, &mut scope)?;
+            check::check_fn(function, &resolutions, &symbols)?;
             functions.push(CheckedFunction {
                 function: function.clone(),
-                resolved,
+                resolutions,
             });
         }
     }
 
-    Ok(CheckedScript { script, functions })
+    Ok(CheckedScript {
+        script,
+        symbols,
+        functions,
+    })
 }
 
 pub fn lower(checked: CheckedScript) -> SemaResult<hir::Script> {

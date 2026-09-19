@@ -1,15 +1,21 @@
 use crate::error::{SemaError, SemaResult};
 use crate::infer;
-use crate::resolve::ResolveOutput;
+use crate::resolve::Resolutions;
+use crate::symbol::SymbolTable;
 use fsc_diagnostics::Span;
 use fsc_parse::ast::{self, Ty};
 
-pub fn check_fn(func: &ast::FuncDef, resolved: &ResolveOutput) -> SemaResult<()> {
+pub fn check_fn(
+    func: &ast::FuncDef,
+    resolutions: &Resolutions,
+    symbols: &SymbolTable,
+) -> SemaResult<()> {
     check_stmts(
         &func.body,
         &func.header.ret_ty,
         func.header.ret_ty_span,
-        resolved,
+        resolutions,
+        symbols,
     )
 }
 
@@ -17,10 +23,11 @@ fn check_stmts(
     stmts: &[ast::Stmt],
     ret_ty: &Ty,
     ret_ty_span: Span,
-    resolved: &ResolveOutput,
+    resolutions: &Resolutions,
+    symbols: &SymbolTable,
 ) -> SemaResult<()> {
     for stmt in stmts {
-        check_stmt(stmt, ret_ty, ret_ty_span, resolved)?;
+        check_stmt(stmt, ret_ty, ret_ty_span, resolutions, symbols)?;
     }
     Ok(())
 }
@@ -29,12 +36,13 @@ fn check_stmt(
     stmt: &ast::Stmt,
     ret_ty: &Ty,
     ret_ty_span: Span,
-    resolved: &ResolveOutput,
+    resolutions: &Resolutions,
+    symbols: &SymbolTable,
 ) -> SemaResult<()> {
     match &stmt.kind {
         ast::StmtKind::Return(expr) => match expr {
             Some(e) => {
-                let found = infer::infer_expr(e, resolved)?;
+                let found = infer::infer_expr(e, resolutions, symbols)?;
                 check_return(ret_ty, &found, e.span, ret_ty_span)
             }
             None => check_void_return(ret_ty, stmt.span, ret_ty_span),
@@ -48,15 +56,15 @@ fn check_stmt(
             ty, ty_span, init, ..
         } => {
             if let Some(e) = init {
-                let found = infer::infer_expr(e, resolved)?;
+                let found = infer::infer_expr(e, resolutions, symbols)?;
                 check_assignable(ty, &found, e.span, Some(*ty_span))?;
             }
             Ok(())
         }
 
         ast::StmtKind::Assign { target, expr } => {
-            let sym_id = resolved.resolutions.symbol(target.id);
-            let symbol = resolved.symbols.get(sym_id);
+            let sym_id = resolutions.symbol(target.id);
+            let symbol = symbols.get(sym_id);
             if matches!(symbol.kind, crate::symbol::SymbolKind::Const { .. }) {
                 return Err(SemaError::AssignmentToConstant {
                     name: symbol.name.clone(),
@@ -65,7 +73,7 @@ fn check_stmt(
                 });
             }
             let decl_ty = &symbol.ty;
-            let found = infer::infer_expr(expr, resolved)?;
+            let found = infer::infer_expr(expr, resolutions, symbols)?;
             check_assignable(decl_ty, &found, expr.span, Some(symbol.type_span))
         }
 
@@ -74,24 +82,24 @@ fn check_stmt(
             then_body,
             else_body,
         } => {
-            let cond_ty = infer::infer_expr(cond, resolved)?;
+            let cond_ty = infer::infer_expr(cond, resolutions, symbols)?;
             check_condition(&cond_ty, cond.span)?;
-            check_stmts(then_body, ret_ty, ret_ty_span, resolved)?;
+            check_stmts(then_body, ret_ty, ret_ty_span, resolutions, symbols)?;
             if let Some(else_stmts) = else_body {
-                check_stmts(else_stmts, ret_ty, ret_ty_span, resolved)?;
+                check_stmts(else_stmts, ret_ty, ret_ty_span, resolutions, symbols)?;
             }
             Ok(())
         }
 
         ast::StmtKind::While { cond, body } => {
-            let cond_ty = infer::infer_expr(cond, resolved)?;
+            let cond_ty = infer::infer_expr(cond, resolutions, symbols)?;
             check_condition(&cond_ty, cond.span)?;
 
-            check_stmts(body, ret_ty, ret_ty_span, resolved)?;
+            check_stmts(body, ret_ty, ret_ty_span, resolutions, symbols)?;
             Ok(())
         }
         ast::StmtKind::ExprStmt(expr) => {
-            let ty = infer::infer_expr(expr, resolved)?;
+            let ty = infer::infer_expr(expr, resolutions, symbols)?;
             if ty != Ty::Void {
                 if !matches!(expr.kind, ast::ExprKind::Call { .. }) {
                     // TODO: emit warning: "expression result unused"
@@ -100,7 +108,7 @@ fn check_stmt(
             Ok(())
         }
         ast::StmtKind::Pause(expr) => {
-            let ty = infer::infer_expr(expr, resolved)?;
+            let ty = infer::infer_expr(expr, resolutions, symbols)?;
             if ty != Ty::Int {
                 return Err(SemaError::TypeMismatch {
                     expected: Ty::Int,

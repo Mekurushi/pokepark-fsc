@@ -29,11 +29,6 @@ impl Resolutions {
     }
 }
 
-pub struct ResolveOutput {
-    pub symbols: SymbolTable, // TODO: borrow is probably better now
-    pub resolutions: Resolutions,
-    pub params_in_order: Vec<SymbolId>,
-}
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ScopeKind {
     File,
@@ -254,8 +249,7 @@ pub fn resolve_params(
     params: &[ParamInfo],
     scope: &mut ScopeStack,
     symbol_table: &mut SymbolTable,
-) -> SemaResult<Vec<SymbolId>> {
-    let mut params_in_order: Vec<SymbolId> = Vec::new();
+) -> SemaResult<()> {
     for (index, param) in params.iter().enumerate() {
         let sym_id = symbol_table.insert(Symbol {
             name: param.name.clone(),
@@ -267,16 +261,15 @@ pub fn resolve_params(
             },
         });
         scope.declare(&param.name, sym_id, param.name_span)?;
-        params_in_order.push(sym_id);
     }
-    Ok(params_in_order)
+    Ok(())
 }
 
 pub fn resolve_fn(
     func: &ast::FuncDef,
     symbols: &mut SymbolTable,
     scope: &mut ScopeStack,
-) -> SemaResult<ResolveOutput> {
+) -> SemaResult<Resolutions> {
     scope.enter_function_scope();
     let mut resolutions = Resolutions::new();
     let fn_symbol_id = scope.lookup(&func.header.name, func.header.name_span)?;
@@ -284,16 +277,11 @@ pub fn resolve_fn(
         SymbolKind::Function { params, ret_ty } => (params, ret_ty),
         _ => todo!(),
     };
-    let params_in_order = resolve_params(&params, scope, symbols)?;
+    resolve_params(&params, scope, symbols)?;
 
     resolve_stmts(&func.body, scope, symbols, &mut resolutions)?;
-    let symbol_table = symbols.clone();
     scope.exit_scope();
-    Ok(ResolveOutput {
-        symbols: symbol_table,
-        resolutions,
-        params_in_order,
-    })
+    Ok(resolutions)
 }
 
 fn resolve_stmts(

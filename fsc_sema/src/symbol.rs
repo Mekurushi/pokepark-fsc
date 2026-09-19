@@ -47,7 +47,7 @@ pub enum SymbolKind {
     Const { value: ConstValue },
     Function { ret_ty: Ty, params: Vec<ParamInfo> },
 }
-#[derive(Default, Clone)]
+#[derive(Default)]
 pub struct SymbolTable {
     symbols: Vec<Symbol>,
 }

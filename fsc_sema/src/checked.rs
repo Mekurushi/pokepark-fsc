@@ -1,8 +1,10 @@
-use crate::resolve::ResolveOutput;
+use crate::resolve::Resolutions;
+use crate::symbol::SymbolTable;
 use fsc_parse::ast;
 
 pub struct CheckedScript {
     pub(crate) script: ast::Script,
+    pub(crate) symbols: SymbolTable,
     pub(crate) functions: Vec<CheckedFunction>,
 }
 
@@ -15,5 +17,5 @@ impl CheckedScript {
 
 pub struct CheckedFunction {
     pub(crate) function: ast::FuncDef,
-    pub(crate) resolved: ResolveOutput,
+    pub(crate) resolutions: Resolutions,
 }
