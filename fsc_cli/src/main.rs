@@ -1,8 +1,10 @@
 mod cli;
 
 use clap::Parser;
-use cli::{BuildArgs, CheckArgs, Cli, Command, DiagnosticFormat, PatchArgs};
-use fsc_compiler::{check, compile, CompileRequest};
+use cli::{BuildArgs, CheckArgs, Cli, Command, ConfigArgs, DiagnosticFormat, PatchArgs};
+use fsc_compiler::{
+    check, compile, required_configs, CompileRequest, ConfigRequirement, ConfigType,
+};
 use fsc_diagnostics::{render_diagnostics, render_diagnostics_json, Diagnostic};
 use std::fs;
 use std::process::ExitCode;
@@ -19,7 +21,50 @@ fn run(cli: Cli) -> Result<(), ()> {
     match cli.command {
         Command::Build(args) => build(args),
         Command::Check(args) => check_file(args),
+        Command::Configs(args) => configs(args),
         Command::Patch(args) => patch(args),
+    }
+}
+
+fn configs(args: ConfigArgs) -> Result<(), ()> {
+    //TODO: JSON output?
+    let source = fs::read_to_string(&args.input).map_err(|error| {
+        eprintln!("error: could not read {}: {error}", args.input.display());
+    })?;
+    let Some(source_name) = args.input.file_name().and_then(|name| name.to_str()) else {
+        eprintln!("error: input path does not have a valid UTF-8 file name");
+        return Err(());
+    };
+
+    match required_configs(&source) {
+        Ok(requirements) => {
+            render_config_requirements(&requirements);
+            Ok(())
+        }
+        Err(failure) => {
+            render_check_diagnostics(
+                DiagnosticFormat::Human,
+                failure.diagnostics(),
+                source_name,
+                &source,
+            )?;
+            Err(())
+        }
+    }
+}
+
+fn render_config_requirements(requirements: &[ConfigRequirement]) {
+    for requirement in requirements {
+        println!("{}: {}", requirement.name, config_type_name(requirement.ty));
+    }
+}
+
+const fn config_type_name(ty: ConfigType) -> &'static str {
+    match ty {
+        ConfigType::Int => "int",
+        ConfigType::Float => "float",
+        ConfigType::Bool => "bool",
+        ConfigType::String => "string",
     }
 }
 

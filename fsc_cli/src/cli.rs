@@ -21,8 +21,17 @@ pub enum Command {
     #[command(about = "Check an FSC source file without producing output")]
     Check(CheckArgs),
 
+    #[command(about = "List configuration values required by an FSC source file")]
+    Configs(ConfigArgs),
+
     #[command(about = "Patch functions in an existing FSB file")]
     Patch(PatchArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct ConfigArgs {
+    #[arg(value_name = "INPUT")]
+    pub input: PathBuf,
 }
 
 #[derive(Debug, Args)]

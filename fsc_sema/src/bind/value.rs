@@ -1,6 +1,32 @@
 use fsc_parse::ast::Ty;
 use std::collections::BTreeMap;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConfigType {
+    Int,
+    Float,
+    Bool,
+    String,
+}
+
+impl ConfigType {
+    pub(crate) fn from_ty(ty: &Ty) -> Option<Self> {
+        match ty {
+            Ty::Int => Some(Self::Int),
+            Ty::Float => Some(Self::Float),
+            Ty::Bool => Some(Self::Bool),
+            Ty::Str => Some(Self::String),
+            Ty::Void => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConfigRequirement {
+    pub name: String,
+    pub ty: ConfigType,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum ConfigValue {
     Int(i32),

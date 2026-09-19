@@ -13,7 +13,10 @@ mod infer;
 mod resolve;
 mod symbol;
 
-pub use bind::{BindError, BindErrors, BoundScript, ConfigValue, ConfigValues, bind_configs};
+pub use bind::{
+    BindError, BindErrors, BoundScript, ConfigRequirement, ConfigType, ConfigValue, ConfigValues,
+    bind_configs,
+};
 pub use checked::{CheckedFunction, CheckedScript};
 
 pub fn check(script: ast::Script) -> SemaResult<CheckedScript> {

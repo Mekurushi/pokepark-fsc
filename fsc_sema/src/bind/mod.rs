@@ -6,7 +6,7 @@ use crate::symbol::{ConstValue, SymbolKind};
 use std::collections::HashSet;
 
 pub use error::{BindError, BindErrors};
-pub use value::{ConfigValue, ConfigValues};
+pub use value::{ConfigRequirement, ConfigType, ConfigValue, ConfigValues};
 
 pub struct BoundScript(pub(crate) CheckedScript);
 

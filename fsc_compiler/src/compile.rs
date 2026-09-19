@@ -1,3 +1,4 @@
+use crate::ConfigRequirement;
 use crate::ConfigValues;
 use crate::diagnostic::CompileFailure;
 use fsc_assembler::Assembler;
@@ -76,6 +77,10 @@ pub fn compile(request: CompileRequest<'_>) -> Result<CompileArtifact, CompileFa
 pub fn check(source: &str) -> Result<(), CompileFailure> {
     check_source(source)?;
     Ok(())
+}
+
+pub fn required_configs(source: &str) -> Result<Vec<ConfigRequirement>, CompileFailure> {
+    Ok(check_source(source)?.config_requirements())
 }
 
 fn check_source(source: &str) -> Result<fsc_sema::CheckedScript, CompileFailure> {
