@@ -89,20 +89,20 @@ pub enum FaluOp {
 pub enum CmpOp {
     Eq = 0xb,
     Neq = 0xc,
-    Lt = 0xd,
-    Gt = 0xe,
-    Le = 0xf,
-    Ge = 0x10,
+    Gt = 0xd,
+    Lt = 0xe,
+    Ge = 0xf,
+    Le = 0x10,
 }
 
 #[repr(u16)]
 pub enum FCmpOp {
     Feq = 0xb,
     Fneq = 0xc,
-    Flt = 0xd,
-    Fgt = 0xe,
-    Fle = 0xf,
-    Fge = 0x10,
+    Fgt = 0xd,
+    Flt = 0xe,
+    Fge = 0xf,
+    Fle = 0x10,
 }
 
 #[repr(u16)]
