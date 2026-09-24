@@ -353,7 +353,11 @@ impl Parser {
         let then_body = self.parse_block()?;
 
         let else_body = if self.ts.eat(&TokenKind::KwElse) {
-            Some(self.parse_block()?)
+            if self.ts.peek() == Some(&TokenKind::KwIf) {
+                Some(vec![self.parse_if()?])
+            } else {
+                Some(self.parse_block()?)
+            }
         } else {
             None
         };
