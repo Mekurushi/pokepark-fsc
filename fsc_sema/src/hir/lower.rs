@@ -68,17 +68,45 @@ fn lower_fn(
     let mut layout = Layout::new();
     let param_count = func.header.params.len() as i16;
 
-    let body = lower_stmts(&func.body, resolutions, symbols, &mut layout)?;
+    let ret_ty = lower_ty(&func.header.ret_ty);
+    let mut body = lower_stmts(&func.body, resolutions, symbols, &mut layout)?;
+
+    if ret_ty == hir::Ty::Void && stmts_can_fall_through(&body) {
+        body.push(hir::Stmt::ReturnVoid);
+    }
 
     let frame = FrameLayout::new(param_count, layout.local_count);
 
     Ok(hir::FuncDef {
         name: func.header.name.clone(),
         exported: func.exported,
-        ret_ty: lower_ty(&func.header.ret_ty),
+        ret_ty,
         frame,
         body,
     })
+}
+
+fn stmts_can_fall_through(stmts: &[hir::Stmt]) -> bool {
+    stmts.iter().all(stmt_can_fall_through)
+}
+
+fn stmt_can_fall_through(stmt: &hir::Stmt) -> bool {
+    match stmt {
+        hir::Stmt::Return(_) | hir::Stmt::ReturnVoid | hir::Stmt::Break => false,
+        hir::Stmt::If {
+            then_body,
+            else_body: Some(else_body),
+            ..
+        } => stmts_can_fall_through(then_body) || stmts_can_fall_through(else_body),
+        hir::Stmt::If {
+            else_body: None, ..
+        }
+        | hir::Stmt::While { .. }
+        | hir::Stmt::VarDecl { .. }
+        | hir::Stmt::Assign { .. }
+        | hir::Stmt::ExprStmt(_)
+        | hir::Stmt::Pause(_) => true,
+    }
 }
 
 fn lower_stmts(
