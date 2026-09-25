@@ -51,6 +51,17 @@ pub enum SemaError {
         ty: Ty,
         type_span: Span,
     },
+    InvalidParameterType {
+        ty: Ty,
+        type_span: Span,
+    },
+    InvalidLocalType {
+        ty: Ty,
+        type_span: Span,
+    },
+    InvalidAssignmentTarget {
+        target_span: Span,
+    },
     ConstantInitializerMustBeLiteral {
         initializer_span: Span,
     },
@@ -72,6 +83,10 @@ pub enum SemaError {
         name: String,
         reference_span: Span,
         declaration_span: Span,
+    },
+    MissingLocalIdentity {
+        name: String,
+        reference_span: Span,
     },
 }
 
@@ -122,6 +137,15 @@ impl std::fmt::Display for SemaError {
             Self::InvalidConfigType { ty, .. } => {
                 write!(f, "configs cannot have type `{ty:?}`")
             }
+            Self::InvalidParameterType { ty, .. } => {
+                write!(f, "parameters cannot have type `{ty:?}`")
+            }
+            Self::InvalidLocalType { ty, .. } => {
+                write!(f, "local variables cannot have type `{ty:?}`")
+            }
+            Self::InvalidAssignmentTarget { .. } => {
+                write!(f, "assignment target is not a variable")
+            }
             Self::ConstantInitializerMustBeLiteral { .. } => {
                 write!(f, "constant initializer must be a literal")
             }
@@ -136,6 +160,9 @@ impl std::fmt::Display for SemaError {
             }
             Self::NotAValue { name, .. } => {
                 write!(f, "`{name}` is not a value")
+            }
+            Self::MissingLocalIdentity { name, .. } => {
+                write!(f, "local `{name}` has no logical identity")
             }
         }
     }
@@ -215,6 +242,19 @@ impl From<SemaError> for Diagnostic {
             SemaError::InvalidConfigType { ty, type_span } => diagnostic.with_label(
                 Label::primary(type_span, format!("`{ty:?}` cannot be used for a config")),
             ),
+            SemaError::InvalidParameterType { ty, type_span } => {
+                diagnostic.with_label(Label::primary(
+                    type_span,
+                    format!("`{ty:?}` cannot be used for a parameter"),
+                ))
+            }
+            SemaError::InvalidLocalType { ty, type_span } => diagnostic.with_label(Label::primary(
+                type_span,
+                format!("`{ty:?}` cannot be used for a local variable"),
+            )),
+            SemaError::InvalidAssignmentTarget { target_span } => diagnostic.with_label(
+                Label::primary(target_span, "only variables can be assigned to"),
+            ),
             SemaError::ConstantInitializerMustBeLiteral { initializer_span } => {
                 diagnostic.with_label(Label::primary(initializer_span, "not a literal expression"))
             }
@@ -245,6 +285,9 @@ impl From<SemaError> for Diagnostic {
             } => diagnostic
                 .with_label(Label::primary(reference_span, "used as a value here"))
                 .with_label(Label::secondary(declaration_span, "function declared here")),
+            SemaError::MissingLocalIdentity { reference_span, .. } => diagnostic.with_label(
+                Label::primary(reference_span, "this local has no semantic identity"),
+            ),
         }
     }
 }

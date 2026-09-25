@@ -8,12 +8,14 @@ use std::collections::HashMap;
 
 pub struct Resolutions {
     references: HashMap<NodeId, SymbolId>,
+    frame_symbols: Vec<SymbolId>,
 }
 
 impl Resolutions {
     fn new() -> Self {
         Self {
             references: HashMap::new(),
+            frame_symbols: Vec::new(),
         }
     }
 
@@ -26,6 +28,14 @@ impl Resolutions {
             Some(sym_id) => *sym_id,
             None => todo!("Symbol not found"), //TODO: explicit error
         }
+    }
+
+    pub(crate) fn frame_symbols(&self) -> &[SymbolId] {
+        &self.frame_symbols
+    }
+
+    fn add_frame_symbol(&mut self, symbol: SymbolId) {
+        self.frame_symbols.push(symbol);
     }
 }
 
@@ -190,6 +200,16 @@ fn declare_function(
     scope: &mut ScopeStack,
     symbols: &mut SymbolTable,
 ) -> SemaResult<()> {
+    // TODO: move with separation of concern
+    for param in &header.params {
+        if param.ty == ast::Ty::Void {
+            return Err(SemaError::InvalidParameterType {
+                ty: param.ty.clone(),
+                type_span: param.ty_span,
+            });
+        }
+    }
+
     let params = header
         .params
         .iter()
@@ -272,7 +292,8 @@ pub fn resolve_params(
     params: &[ParamInfo],
     scope: &mut ScopeStack,
     symbol_table: &mut SymbolTable,
-) -> SemaResult<()> {
+) -> SemaResult<Vec<SymbolId>> {
+    let mut symbols = Vec::with_capacity(params.len());
     for (index, param) in params.iter().enumerate() {
         let sym_id = symbol_table.insert(Symbol {
             name: param.name.clone(),
@@ -284,8 +305,9 @@ pub fn resolve_params(
             },
         });
         scope.declare(&param.name, sym_id, param.name_span)?;
+        symbols.push(sym_id);
     }
-    Ok(())
+    Ok(symbols)
 }
 
 pub fn resolve_fn(
@@ -300,7 +322,9 @@ pub fn resolve_fn(
         SymbolKind::Function { params, ret_ty } => (params, ret_ty),
         _ => todo!(),
     };
-    resolve_params(&params, scope, symbols)?;
+    for parameter in resolve_params(&params, scope, symbols)? {
+        resolutions.add_frame_symbol(parameter);
+    }
 
     resolve_stmts(&func.body, scope, symbols, &mut resolutions)?;
     scope.exit_scope();
@@ -340,6 +364,12 @@ fn resolve_stmt(
             ty_span,
             init,
         } => {
+            if *ty == ast::Ty::Void {
+                return Err(SemaError::InvalidLocalType {
+                    ty: ty.clone(),
+                    type_span: *ty_span,
+                });
+            }
             if let Some(e) = init {
                 resolve_expr(e, scope, resolutions)?;
             }
@@ -352,10 +382,16 @@ fn resolve_stmt(
             });
             scope.declare(name, sym_id, *name_span)?;
             resolutions.insert(stmt.id, sym_id);
+            resolutions.add_frame_symbol(sym_id);
             Ok(())
         }
 
         ast::StmtKind::Assign { target, expr } => {
+            if !matches!(target.kind, ast::ExprKind::Var(_)) {
+                return Err(SemaError::InvalidAssignmentTarget {
+                    target_span: target.span,
+                });
+            }
             resolve_expr(target, scope, resolutions)?;
             resolve_expr(expr, scope, resolutions)?;
             Ok(())

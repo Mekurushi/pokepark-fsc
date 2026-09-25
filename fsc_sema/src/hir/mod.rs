@@ -2,14 +2,21 @@ mod lower;
 
 pub(crate) use lower::lower_script;
 
-use crate::frame::{FrameLayout, StackSlot};
+use crate::local::LocalId;
+use crate::place::Place;
+use crate::types::Ty;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LocalKind {
+    Parameter,
+    Variable,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Ty {
-    Int,
-    Float,
-    Void,
-    Bool,
-    Str,
+pub struct Local {
+    pub id: LocalId,
+    pub ty: Ty,
+    pub kind: LocalKind,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -58,9 +65,8 @@ pub enum Expr {
         ty: Ty,
     },
 
-    Var {
-        name: String,
-        slot: StackSlot,
+    Load {
+        place: Place,
         ty: Ty,
     },
 
@@ -96,7 +102,7 @@ impl Expr {
         match self {
             Self::IntLit { ty, .. }
             | Self::FloatLit { ty, .. }
-            | Self::Var { ty, .. }
+            | Self::Load { ty, .. }
             | Self::BinOp { ty, .. }
             | Self::BoolLit { ty, .. }
             | Self::Unary { ty, .. }
@@ -114,13 +120,11 @@ pub enum Stmt {
 
     ReturnVoid,
     VarDecl {
-        name: String,
-        slot: StackSlot,
-        ty: Ty,
+        local: LocalId,
         init: Option<Expr>,
     },
     Assign {
-        slot: StackSlot,
+        target: Place,
         value: Expr,
     },
     ExprStmt(Expr),
@@ -141,7 +145,7 @@ pub struct FuncDef {
     pub name: String,
     pub exported: bool,
     pub ret_ty: Ty,
-    pub frame: FrameLayout,
+    pub locals: Vec<Local>,
     pub body: Vec<Stmt>,
 }
 

@@ -1,58 +1,67 @@
 mod label_ctx;
 
 use crate::error::{CodegenError, CodegenResult};
+use crate::frame::{plan_frame, FrameLayout};
 use crate::lower::label_ctx::LabelCtx;
 use fsc_assembler::Assembler;
-use fsc_sema::frame::FrameLayout;
-use fsc_sema::hir::{BinOp, Expr, FuncDef, Stmt, Ty, UnaryOp};
+use fsc_sema::hir::{BinOp, Expr, FuncDef, Stmt, UnaryOp};
+use fsc_sema::types::Ty;
+
+struct FunctionCx<'hir, 'asm> {
+    function: &'hir FuncDef,
+    frame: FrameLayout,
+    labels: LabelCtx,
+    asm: &'asm mut Assembler,
+}
 
 pub fn lower_func(func: &FuncDef, asm: &mut Assembler) -> CodegenResult<()> {
-    let frame = &func.frame;
-    let mut label_ctx = LabelCtx::new();
+    let frame = plan_frame(func)?;
+    let mut cx = FunctionCx {
+        function: func,
+        frame,
+        labels: LabelCtx::new(),
+        asm,
+    };
 
-    asm.define_function(&func.name, func.exported)
+    cx.asm
+        .define_function(&cx.function.name, cx.function.exported)
         .map_err(Into::<CodegenError>::into)?;
 
-    if frame.local_count() > 0 {
-        asm.emit_grow_stack(frame.local_count());
+    if cx.frame.local_slot_count() > 0 {
+        cx.asm.emit_grow_stack(cx.frame.local_slot_count());
     }
 
     for stmt in &func.body {
-        lower_stmt(stmt, frame, &mut label_ctx, asm)?;
+        lower_stmt(stmt, &mut cx)?;
     }
     Ok(())
 }
 
-pub fn lower_stmt(
-    stmt: &Stmt,
-    frame: &FrameLayout,
-    label_ctx: &mut LabelCtx,
-    asm: &mut Assembler,
-) -> CodegenResult<()> {
+fn lower_stmt(stmt: &Stmt, cx: &mut FunctionCx<'_, '_>) -> CodegenResult<()> {
     match stmt {
-        Stmt::Return(expr) => Ok(lower_return(expr, frame, label_ctx, asm)?),
-        Stmt::Break => match label_ctx.loop_end() {
-            Some(label) => Ok(asm.emit_jmp(label)?),
+        Stmt::Return(expr) => lower_return(expr, cx),
+        Stmt::Break => match cx.labels.loop_end() {
+            Some(label) => Ok(cx.asm.emit_jmp(label)?),
             None => todo!("error?"),
         },
         Stmt::ReturnVoid => {
-            asm.emit_ret(frame.frame_size());
+            cx.asm.emit_ret(cx.frame.frame_size());
             Ok(())
         }
-        Stmt::Assign { slot, value: expr } => {
-            lower_expr(expr, label_ctx, asm)?;
-            asm.emit_store_arg(slot.0);
-            Ok(())
-        }
-        Stmt::VarDecl {
-            name: _name,
-            slot,
-            ty: _ty,
-            init,
+        Stmt::Assign {
+            target,
+            value: expr,
         } => {
+            lower_expr(expr, cx)?;
+            let slot = cx.frame.resolve(*target)?;
+            cx.asm.emit_store_arg(slot.0);
+            Ok(())
+        }
+        Stmt::VarDecl { local, init } => {
             if let Some(expr) = init {
-                lower_expr(expr, label_ctx, asm)?;
-                asm.emit_store_arg(slot.0);
+                lower_expr(expr, cx)?;
+                let slot = cx.frame.resolve(fsc_sema::place::Place::new(*local))?;
+                cx.asm.emit_store_arg(slot.0);
             }
             Ok(())
         }
@@ -61,29 +70,29 @@ pub fn lower_stmt(
             then_body,
             else_body,
         } => {
-            lower_expr(cond, label_ctx, asm)?;
+            lower_expr(cond, cx)?;
             match else_body {
                 None => {
-                    let end = label_ctx.fresh_label("if_end");
-                    asm.emit_jz(&end)?;
+                    let end = cx.labels.fresh_label("if_end");
+                    cx.asm.emit_jz(&end)?;
                     for s in then_body {
-                        lower_stmt(s, frame, label_ctx, asm)?;
+                        lower_stmt(s, cx)?;
                     }
-                    asm.define_label(&end)?;
+                    cx.asm.define_label(&end)?;
                 }
                 Some(else_stmts) => {
-                    let else_lbl = label_ctx.fresh_label("else");
-                    let end = label_ctx.fresh_label("if_end");
-                    asm.emit_jz(&else_lbl)?;
+                    let else_lbl = cx.labels.fresh_label("else");
+                    let end = cx.labels.fresh_label("if_end");
+                    cx.asm.emit_jz(&else_lbl)?;
                     for s in then_body {
-                        lower_stmt(s, frame, label_ctx, asm)?;
+                        lower_stmt(s, cx)?;
                     }
-                    asm.emit_jmp(&end)?;
-                    asm.define_label(&else_lbl)?;
+                    cx.asm.emit_jmp(&end)?;
+                    cx.asm.define_label(&else_lbl)?;
                     for s in else_stmts {
-                        lower_stmt(s, frame, label_ctx, asm)?;
+                        lower_stmt(s, cx)?;
                     }
-                    asm.define_label(&end)?;
+                    cx.asm.define_label(&end)?;
                 }
             }
             Ok(())
@@ -91,7 +100,7 @@ pub fn lower_stmt(
         Stmt::ExprStmt(expr) => {
             match expr {
                 Expr::Call { callee, args, .. } => {
-                    lower_call(callee, args, label_ctx, asm)?;
+                    lower_call(callee, args, cx)?;
                 }
                 Expr::SysCall {
                     args,
@@ -99,84 +108,70 @@ pub fn lower_stmt(
                     page,
                     func,
                     ..
-                } => lower_syscall(args, label_ctx, asm, *subtype, *page, *func)?,
-                _ => lower_expr(expr, label_ctx, asm)?,
+                } => lower_syscall(args, cx, *subtype, *page, *func)?,
+                _ => lower_expr(expr, cx)?,
             }
             Ok(())
         }
         Stmt::While { cond, body } => {
-            lower_while(cond, body, frame, label_ctx, asm)?;
+            lower_while(cond, body, cx)?;
             Ok(())
         }
         Stmt::Pause(expr) => {
-            lower_expr(expr, label_ctx, asm)?;
+            lower_expr(expr, cx)?;
 
-            asm.emit_delay_load();
+            cx.asm.emit_delay_load();
             Ok(())
         }
     }
 }
 
-fn lower_while(
-    cond: &Expr,
-    body: &[Stmt],
-    frame: &FrameLayout,
-    label_ctx: &mut LabelCtx,
-    asm: &mut Assembler,
-) -> CodegenResult<()> {
-    let labels = label_ctx.enter_loop();
+fn lower_while(cond: &Expr, body: &[Stmt], cx: &mut FunctionCx<'_, '_>) -> CodegenResult<()> {
+    let labels = cx.labels.enter_loop();
 
-    asm.define_label(&labels.header)?;
+    cx.asm.define_label(&labels.header)?;
 
-    lower_expr(cond, label_ctx, asm)?;
-    asm.emit_jz(&labels.end)?;
+    lower_expr(cond, cx)?;
+    cx.asm.emit_jz(&labels.end)?;
 
     for s in body {
-        lower_stmt(s, frame, label_ctx, asm)?;
+        lower_stmt(s, cx)?;
     }
 
-    asm.emit_jmp(&labels.header)?;
-    asm.define_label(&labels.end)?;
+    cx.asm.emit_jmp(&labels.header)?;
+    cx.asm.define_label(&labels.end)?;
 
-    label_ctx.exit_loop();
+    cx.labels.exit_loop();
     Ok(())
 }
-fn lower_return(
-    expr: &Expr,
-    frame: &FrameLayout,
-    label_ctx: &mut LabelCtx,
-    asm: &mut Assembler,
-) -> CodegenResult<()> {
-    lower_expr(expr, label_ctx, asm)?;
-    asm.emit_retv(frame.frame_size());
+fn lower_return(expr: &Expr, cx: &mut FunctionCx<'_, '_>) -> CodegenResult<()> {
+    lower_expr(expr, cx)?;
+    cx.asm.emit_retv(cx.frame.frame_size());
     Ok(())
 }
 
-pub fn lower_expr(expr: &Expr, label_ctx: &mut LabelCtx, asm: &mut Assembler) -> CodegenResult<()> {
+fn lower_expr(expr: &Expr, cx: &mut FunctionCx<'_, '_>) -> CodegenResult<()> {
     match expr {
         Expr::IntLit { value, .. } => {
-            emit_int_lit(*value, asm);
+            emit_int_lit(*value, cx.asm);
         }
         Expr::FloatLit { value, .. } => {
-            asm.emit_push_imm(value.to_bits());
+            cx.asm.emit_push_imm(value.to_bits());
         }
         Expr::BoolLit { value, .. } => {
             if *value {
-                asm.emit_push(1);
+                cx.asm.emit_push(1);
             } else {
-                asm.emit_push(0);
+                cx.asm.emit_push(0);
             }
         }
         Expr::StrLit { value, .. } => {
-            asm.emit_lstr(value)?;
+            cx.asm.emit_lstr(value)?;
         }
 
-        Expr::Var {
-            name: _name,
-            slot,
-            ty: _ty,
-        } => {
-            asm.emit_load_arg(slot.0);
+        Expr::Load { place, ty: _ty } => {
+            let slot = cx.frame.resolve(*place)?;
+            cx.asm.emit_load_arg(slot.0);
         }
 
         Expr::Unary {
@@ -185,12 +180,12 @@ pub fn lower_expr(expr: &Expr, label_ctx: &mut LabelCtx, asm: &mut Assembler) ->
             ty,
         } => {
             // TODO: optimize push literal directly
-            lower_expr(expression, label_ctx, asm)?;
-            emit_unary(op, ty, asm);
+            lower_expr(expression, cx)?;
+            emit_unary(op, ty, cx.asm);
         }
         Expr::BinOp { op, lhs, rhs, .. } if matches!(op, BinOp::And | BinOp::Or) => match op {
-            BinOp::And => emit_and_short_circuit(lhs, rhs, label_ctx, asm)?,
-            BinOp::Or => emit_or_short_circuit(lhs, rhs, label_ctx, asm)?,
+            BinOp::And => emit_and_short_circuit(lhs, rhs, cx)?,
+            BinOp::Or => emit_or_short_circuit(lhs, rhs, cx)?,
             _ => unreachable!(),
         },
         Expr::BinOp {
@@ -200,16 +195,16 @@ pub fn lower_expr(expr: &Expr, label_ctx: &mut LabelCtx, asm: &mut Assembler) ->
             ty: _,
         } => {
             //TODO: for Eq == 0 optimization to eq0
-            lower_expr(lhs, label_ctx, asm)?;
-            lower_expr(rhs, label_ctx, asm)?;
+            lower_expr(lhs, cx)?;
+            lower_expr(rhs, cx)?;
 
-            emit_binop(op, lhs.ty(), asm);
+            emit_binop(op, lhs.ty(), cx.asm);
             // TODO: original scripts are saving in arg and load again; check if this is really
             // everytime necessary
         }
         Expr::Call { callee, args, .. } => {
-            lower_call(callee, args, label_ctx, asm)?;
-            asm.emit_push_result();
+            lower_call(callee, args, cx)?;
+            cx.asm.emit_push_result();
         }
         Expr::SysCall {
             page,
@@ -218,8 +213,8 @@ pub fn lower_expr(expr: &Expr, label_ctx: &mut LabelCtx, asm: &mut Assembler) ->
             args,
             ..
         } => {
-            lower_syscall(args, label_ctx, asm, *subtype, *page, *func)?;
-            asm.emit_push_result();
+            lower_syscall(args, cx, *subtype, *page, *func)?;
+            cx.asm.emit_push_result();
         }
     }
     Ok(())
@@ -227,79 +222,67 @@ pub fn lower_expr(expr: &Expr, label_ctx: &mut LabelCtx, asm: &mut Assembler) ->
 
 fn lower_syscall(
     args: &[Expr],
-    label_ctx: &mut LabelCtx,
-    asm: &mut Assembler,
+    cx: &mut FunctionCx<'_, '_>,
     subtype: u8,
     page: u8,
     func: u16,
 ) -> CodegenResult<()> {
     for arg in args.iter().rev() {
-        lower_expr(arg, label_ctx, asm)?;
+        lower_expr(arg, cx)?;
     }
-    asm.emit_syscall(subtype, page, func);
+    cx.asm.emit_syscall(subtype, page, func);
     Ok(())
 }
 
-fn lower_call(
-    callee: &str,
-    args: &[Expr],
-    label_ctx: &mut LabelCtx,
-    asm: &mut Assembler,
-) -> CodegenResult<()> {
+fn lower_call(callee: &str, args: &[Expr], cx: &mut FunctionCx<'_, '_>) -> CodegenResult<()> {
     // TODO: rev() used because of calling convention; check how to make this more explicit
     for arg in args.iter().rev() {
-        lower_expr(arg, label_ctx, asm)?;
+        lower_expr(arg, cx)?;
     }
-    asm.emit_call(callee)?;
+    cx.asm.emit_call(callee)?;
     Ok(())
 }
 fn emit_and_short_circuit(
     lhs: &Expr,
     rhs: &Expr,
-    ctx: &mut LabelCtx,
-    asm: &mut Assembler,
+    cx: &mut FunctionCx<'_, '_>,
 ) -> CodegenResult<()> {
-    let false_label = ctx.fresh_label("and_false");
-    let end_label = ctx.fresh_label("and_end");
+    let false_label = cx.labels.fresh_label("and_false");
+    let end_label = cx.labels.fresh_label("and_end");
 
-    lower_expr(lhs, ctx, asm)?;
-    asm.emit_jz(&false_label)?;
+    lower_expr(lhs, cx)?;
+    cx.asm.emit_jz(&false_label)?;
 
-    lower_expr(rhs, ctx, asm)?;
-    asm.emit_jz(&false_label)?;
+    lower_expr(rhs, cx)?;
+    cx.asm.emit_jz(&false_label)?;
 
-    asm.emit_push(1);
-    asm.emit_jmp(&end_label)?;
+    cx.asm.emit_push(1);
+    cx.asm.emit_jmp(&end_label)?;
 
-    asm.define_label(&false_label)?;
-    asm.emit_push(0);
+    cx.asm.define_label(&false_label)?;
+    cx.asm.emit_push(0);
 
-    asm.define_label(&end_label)?;
+    cx.asm.define_label(&end_label)?;
     Ok(())
 }
 
-fn emit_or_short_circuit(
-    lhs: &Expr,
-    rhs: &Expr,
-    ctx: &mut LabelCtx,
-    asm: &mut Assembler,
-) -> CodegenResult<()> {
-    let true_label = ctx.fresh_label("or_true");
-    let end_label = ctx.fresh_label("or_end");
+fn emit_or_short_circuit(lhs: &Expr, rhs: &Expr, cx: &mut FunctionCx<'_, '_>) -> CodegenResult<()> {
+    let true_label = cx.labels.fresh_label("or_true");
+    let end_label = cx.labels.fresh_label("or_end");
 
-    lower_expr(lhs, ctx, asm)?;
-    asm.emit_jnz(&true_label)?;
+    lower_expr(lhs, cx)?;
+    cx.asm.emit_jnz(&true_label)?;
 
-    lower_expr(rhs, ctx, asm)?;
-    asm.emit_jnz(&true_label)?;
+    lower_expr(rhs, cx)?;
+    cx.asm.emit_jnz(&true_label)?;
 
-    asm.emit_push(0);
-    asm.emit_jmp(&end_label)?;
+    cx.asm.emit_push(0);
+    cx.asm.emit_jmp(&end_label)?;
 
-    asm.define_label(&true_label)?;
-    asm.emit_push(1);
+    cx.asm.define_label(&true_label)?;
+    cx.asm.emit_push(1);
 
-    asm.define_label(&end_label)?;
+    cx.asm.define_label(&end_label)?;
     Ok(())
 }
 fn emit_int_lit(value: i32, asm: &mut Assembler) {

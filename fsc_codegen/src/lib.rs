@@ -4,6 +4,7 @@ use fsc_assembler::Assembler;
 use fsc_sema::hir::{FuncDef, Item, Script};
 
 mod error;
+mod frame;
 mod lower;
 
 pub fn compile(script: &Script, asm: &mut Assembler) -> CodegenResult<()> {

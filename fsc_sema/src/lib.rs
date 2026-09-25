@@ -7,11 +7,13 @@ mod bind;
 mod check;
 mod checked;
 mod error;
-pub mod frame;
 pub mod hir;
 mod infer;
+pub mod local;
+pub mod place;
 mod resolve;
 mod symbol;
+pub mod types;
 
 pub use bind::{
     BindError, BindErrors, BoundScript, ConfigRequirement, ConfigType, ConfigValue, ConfigValues,

@@ -1,0 +1,53 @@
+mod layout;
+
+use crate::error::{CodegenError, CodegenResult};
+use fsc_sema::local::LocalId;
+use fsc_sema::place::Place;
+use std::collections::HashMap;
+
+pub(crate) use layout::plan_frame;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct StackSlot(pub i16);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct StackAllocation {
+    pub base: StackSlot,
+    pub width: u16,
+}
+
+#[derive(Debug)]
+pub(crate) struct FrameLayout {
+    allocations: HashMap<LocalId, StackAllocation>,
+    parameter_slots: i16,
+    local_slots: i16,
+}
+
+impl FrameLayout {
+    pub(crate) fn new(
+        allocations: HashMap<LocalId, StackAllocation>,
+        parameter_slots: i16,
+        local_slots: i16,
+    ) -> Self {
+        Self {
+            allocations,
+            parameter_slots,
+            local_slots,
+        }
+    }
+
+    pub(crate) fn resolve(&self, place: Place) -> CodegenResult<StackSlot> {
+        self.allocations
+            .get(&place.local)
+            .map(|allocation| allocation.base)
+            .ok_or(CodegenError::UnknownLocal(place.local))
+    }
+
+    pub(crate) const fn local_slot_count(&self) -> i16 {
+        self.local_slots
+    }
+
+    pub(crate) const fn frame_size(&self) -> i16 {
+        self.parameter_slots + self.local_slots
+    }
+}

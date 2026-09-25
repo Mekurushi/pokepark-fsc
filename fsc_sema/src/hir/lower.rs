@@ -1,47 +1,68 @@
 use crate::bind::BoundScript;
 use crate::checked::CheckedScript;
 use crate::error::{SemaError, SemaResult};
-use crate::frame::{FrameLayout, StackSlot};
 use crate::hir;
 use crate::infer::infer_expr;
+use crate::local::LocalId;
+use crate::place::Place;
 use crate::resolve::Resolutions;
-use crate::symbol::{ConstValue, Symbol, SymbolId, SymbolKind, SymbolTable};
+use crate::symbol::{ConstValue, SymbolId, SymbolKind, SymbolTable};
+use crate::types::Ty;
 use fsc_parse::ast::{self, Expr, FuncDef, Stmt};
 use std::collections::HashMap;
 
-// TODO: short-circuit
-struct Layout {
-    slots: HashMap<SymbolId, StackSlot>,
-    local_count: i16,
+struct HirLocals {
+    declarations: Vec<hir::Local>,
+    by_symbol: HashMap<SymbolId, LocalId>,
 }
 
-#[derive(Clone, Copy)]
-enum StackBinding {
-    Param { index: u32 },
-    Local,
-}
+//TODO: cleanup with separation of concern
+impl HirLocals {
+    fn new(resolutions: &Resolutions, symbols: &SymbolTable) -> Self {
+        let mut declarations = Vec::new();
+        let mut by_symbol = HashMap::new();
 
-impl Layout {
-    fn new() -> Self {
+        for &symbol_id in resolutions.frame_symbols() {
+            let symbol = symbols.get(symbol_id);
+            let kind = match symbol.kind {
+                SymbolKind::Param { .. } => hir::LocalKind::Parameter,
+                SymbolKind::Local => hir::LocalKind::Variable,
+                SymbolKind::Const { .. } | SymbolKind::Config | SymbolKind::Function { .. } => {
+                    continue;
+                }
+            };
+            let local = LocalId::new(declarations.len() as u32);
+            declarations.push(hir::Local {
+                id: local,
+                ty: Ty::from(&symbol.ty),
+                kind,
+            });
+            by_symbol.insert(symbol_id, local);
+        }
+
         Self {
-            slots: HashMap::new(),
-            local_count: 0,
+            declarations,
+            by_symbol,
         }
     }
 
-    fn slot_for(&mut self, sym_id: SymbolId, binding: StackBinding) -> StackSlot {
-        if let Some(&slot) = self.slots.get(&sym_id) {
-            return slot;
-        }
-        let slot = match binding {
-            StackBinding::Param { index } => StackSlot(index as i16),
-            StackBinding::Local => {
-                self.local_count += 1;
-                StackSlot(-self.local_count)
-            }
-        };
-        self.slots.insert(sym_id, slot);
-        slot
+    fn local_for_symbol(
+        &self,
+        symbol: SymbolId,
+        name: &str,
+        reference_span: fsc_diagnostics::Span,
+    ) -> SemaResult<LocalId> {
+        self.by_symbol
+            .get(&symbol)
+            .copied()
+            .ok_or_else(|| SemaError::MissingLocalIdentity {
+                name: name.to_owned(),
+                reference_span,
+            })
+    }
+
+    fn into_declarations(self) -> Vec<hir::Local> {
+        self.declarations
     }
 }
 
@@ -65,23 +86,20 @@ fn lower_fn(
     resolutions: &Resolutions,
     symbols: &SymbolTable,
 ) -> SemaResult<hir::FuncDef> {
-    let mut layout = Layout::new();
-    let param_count = func.header.params.len() as i16;
+    let locals = HirLocals::new(resolutions, symbols);
 
     let ret_ty = lower_ty(&func.header.ret_ty);
-    let mut body = lower_stmts(&func.body, resolutions, symbols, &mut layout)?;
+    let mut body = lower_stmts(&func.body, resolutions, symbols, &locals)?;
 
-    if ret_ty == hir::Ty::Void && stmts_can_fall_through(&body) {
+    if ret_ty == Ty::Void && stmts_can_fall_through(&body) {
         body.push(hir::Stmt::ReturnVoid);
     }
-
-    let frame = FrameLayout::new(param_count, layout.local_count);
 
     Ok(hir::FuncDef {
         name: func.header.name.clone(),
         exported: func.exported,
         ret_ty,
-        frame,
+        locals: locals.into_declarations(),
         body,
     })
 }
@@ -113,11 +131,11 @@ fn lower_stmts(
     stmts: &[Stmt],
     resolutions: &Resolutions,
     symbols: &SymbolTable,
-    layout: &mut Layout,
+    locals: &HirLocals,
 ) -> SemaResult<Vec<hir::Stmt>> {
     stmts
         .iter()
-        .map(|s| lower_stmt(s, resolutions, symbols, layout))
+        .map(|s| lower_stmt(s, resolutions, symbols, locals))
         .collect()
 }
 
@@ -125,7 +143,7 @@ fn lower_stmt(
     stmt: &Stmt,
     resolutions: &Resolutions,
     symbols: &SymbolTable,
-    layout: &mut Layout,
+    locals: &HirLocals,
 ) -> SemaResult<hir::Stmt> {
     match &stmt.kind {
         ast::StmtKind::Return(expr) => match expr {
@@ -133,27 +151,23 @@ fn lower_stmt(
                 e,
                 resolutions,
                 symbols,
-                layout,
+                locals,
             )?)),
             None => Ok(hir::Stmt::ReturnVoid),
         },
         ast::StmtKind::Break => Ok(hir::Stmt::Break),
 
-        ast::StmtKind::VarDecl { name, ty, init, .. } => {
+        ast::StmtKind::VarDecl { init, .. } => {
             let hir_init = init
                 .as_ref()
-                .map(|e| lower_expr(e, resolutions, symbols, layout))
+                .map(|e| lower_expr(e, resolutions, symbols, locals))
                 .transpose()?;
-            // TODO: rethink statement NOdeId resolution
             let sym_id = resolutions.symbol(stmt.id);
             let sym = symbols.get(sym_id);
-            let binding = stack_binding(sym, stmt.span)?;
-            let slot = layout.slot_for(sym_id, binding);
+            let local = locals.local_for_symbol(sym_id, &sym.name, stmt.span)?;
 
             Ok(hir::Stmt::VarDecl {
-                name: name.clone(),
-                slot,
-                ty: lower_ty(ty),
+                local,
                 init: hir_init,
             })
         }
@@ -161,12 +175,11 @@ fn lower_stmt(
         ast::StmtKind::Assign { target, expr } => {
             let sym_id = resolutions.symbol(target.id);
             let sym = symbols.get(sym_id);
-            let binding = stack_binding(sym, target.span)?;
-            let slot = layout.slot_for(sym_id, binding);
+            let local = locals.local_for_symbol(sym_id, &sym.name, target.span)?;
 
             Ok(hir::Stmt::Assign {
-                slot,
-                value: lower_expr(expr, resolutions, symbols, layout)?,
+                target: Place::new(local),
+                value: lower_expr(expr, resolutions, symbols, locals)?,
             })
         }
 
@@ -175,29 +188,29 @@ fn lower_stmt(
             then_body,
             else_body,
         } => Ok(hir::Stmt::If {
-            cond: lower_expr(cond, resolutions, symbols, layout)?,
-            then_body: lower_stmts(then_body, resolutions, symbols, layout)?,
+            cond: lower_expr(cond, resolutions, symbols, locals)?,
+            then_body: lower_stmts(then_body, resolutions, symbols, locals)?,
             else_body: else_body
                 .as_ref()
-                .map(|b| lower_stmts(b, resolutions, symbols, layout))
+                .map(|b| lower_stmts(b, resolutions, symbols, locals))
                 .transpose()?,
         }),
 
         ast::StmtKind::While { cond, body } => Ok(hir::Stmt::While {
-            cond: lower_expr(cond, resolutions, symbols, layout)?,
-            body: lower_stmts(body, resolutions, symbols, layout)?,
+            cond: lower_expr(cond, resolutions, symbols, locals)?,
+            body: lower_stmts(body, resolutions, symbols, locals)?,
         }),
         ast::StmtKind::ExprStmt(expr) => Ok(hir::Stmt::ExprStmt(lower_expr(
             expr,
             resolutions,
             symbols,
-            layout,
+            locals,
         )?)),
         ast::StmtKind::Pause(expr) => Ok(hir::Stmt::Pause(lower_expr(
             expr,
             resolutions,
             symbols,
-            layout,
+            locals,
         )?)),
     }
 }
@@ -206,25 +219,25 @@ fn lower_expr(
     expr: &Expr,
     resolutions: &Resolutions,
     symbols: &SymbolTable,
-    layout: &mut Layout,
+    locals: &HirLocals,
 ) -> SemaResult<hir::Expr> {
     match &expr.kind {
         ast::ExprKind::IntLit(v) => Ok(hir::Expr::IntLit {
             value: *v,
-            ty: hir::Ty::Int,
+            ty: Ty::Int,
         }),
         ast::ExprKind::FloatLit(v) => Ok(hir::Expr::FloatLit {
             value: *v,
-            ty: hir::Ty::Float,
+            ty: Ty::Float,
         }),
         ast::ExprKind::StringLit(v) => Ok(hir::Expr::StrLit {
             value: v.clone(),
-            ty: hir::Ty::Int,
+            ty: Ty::Int,
         }),
 
         ast::ExprKind::BoolLit(v) => Ok(hir::Expr::BoolLit {
             value: *v,
-            ty: hir::Ty::Bool,
+            ty: Ty::Bool,
         }),
 
         ast::ExprKind::Var(_name) => {
@@ -236,19 +249,10 @@ fn lower_expr(
                     name: sym.name.clone(),
                     declaration_span: sym.name_span,
                 }),
-                SymbolKind::Param { index } => {
-                    let slot = layout.slot_for(sym_id, StackBinding::Param { index: *index });
-                    Ok(hir::Expr::Var {
-                        name: sym.name.clone(),
-                        slot,
-                        ty: lower_ty(&sym.ty),
-                    })
-                }
-                SymbolKind::Local => {
-                    let slot = layout.slot_for(sym_id, StackBinding::Local);
-                    Ok(hir::Expr::Var {
-                        name: sym.name.clone(),
-                        slot,
+                SymbolKind::Param { .. } | SymbolKind::Local => {
+                    let local = locals.local_for_symbol(sym_id, &sym.name, expr.span)?;
+                    Ok(hir::Expr::Load {
+                        place: Place::new(local),
                         ty: lower_ty(&sym.ty),
                     })
                 }
@@ -264,8 +268,8 @@ fn lower_expr(
             let ty = infer_expr(expr, resolutions, symbols)?;
             Ok(hir::Expr::BinOp {
                 op: lower_binop(op),
-                lhs: Box::new(lower_expr(lhs, resolutions, symbols, layout)?),
-                rhs: Box::new(lower_expr(rhs, resolutions, symbols, layout)?),
+                lhs: Box::new(lower_expr(lhs, resolutions, symbols, locals)?),
+                rhs: Box::new(lower_expr(rhs, resolutions, symbols, locals)?),
                 ty: lower_ty(&ty),
             })
         }
@@ -274,7 +278,7 @@ fn lower_expr(
             let ty = infer_expr(expr, resolutions, symbols)?;
             Ok(hir::Expr::Unary {
                 op: lower_unaryop(op),
-                expr: Box::new(lower_expr(inner, resolutions, symbols, layout)?),
+                expr: Box::new(lower_expr(inner, resolutions, symbols, locals)?),
                 ty: lower_ty(&ty),
             })
         }
@@ -286,7 +290,7 @@ fn lower_expr(
                 callee: callee.clone(),
                 args: args
                     .iter()
-                    .map(|x| lower_expr(x, resolutions, symbols, layout))
+                    .map(|x| lower_expr(x, resolutions, symbols, locals))
                     .collect::<Result<_, _>>()?,
                 ty: lower_ty(&ty),
             })
@@ -295,7 +299,7 @@ fn lower_expr(
             let (page, func) = extract_syscall(args)?;
             let lowered_args: Vec<_> = args[2..]
                 .iter()
-                .map(|a| lower_expr(a, resolutions, symbols, layout))
+                .map(|a| lower_expr(a, resolutions, symbols, locals))
                 .collect::<Result<_, _>>()?;
 
             let subtype = lowered_args.len() as u8;
@@ -305,34 +309,9 @@ fn lower_expr(
                 func,
                 subtype,
                 args: lowered_args,
-                ty: hir::Ty::Int,
+                ty: Ty::Int,
             })
         }
-    }
-}
-
-fn stack_binding(
-    symbol: &Symbol,
-    reference_span: fsc_diagnostics::Span,
-) -> SemaResult<StackBinding> {
-    match symbol.kind {
-        SymbolKind::Param { index } => Ok(StackBinding::Param { index }),
-        SymbolKind::Local => Ok(StackBinding::Local),
-        SymbolKind::Const { .. } => Err(SemaError::AssignmentToConstant {
-            name: symbol.name.clone(),
-            assignment_span: reference_span,
-            declaration_span: symbol.name_span,
-        }),
-        SymbolKind::Config => Err(SemaError::AssignmentToConfig {
-            name: symbol.name.clone(),
-            assignment_span: reference_span,
-            declaration_span: symbol.name_span,
-        }),
-        SymbolKind::Function { .. } => Err(SemaError::NotAValue {
-            name: symbol.name.clone(),
-            reference_span,
-            declaration_span: symbol.name_span,
-        }),
     }
 }
 
@@ -340,19 +319,19 @@ fn lower_const_value(value: &ConstValue) -> hir::Expr {
     match value {
         ConstValue::Int(value) => hir::Expr::IntLit {
             value: *value,
-            ty: hir::Ty::Int,
+            ty: Ty::Int,
         },
         ConstValue::Float(value) => hir::Expr::FloatLit {
             value: *value,
-            ty: hir::Ty::Float,
+            ty: Ty::Float,
         },
         ConstValue::Bool(value) => hir::Expr::BoolLit {
             value: *value,
-            ty: hir::Ty::Bool,
+            ty: Ty::Bool,
         },
         ConstValue::Str(value) => hir::Expr::StrLit {
             value: value.clone(),
-            ty: hir::Ty::Int,
+            ty: Ty::Int,
         },
     }
 }
@@ -381,14 +360,8 @@ fn extract_syscall_u16(expr: &Expr) -> SemaResult<u16> {
     }
 }
 
-fn lower_ty(ty: &ast::Ty) -> hir::Ty {
-    match ty {
-        ast::Ty::Int => hir::Ty::Int,
-        ast::Ty::Float => hir::Ty::Float,
-        ast::Ty::Void => hir::Ty::Void,
-        ast::Ty::Bool => hir::Ty::Bool,
-        ast::Ty::Str => hir::Ty::Str,
-    }
+fn lower_ty(ty: &ast::Ty) -> Ty {
+    Ty::from(ty)
 }
 
 fn lower_unaryop(op: &ast::UnaryOp) -> hir::UnaryOp {

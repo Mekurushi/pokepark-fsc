@@ -1,4 +1,5 @@
 use fsc_assembler::error::AssemblerError;
+use fsc_sema::local::LocalId;
 
 #[derive(Debug, PartialEq)]
 pub enum CodegenError {
@@ -6,6 +7,14 @@ pub enum CodegenError {
     UndeclaredVariable(String),
 
     AlreadyDeclared(String),
+
+    FrameTooLarge,
+
+    UnknownLocal(LocalId),
+
+    DuplicateLocal(LocalId),
+
+    InvalidLocalType(LocalId),
 
     Assembler(String),
 }
@@ -18,6 +27,18 @@ impl std::fmt::Display for CodegenError {
             }
             Self::AlreadyDeclared(name) => {
                 write!(f, "variable `{name}` already declared in this scope")
+            }
+            Self::FrameTooLarge => {
+                write!(f, "function frame exceeds the VM slot limit")
+            }
+            Self::UnknownLocal(local) => {
+                write!(f, "no frame allocation exists for local `{local:?}`")
+            }
+            Self::DuplicateLocal(local) => {
+                write!(f, "local `{local:?}` is declared more than once")
+            }
+            Self::InvalidLocalType(local) => {
+                write!(f, "local `{local:?}` has no frame storage representation")
             }
             Self::Assembler(msg) => {
                 write!(f, "assembler error: {msg}")
