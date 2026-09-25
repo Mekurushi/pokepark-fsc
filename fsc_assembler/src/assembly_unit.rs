@@ -182,7 +182,14 @@ impl AssemblyUnit {
 
     fn build_binary_symbol_table(&self) -> BinarySymbolTable {
         let mut table = BinarySymbolTable::new();
-        for symbol in self.symbol_table.exports() {
+        let mut exports: Vec<_> = self.symbol_table.exports().collect();
+        exports.sort_by(|left, right| {
+            left.offset
+                .cmp(&right.offset)
+                .then_with(|| left.name.cmp(&right.name))
+        });
+
+        for symbol in exports {
             table.add(symbol.name.clone(), symbol.offset);
         }
         table
