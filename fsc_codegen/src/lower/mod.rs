@@ -60,7 +60,7 @@ fn lower_stmt(stmt: &Stmt, cx: &mut FunctionCx<'_, '_>) -> CodegenResult<()> {
         Stmt::VarDecl { local, init } => {
             if let Some(expr) = init {
                 lower_expr(expr, cx)?;
-                let slot = cx.frame.resolve(fsc_sema::place::Place::new(*local))?;
+                let slot = cx.frame.resolve(fsc_sema::hir::Place::new(*local))?;
                 cx.asm.emit_store_arg(slot.0);
             }
             Ok(())

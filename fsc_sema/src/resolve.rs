@@ -1,6 +1,6 @@
-use crate::check::check_assignable;
 use crate::error::{SemaError, SemaResult};
 use crate::symbol::{ConstValue, ParamInfo, Symbol, SymbolId, SymbolKind, SymbolTable};
+use crate::types::Ty;
 use fsc_diagnostics::Span;
 use fsc_parse::ast;
 use fsc_parse::ast::NodeId;
@@ -9,6 +9,11 @@ use std::collections::HashMap;
 pub struct Resolutions {
     references: HashMap<NodeId, SymbolId>,
     frame_symbols: Vec<SymbolId>,
+}
+
+pub(crate) struct ResolvedFunction {
+    pub(crate) symbol: SymbolId,
+    pub(crate) resolutions: Resolutions,
 }
 
 impl Resolutions {
@@ -180,7 +185,7 @@ fn declare_config(
 ) -> SemaResult<()> {
     if config.ty == ast::Ty::Void {
         return Err(SemaError::InvalidConfigType {
-            ty: config.ty.clone(),
+            ty: Ty::from(&config.ty),
             type_span: config.ty_span,
         });
     }
@@ -188,7 +193,7 @@ fn declare_config(
     let symbol = symbols.insert(Symbol {
         name: config.name.clone(),
         name_span: config.name_span,
-        ty: config.ty.clone(),
+        ty: Ty::from(&config.ty),
         type_span: config.ty_span,
         kind: SymbolKind::Config,
     });
@@ -204,7 +209,7 @@ fn declare_function(
     for param in &header.params {
         if param.ty == ast::Ty::Void {
             return Err(SemaError::InvalidParameterType {
-                ty: param.ty.clone(),
+                ty: Ty::from(&param.ty),
                 type_span: param.ty_span,
             });
         }
@@ -216,17 +221,17 @@ fn declare_function(
         .map(|param| ParamInfo {
             name: param.name.clone(),
             name_span: param.name_span,
-            ty: param.ty.clone(),
+            ty: Ty::from(&param.ty),
             type_span: param.ty_span,
         })
         .collect();
     let symbol = symbols.insert(Symbol {
         name: header.name.clone(),
         name_span: header.name_span,
-        ty: header.ret_ty.clone(),
+        ty: Ty::from(&header.ret_ty),
         type_span: header.ret_ty_span,
         kind: SymbolKind::Function {
-            ret_ty: header.ret_ty.clone(),
+            ret_ty: Ty::from(&header.ret_ty),
             params,
         },
     });
@@ -240,7 +245,7 @@ fn declare_constant(
 ) -> SemaResult<()> {
     if constant.ty == ast::Ty::Void {
         return Err(SemaError::InvalidConstantType {
-            ty: constant.ty.clone(),
+            ty: Ty::from(&constant.ty),
             type_span: constant.ty_span,
         });
     }
@@ -256,24 +261,16 @@ fn declare_constant(
             });
         }
     };
-    check_assignable(
-        &constant.ty,
-        &value.ty(),
-        constant.initializer.span,
-        Some(constant.ty_span),
-    )?;
-
     let symbol = symbols.insert(Symbol {
         name: constant.name.clone(),
         name_span: constant.name_span,
-        ty: constant.ty.clone(),
+        ty: Ty::from(&constant.ty),
         type_span: constant.ty_span,
         kind: SymbolKind::Const { value },
     });
     scope.declare(&constant.name, symbol, constant.name_span)
 }
 
-//TODO: resolve concern mixup between check, infer and resolve
 fn validate_unique_params(params: &[ast::Param]) -> SemaResult<()> {
     let mut declarations = HashMap::new();
     for param in params {
@@ -314,10 +311,10 @@ pub fn resolve_fn(
     func: &ast::FuncDef,
     symbols: &mut SymbolTable,
     scope: &mut ScopeStack,
-) -> SemaResult<Resolutions> {
+) -> SemaResult<ResolvedFunction> {
     scope.enter_function_scope();
-    let mut resolutions = Resolutions::new();
     let fn_symbol_id = scope.lookup(&func.header.name, func.header.name_span)?;
+    let mut resolutions = Resolutions::new();
     let (params, ..) = match symbols.get(fn_symbol_id).kind.clone() {
         SymbolKind::Function { params, ret_ty } => (params, ret_ty),
         _ => todo!(),
@@ -328,7 +325,10 @@ pub fn resolve_fn(
 
     resolve_stmts(&func.body, scope, symbols, &mut resolutions)?;
     scope.exit_scope();
-    Ok(resolutions)
+    Ok(ResolvedFunction {
+        symbol: fn_symbol_id,
+        resolutions,
+    })
 }
 
 fn resolve_stmts(
@@ -366,7 +366,7 @@ fn resolve_stmt(
         } => {
             if *ty == ast::Ty::Void {
                 return Err(SemaError::InvalidLocalType {
-                    ty: ty.clone(),
+                    ty: Ty::from(ty),
                     type_span: *ty_span,
                 });
             }
@@ -376,7 +376,7 @@ fn resolve_stmt(
             let sym_id = symbols.insert(Symbol {
                 name: name.clone(),
                 name_span: *name_span,
-                ty: ty.clone(),
+                ty: Ty::from(ty),
                 type_span: *ty_span,
                 kind: SymbolKind::Local,
             });

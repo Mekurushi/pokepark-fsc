@@ -1,5 +1,5 @@
+use crate::types::Ty;
 use fsc_diagnostics::{Diagnostic, Label, Span, Stage};
-use fsc_parse::ast::Ty;
 
 #[derive(Debug, PartialEq)]
 pub enum SemaError {
@@ -88,6 +88,13 @@ pub enum SemaError {
         name: String,
         reference_span: Span,
     },
+    MissingExpressionType {
+        span: Span,
+    },
+    MissingFunctionSignature {
+        name: String,
+        declaration_span: Span,
+    },
 }
 
 impl std::fmt::Display for SemaError {
@@ -163,6 +170,18 @@ impl std::fmt::Display for SemaError {
             }
             Self::MissingLocalIdentity { name, .. } => {
                 write!(f, "local `{name}` has no logical identity")
+            }
+            Self::MissingExpressionType { .. } => {
+                write!(
+                    f,
+                    "internal compiler error: checked expression has no semantic type"
+                )
+            }
+            Self::MissingFunctionSignature { name, .. } => {
+                write!(
+                    f,
+                    "internal compiler error: `{name}` has no semantic function signature"
+                )
             }
         }
     }
@@ -288,6 +307,16 @@ impl From<SemaError> for Diagnostic {
             SemaError::MissingLocalIdentity { reference_span, .. } => diagnostic.with_label(
                 Label::primary(reference_span, "this local has no semantic identity"),
             ),
+            SemaError::MissingExpressionType { span } => diagnostic.with_label(Label::primary(
+                span,
+                "semantic type information is missing for this expression",
+            )),
+            SemaError::MissingFunctionSignature {
+                declaration_span, ..
+            } => diagnostic.with_label(Label::primary(
+                declaration_span,
+                "resolved function identity does not refer to a function signature",
+            )),
         }
     }
 }

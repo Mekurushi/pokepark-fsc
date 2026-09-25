@@ -1,23 +1,12 @@
+mod local;
 mod lower;
+mod place;
 
+pub use local::{Local, LocalId, LocalKind};
 pub(crate) use lower::lower_script;
+pub use place::Place;
 
-use crate::local::LocalId;
-use crate::place::Place;
 use crate::types::Ty;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LocalKind {
-    Parameter,
-    Variable,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Local {
-    pub id: LocalId,
-    pub ty: Ty,
-    pub kind: LocalKind,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UnaryOp {

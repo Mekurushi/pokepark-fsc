@@ -1,4 +1,4 @@
-use crate::local::LocalId;
+use super::LocalId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Place {

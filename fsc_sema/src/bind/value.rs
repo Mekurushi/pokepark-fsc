@@ -1,4 +1,4 @@
-use fsc_parse::ast::Ty;
+use crate::types::Ty;
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

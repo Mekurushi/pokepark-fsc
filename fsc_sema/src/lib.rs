@@ -4,15 +4,12 @@ use crate::symbol::SymbolTable;
 use fsc_parse::ast;
 
 mod bind;
-mod check;
 mod checked;
 mod error;
 pub mod hir;
-mod infer;
-pub mod local;
-pub mod place;
 mod resolve;
 mod symbol;
+mod type_check;
 pub mod types;
 
 pub use bind::{
@@ -26,14 +23,22 @@ pub fn check(script: ast::Script) -> SemaResult<CheckedScript> {
     let mut symbols = SymbolTable::new();
     declare_items(&script, &mut scope, &mut symbols)?;
 
+    for item in &script.items {
+        if let ast::Item::ConstDecl(constant) = item {
+            type_check::check_constant(constant)?;
+        }
+    }
+
     let mut functions = Vec::new();
     for item in &script.items {
         if let ast::Item::FuncDef(function) = item {
-            let resolutions = resolve::resolve_fn(function, &mut symbols, &mut scope)?;
-            check::check_fn(function, &resolutions, &symbols)?;
+            let resolved = resolve::resolve_fn(function, &mut symbols, &mut scope)?;
+            let expression_types = type_check::check_fn(function, &resolved.resolutions, &symbols)?;
             functions.push(CheckedFunction {
                 function: function.clone(),
-                resolutions,
+                symbol: resolved.symbol,
+                resolutions: resolved.resolutions,
+                expression_types,
             });
         }
     }

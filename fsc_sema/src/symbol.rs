@@ -1,5 +1,5 @@
+use crate::types::Ty;
 use fsc_diagnostics::Span;
-use fsc_parse::ast::Ty;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SymbolId(u32);
@@ -27,17 +27,6 @@ pub(crate) enum ConstValue {
     Float(f32),
     Bool(bool),
     Str(String),
-}
-
-impl ConstValue {
-    pub(crate) fn ty(&self) -> Ty {
-        match self {
-            Self::Int(_) => Ty::Int,
-            Self::Float(_) => Ty::Float,
-            Self::Bool(_) => Ty::Bool,
-            Self::Str(_) => Ty::Str,
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

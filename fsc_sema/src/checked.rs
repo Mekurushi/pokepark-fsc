@@ -1,6 +1,7 @@
 use crate::bind::{ConfigRequirement, ConfigType};
 use crate::resolve::Resolutions;
-use crate::symbol::{SymbolKind, SymbolTable};
+use crate::symbol::{SymbolId, SymbolKind, SymbolTable};
+use crate::type_check::ExpressionTypes;
 use fsc_parse::ast;
 
 pub struct CheckedScript {
@@ -34,5 +35,7 @@ impl CheckedScript {
 
 pub struct CheckedFunction {
     pub(crate) function: ast::FuncDef,
+    pub(crate) symbol: SymbolId,
     pub(crate) resolutions: Resolutions,
+    pub(crate) expression_types: ExpressionTypes,
 }

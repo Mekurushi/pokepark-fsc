@@ -1,5 +1,5 @@
+use crate::types::Ty;
 use fsc_diagnostics::{Diagnostic, Label, Span, Stage};
-use fsc_parse::ast::Ty;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum BindError {
