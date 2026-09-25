@@ -1,5 +1,6 @@
+use crate::checked::CheckedFunction;
 use crate::error::{SemaError, SemaResult};
-use crate::resolve::Resolutions;
+use crate::resolve::{Resolutions, ResolvedFunction};
 use crate::symbol::{SymbolKind, SymbolTable};
 use crate::types::Ty;
 use fsc_diagnostics::Span;
@@ -247,39 +248,72 @@ impl<'a> TypeChecker<'a> {
     }
 }
 
-pub(crate) fn check_constant(constant: &ast::ConstDecl) -> SemaResult<()> {
-    let found = match &constant.initializer.kind {
-        ExprKind::IntLit(_) => Ty::Int,
-        ExprKind::FloatLit(_) => Ty::Float,
-        ExprKind::BoolLit(_) => Ty::Bool,
-        ExprKind::StringLit(_) => Ty::Str,
-        _ => {
-            return Err(SemaError::ConstantInitializerMustBeLiteral {
-                initializer_span: constant.initializer.span,
-            });
-        }
-    };
-
-    check_assignable(
-        &Ty::from(&constant.ty),
-        &found,
-        constant.initializer.span,
-        Some(constant.ty_span),
-    )
-}
-
-pub(crate) fn check_fn(
-    func: &ast::FuncDef,
-    resolutions: &Resolutions,
+pub(crate) fn check(
+    resolved_functions: Vec<(ast::FuncDef, ResolvedFunction)>,
     symbols: &SymbolTable,
-) -> SemaResult<ExpressionTypes> {
-    let mut checker = TypeChecker::new(resolutions, symbols);
-    checker.check_stmts(
-        &func.body,
-        &Ty::from(&func.header.ret_ty),
-        func.header.ret_ty_span,
-    )?;
-    Ok(checker.expression_types)
+) -> SemaResult<Vec<CheckedFunction>> {
+    for (_, symbol) in symbols.iter() {
+        match &symbol.kind {
+            SymbolKind::Config if symbol.ty == Ty::Void => {
+                return Err(SemaError::InvalidConfigType {
+                    ty: symbol.ty.clone(),
+                    type_span: symbol.type_span,
+                });
+            }
+            SymbolKind::Const { value, value_span } => {
+                if symbol.ty == Ty::Void {
+                    return Err(SemaError::InvalidConstantType {
+                        ty: symbol.ty.clone(),
+                        type_span: symbol.type_span,
+                    });
+                }
+                check_assignable(&symbol.ty, &value.ty(), *value_span, Some(symbol.type_span))?;
+            }
+            SymbolKind::Function { params, .. } => {
+                for parameter in params {
+                    if parameter.ty == Ty::Void {
+                        return Err(SemaError::InvalidParameterType {
+                            ty: parameter.ty.clone(),
+                            type_span: parameter.type_span,
+                        });
+                    }
+                }
+            }
+            SymbolKind::Local if symbol.ty == Ty::Void => {
+                return Err(SemaError::InvalidLocalType {
+                    ty: symbol.ty.clone(),
+                    type_span: symbol.type_span,
+                });
+            }
+            SymbolKind::Param { .. } | SymbolKind::Local | SymbolKind::Config => {}
+        }
+    }
+
+    resolved_functions
+        .into_iter()
+        .map(|(function, resolved)| {
+            let ResolvedFunction {
+                symbol,
+                resolutions,
+            } = resolved;
+            let expression_types = {
+                let mut checker = TypeChecker::new(&resolutions, symbols);
+                checker.check_stmts(
+                    &function.body,
+                    &Ty::from(&function.header.ret_ty),
+                    function.header.ret_ty_span,
+                )?;
+                checker.expression_types
+            };
+
+            Ok(CheckedFunction {
+                function,
+                symbol,
+                resolutions,
+                expression_types,
+            })
+        })
+        .collect()
 }
 
 fn check_assignable(

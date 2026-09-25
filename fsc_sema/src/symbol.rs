@@ -29,11 +29,22 @@ pub(crate) enum ConstValue {
     Str(String),
 }
 
+impl ConstValue {
+    pub(crate) fn ty(&self) -> Ty {
+        match self {
+            Self::Int(_) => Ty::Int,
+            Self::Float(_) => Ty::Float,
+            Self::Bool(_) => Ty::Bool,
+            Self::Str(_) => Ty::Str,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum SymbolKind {
     Param { index: u32 },
     Local,
-    Const { value: ConstValue },
+    Const { value: ConstValue, value_span: Span },
     Config,
     Function { ret_ty: Ty, params: Vec<ParamInfo> },
 }

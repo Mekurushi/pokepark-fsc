@@ -183,13 +183,6 @@ fn declare_config(
     scope: &mut ScopeStack,
     symbols: &mut SymbolTable,
 ) -> SemaResult<()> {
-    if config.ty == ast::Ty::Void {
-        return Err(SemaError::InvalidConfigType {
-            ty: Ty::from(&config.ty),
-            type_span: config.ty_span,
-        });
-    }
-
     let symbol = symbols.insert(Symbol {
         name: config.name.clone(),
         name_span: config.name_span,
@@ -205,16 +198,6 @@ fn declare_function(
     scope: &mut ScopeStack,
     symbols: &mut SymbolTable,
 ) -> SemaResult<()> {
-    // TODO: move with separation of concern
-    for param in &header.params {
-        if param.ty == ast::Ty::Void {
-            return Err(SemaError::InvalidParameterType {
-                ty: Ty::from(&param.ty),
-                type_span: param.ty_span,
-            });
-        }
-    }
-
     let params = header
         .params
         .iter()
@@ -243,13 +226,6 @@ fn declare_constant(
     scope: &mut ScopeStack,
     symbols: &mut SymbolTable,
 ) -> SemaResult<()> {
-    if constant.ty == ast::Ty::Void {
-        return Err(SemaError::InvalidConstantType {
-            ty: Ty::from(&constant.ty),
-            type_span: constant.ty_span,
-        });
-    }
-
     let value = match &constant.initializer.kind {
         ast::ExprKind::IntLit(value) => ConstValue::Int(*value),
         ast::ExprKind::FloatLit(value) => ConstValue::Float(*value),
@@ -266,7 +242,10 @@ fn declare_constant(
         name_span: constant.name_span,
         ty: Ty::from(&constant.ty),
         type_span: constant.ty_span,
-        kind: SymbolKind::Const { value },
+        kind: SymbolKind::Const {
+            value,
+            value_span: constant.initializer.span,
+        },
     });
     scope.declare(&constant.name, symbol, constant.name_span)
 }
@@ -364,12 +343,6 @@ fn resolve_stmt(
             ty_span,
             init,
         } => {
-            if *ty == ast::Ty::Void {
-                return Err(SemaError::InvalidLocalType {
-                    ty: Ty::from(ty),
-                    type_span: *ty_span,
-                });
-            }
             if let Some(e) = init {
                 resolve_expr(e, scope, resolutions)?;
             }

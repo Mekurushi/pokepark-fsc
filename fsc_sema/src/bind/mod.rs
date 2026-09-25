@@ -61,7 +61,8 @@ pub fn bind_configs(
 
     if errors.is_empty() {
         for (symbol, value) in values {
-            checked.symbols.get_mut(symbol).kind = SymbolKind::Const { value };
+            let value_span = checked.symbols.get(symbol).name_span;
+            checked.symbols.get_mut(symbol).kind = SymbolKind::Const { value, value_span };
         }
         Ok(BoundScript(checked))
     } else {

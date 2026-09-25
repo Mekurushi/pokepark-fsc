@@ -185,7 +185,7 @@ impl<'a> LoweringContext<'a> {
                 let symbol_id = self.checked.resolutions.symbol(expr.id);
                 let symbol = self.symbols.get(symbol_id);
                 match &symbol.kind {
-                    SymbolKind::Const { value } => Ok(lower_const_value(value)),
+                    SymbolKind::Const { value, .. } => Ok(lower_const_value(value)),
                     SymbolKind::Config => Err(SemaError::MissingConfigValue {
                         name: symbol.name.clone(),
                         declaration_span: symbol.name_span,
