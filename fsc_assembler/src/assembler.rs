@@ -40,7 +40,7 @@ pub enum CtrlSubtype {
     Exit2 = 2,
     DelayLoad = 3,
     DelayNeq0 = 4,
-    SetArgMode = 5,
+    LoadArgRef = 5,
 }
 
 #[repr(u8)]
@@ -256,10 +256,10 @@ impl Assembler {
                 .build(),
         );
     }
-    pub fn emit_set_arg_mode(&mut self) {
+    pub fn emit_load_arg_ref(&mut self) {
         self.emit(
             InsnWord::new(Opcode::Ctrl as u8)
-                .subtype(CtrlSubtype::SetArgMode as u8)
+                .subtype(CtrlSubtype::LoadArgRef as u8)
                 .build(),
         );
     }
@@ -1047,9 +1047,9 @@ mod emit_tests {
     }
 
     #[test]
-    fn emit_set_arg_mode() {
+    fn emit_load_arg_ref() {
         let mut asm = assembler_in_function();
-        asm.emit_set_arg_mode();
+        asm.emit_load_arg_ref();
         assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x05, 0x02]);
     }
 

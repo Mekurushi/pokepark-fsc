@@ -473,9 +473,9 @@ fn parse_instruction(ts: &mut TokenStream) -> ParseResult<Instruction> {
             ts.advance();
             Ok(Instruction::Exit2)
         }
-        Some(Token::SetArgMode) => {
+        Some(Token::LoadArgRef) => {
             ts.advance();
-            Ok(Instruction::SetArgMode)
+            Ok(Instruction::LoadArgRef)
         }
         Some(Token::Lb) => {
             ts.advance();

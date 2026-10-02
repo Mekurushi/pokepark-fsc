@@ -192,8 +192,8 @@ impl<'a> AstWalker<'a> {
                 self.core.emit_exit_2();
                 Ok(())
             }
-            ast::Instruction::SetArgMode => {
-                self.core.emit_set_arg_mode();
+            ast::Instruction::LoadArgRef => {
+                self.core.emit_load_arg_ref();
                 Ok(())
             }
             ast::Instruction::Call(sym) => self.core.emit_call(sym),

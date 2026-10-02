@@ -51,8 +51,8 @@ pub enum Token {
     #[token("exit_2")]
     Exit2, //unimpl
 
-    #[token("set_arg_mode")]
-    SetArgMode,
+    #[token("load_arg_ref")]
+    LoadArgRef,
 
     #[token("add")]
     Add,
