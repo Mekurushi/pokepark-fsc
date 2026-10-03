@@ -55,6 +55,10 @@ pub enum SemaError {
         ty: Ty,
         type_span: Span,
     },
+    InvalidReturnType {
+        ty: Ty,
+        type_span: Span,
+    },
     InvalidLocalType {
         ty: Ty,
         type_span: Span,
@@ -94,6 +98,15 @@ pub enum SemaError {
     MissingFunctionSignature {
         name: String,
         declaration_span: Span,
+    },
+    UnsupportedValueType {
+        ty: Ty,
+        span: Span,
+    },
+    InvalidMember {
+        ty: Ty,
+        member: String,
+        member_span: Span,
     },
 }
 
@@ -147,6 +160,9 @@ impl std::fmt::Display for SemaError {
             Self::InvalidParameterType { ty, .. } => {
                 write!(f, "parameters cannot have type `{ty:?}`")
             }
+            Self::InvalidReturnType { ty, .. } => {
+                write!(f, "functions cannot return type `{ty:?}`")
+            }
             Self::InvalidLocalType { ty, .. } => {
                 write!(f, "local variables cannot have type `{ty:?}`")
             }
@@ -182,6 +198,15 @@ impl std::fmt::Display for SemaError {
                     f,
                     "internal compiler error: `{name}` has no semantic function signature"
                 )
+            }
+            Self::UnsupportedValueType { ty, .. } => {
+                write!(
+                    f,
+                    "values of type `{ty:?}` are not supported in this context"
+                )
+            }
+            Self::InvalidMember { ty, member, .. } => {
+                write!(f, "type `{ty:?}` has no member `{member}`")
             }
         }
     }
@@ -267,6 +292,12 @@ impl From<SemaError> for Diagnostic {
                     format!("`{ty:?}` cannot be used for a parameter"),
                 ))
             }
+            SemaError::InvalidReturnType { ty, type_span } => diagnostic.with_label(
+                Label::primary(
+                    type_span,
+                    format!("`{ty:?}` cannot be returned by a function"),
+                ),
+            ),
             SemaError::InvalidLocalType { ty, type_span } => diagnostic.with_label(Label::primary(
                 type_span,
                 format!("`{ty:?}` cannot be used for a local variable"),
@@ -316,6 +347,17 @@ impl From<SemaError> for Diagnostic {
             } => diagnostic.with_label(Label::primary(
                 declaration_span,
                 "resolved function identity does not refer to a function signature",
+            )),
+            SemaError::UnsupportedValueType { ty, span } => diagnostic.with_label(
+                Label::primary(span, format!("whole `{ty:?}` values are not supported yet")),
+            ),
+            SemaError::InvalidMember {
+                ty,
+                member,
+                member_span,
+            } => diagnostic.with_label(Label::primary(
+                member_span,
+                format!("`{member}` is not a member of `{ty:?}`"),
             )),
         }
     }

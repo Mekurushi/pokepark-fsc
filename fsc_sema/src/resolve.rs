@@ -360,7 +360,10 @@ fn resolve_stmt(
         }
 
         ast::StmtKind::Assign { target, expr } => {
-            if !matches!(target.kind, ast::ExprKind::Var(_)) {
+            if !matches!(
+                target.kind,
+                ast::ExprKind::Var(_) | ast::ExprKind::Member { .. }
+            ) {
                 return Err(SemaError::InvalidAssignmentTarget {
                     target_span: target.span,
                 });
@@ -426,6 +429,8 @@ fn resolve_expr(
             resolutions.insert(expr.id, sym_id);
             Ok(())
         }
+
+        ast::ExprKind::Member { base, .. } => resolve_expr(base, scope, resolutions),
 
         ast::ExprKind::BinOp { lhs, rhs, .. } => {
             resolve_expr(lhs, scope, resolutions)?;

@@ -1,7 +1,7 @@
 use crate::bind::BoundScript;
 use crate::checked::{CheckedFunction, CheckedScript};
 use crate::error::{SemaError, SemaResult};
-use crate::hir::{self, LocalId, Place};
+use crate::hir::{self, LocalId, Place, ProjectionElem, Vec3Field};
 use crate::resolve::Resolutions;
 use crate::symbol::{ConstValue, SymbolId, SymbolKind, SymbolTable};
 use crate::types::Ty;
@@ -128,18 +128,10 @@ impl<'a> LoweringContext<'a> {
                     init: hir_init,
                 })
             }
-            ast::StmtKind::Assign { target, expr } => {
-                let symbol_id = self.checked.resolutions.symbol(target.id);
-                let symbol = self.symbols.get(symbol_id);
-                let local = self
-                    .locals
-                    .local_for_symbol(symbol_id, &symbol.name, target.span)?;
-
-                Ok(hir::Stmt::Assign {
-                    target: Place::new(local),
-                    value: self.lower_expr(expr)?,
-                })
-            }
+            ast::StmtKind::Assign { target, expr } => Ok(hir::Stmt::Assign {
+                target: self.lower_place(target)?,
+                value: self.lower_expr(expr)?,
+            }),
             ast::StmtKind::If {
                 cond,
                 then_body,
@@ -207,6 +199,19 @@ impl<'a> LoweringContext<'a> {
                 }
             }
 
+            ast::ExprKind::Member { .. } => {
+                let ty = self
+                    .checked
+                    .expression_types
+                    .get(expr.id)
+                    .cloned()
+                    .ok_or(SemaError::MissingExpressionType { span: expr.span })?;
+                Ok(hir::Expr::Load {
+                    place: self.lower_place(expr)?,
+                    ty,
+                })
+            }
+
             ast::ExprKind::BinOp { op, lhs, rhs } => {
                 let ty = self
                     .checked
@@ -257,7 +262,14 @@ impl<'a> LoweringContext<'a> {
                 let (page, func) = extract_syscall(args)?;
                 let lowered_args: Vec<_> = args[2..]
                     .iter()
-                    .map(|argument| self.lower_expr(argument))
+                    .map(|argument| {
+                        match self.checked.expression_types.get(argument.id) {
+                            Some(Ty::Vec3) => self
+                                .lower_place(argument)
+                                .map(hir::SysCallArg::StackRef),
+                            _ => self.lower_expr(argument).map(hir::SysCallArg::Value),
+                        }
+                    })
                     .collect::<Result<_, _>>()?;
 
                 let subtype = lowered_args.len() as u8;
@@ -275,6 +287,36 @@ impl<'a> LoweringContext<'a> {
                         .ok_or(SemaError::MissingExpressionType { span: expr.span })?,
                 })
             }
+        }
+    }
+
+    fn lower_place(&self, expr: &Expr) -> SemaResult<Place> {
+        match &expr.kind {
+            ast::ExprKind::Var(_) => {
+                let symbol_id = self.checked.resolutions.symbol(expr.id);
+                let symbol = self.symbols.get(symbol_id);
+                let local = self
+                    .locals
+                    .local_for_symbol(symbol_id, &symbol.name, expr.span)?;
+                Ok(Place::new(local))
+            }
+            ast::ExprKind::Member {
+                base,
+                member,
+                member_span,
+            } => {
+                let field = Vec3Field::from_name(member).ok_or_else(|| SemaError::InvalidMember {
+                    ty: Ty::Vec3,
+                    member: member.clone(),
+                    member_span: *member_span,
+                })?;
+                Ok(self
+                    .lower_place(base)?
+                    .project(ProjectionElem::Vec3Field(field)))
+            }
+            _ => Err(SemaError::InvalidAssignmentTarget {
+                target_span: expr.span,
+            }),
         }
     }
 }

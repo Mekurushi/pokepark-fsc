@@ -145,6 +145,7 @@ impl Parser {
                 TokenKind::KwStatic
                 | TokenKind::KwInt
                 | TokenKind::KwFloat
+                | TokenKind::KwVec3
                 | TokenKind::KwVoid
                 | TokenKind::KwBool
                 | TokenKind::KwString,
@@ -241,6 +242,10 @@ impl Parser {
                 self.ts.expect(&TokenKind::KwFloat, "float")?;
                 Ty::Float
             }
+            Some(TokenKind::KwVec3) => {
+                self.ts.expect(&TokenKind::KwVec3, "vec3")?;
+                Ty::Vec3
+            }
             Some(TokenKind::KwVoid) => {
                 self.ts.expect(&TokenKind::KwVoid, "void")?;
                 Ty::Void
@@ -324,7 +329,11 @@ impl Parser {
             }
             Some(TokenKind::KwPause) => self.parse_pause(),
             Some(
-                TokenKind::KwInt | TokenKind::KwFloat | TokenKind::KwBool | TokenKind::KwString,
+                TokenKind::KwInt
+                | TokenKind::KwFloat
+                | TokenKind::KwVec3
+                | TokenKind::KwBool
+                | TokenKind::KwString,
             ) => self.parse_var_decl(),
             _ => Err(self.ts.unexpected("statement")),
         }
@@ -425,22 +434,20 @@ impl Parser {
     fn parse_assign_or_expr_stmt(&mut self) -> ParseResult<Stmt> {
         let start = self.ts.current_offset();
         let (name, name_span) = self.ts.expect_ident()?;
-        if self.ts.eat(&TokenKind::Eq) {
-            let expr = self.parse_expr(0)?;
-            Ok(Stmt::new(
-                self.ids.alloc(),
-                StmtKind::Assign {
-                    target: Expr::new(self.ids.alloc(), ExprKind::Var(name), name_span),
-                    expr,
-                },
-                self.ts.span_consumed_from(start),
-            ))
-        } else if self.ts.peek() == Some(&TokenKind::LParen) {
+        if self.ts.peek() == Some(&TokenKind::LParen) {
             let call = self.parse_call(name, name_span)?;
             let span = call.span;
             Ok(Stmt::new(self.ids.alloc(), StmtKind::ExprStmt(call), span))
         } else {
-            Err(self.ts.unexpected("assignment or call statement"))
+            let target = Expr::new(self.ids.alloc(), ExprKind::Var(name), name_span);
+            let target = self.parse_member_suffix(target)?;
+            self.ts.expect(&TokenKind::Eq, "`=`")?;
+            let expr = self.parse_expr(0)?;
+            Ok(Stmt::new(
+                self.ids.alloc(),
+                StmtKind::Assign { target, expr },
+                self.ts.span_consumed_from(start),
+            ))
         }
     }
 
@@ -478,6 +485,8 @@ impl Parser {
             _ => Err(self.ts.unexpected("expression")),
         }?;
 
+        lhs = self.parse_member_suffix(lhs)?;
+
         while let Some(tok) = self.ts.peek() {
             let Some((bp, op)) = binding_power(tok) else {
                 break;
@@ -501,6 +510,23 @@ impl Parser {
         }
 
         Ok(lhs)
+    }
+
+    fn parse_member_suffix(&mut self, mut base: Expr) -> ParseResult<Expr> {
+        while self.ts.eat(&TokenKind::Dot) {
+            let (member, member_span) = self.ts.expect_ident()?;
+            let span = base.span.cover(member_span);
+            base = Expr::new(
+                self.ids.alloc(),
+                ExprKind::Member {
+                    base: Box::new(base),
+                    member,
+                    member_span,
+                },
+                span,
+            );
+        }
+        Ok(base)
     }
     //TODO: cleanup logic in parser general, so less duplications
     fn parse_syscall(&mut self) -> ParseResult<Expr> {

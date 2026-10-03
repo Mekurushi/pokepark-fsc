@@ -1,7 +1,7 @@
 mod layout;
 
 use crate::error::{CodegenError, CodegenResult};
-use fsc_sema::hir::{LocalId, Place};
+use fsc_sema::hir::{LocalId, Place, ProjectionElem};
 use std::collections::HashMap;
 
 pub(crate) use layout::plan_frame;
@@ -12,7 +12,7 @@ pub(crate) struct StackSlot(pub i16);
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct StackAllocation {
     pub base: StackSlot,
-    pub width: u16,
+    pub width: u16, // TODO: metadata only?
 }
 
 #[derive(Debug)]
@@ -35,11 +35,18 @@ impl FrameLayout {
         }
     }
 
-    pub(crate) fn resolve(&self, place: Place) -> CodegenResult<StackSlot> {
-        self.allocations
+    pub(crate) fn resolve(&self, place: &Place) -> CodegenResult<StackSlot> {
+        let allocation = self
+            .allocations
             .get(&place.local)
-            .map(|allocation| allocation.base)
-            .ok_or(CodegenError::UnknownLocal(place.local))
+            .ok_or(CodegenError::UnknownLocal(place.local))?;
+        let offset = place
+            .projection
+            .iter()
+            .map(|ProjectionElem::Vec3Field(field)| field.offset().cast_signed())
+            .sum::<i16>();
+
+        Ok(StackSlot(allocation.base.0 + offset))
     }
 
     pub(crate) const fn local_slot_count(&self) -> i16 {

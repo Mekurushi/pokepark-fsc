@@ -7,6 +7,7 @@ pub struct NodeId(pub u32);
 pub enum Ty {
     Int,
     Float,
+    Vec3, //TODO: aggregate assignment
     Void,
     Bool,
     Str,
@@ -51,6 +52,12 @@ pub enum ExprKind {
     StringLit(String),
 
     Var(String),
+
+    Member {
+        base: Box<Expr>,
+        member: String,
+        member_span: Span,
+    },
 
     BinOp {
         op: BinOp,

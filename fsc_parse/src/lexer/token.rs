@@ -15,6 +15,9 @@ pub enum TokenKind {
     #[token("float", priority = 10)]
     KwFloat,
 
+    #[token("vec3", priority = 10)]
+    KwVec3,
+
     #[token("void", priority = 10)]
     KwVoid,
 
@@ -138,6 +141,9 @@ pub enum TokenKind {
     #[token(";")]
     Semicolon,
 
+    #[token(".")]
+    Dot,
+
     // --- Delimiters ---
     #[token("(")]
     LParen,
@@ -154,6 +160,7 @@ impl TokenKind {
         match self {
             Self::KwInt => "`int`",
             Self::KwFloat => "`float`",
+            Self::KwVec3 => "`vec3`",
             Self::KwVoid => "`void`",
             Self::KwBool => "`boolean`",
             Self::KwString => "`string`",
@@ -190,6 +197,7 @@ impl TokenKind {
             Self::Eq => "`=`",
             Self::Comma => "`,`",
             Self::Semicolon => "`;`",
+            Self::Dot => "`.`",
             Self::LParen => "`(`",
             Self::RParen => "`)`",
             Self::LBrace => "`{`",

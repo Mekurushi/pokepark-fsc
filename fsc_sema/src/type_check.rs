@@ -1,7 +1,7 @@
 use crate::checked::CheckedFunction;
 use crate::error::{SemaError, SemaResult};
 use crate::resolve::{Resolutions, ResolvedFunction};
-use crate::symbol::{SymbolKind, SymbolTable};
+use crate::symbol::{SymbolId, SymbolKind, SymbolTable};
 use crate::types::Ty;
 use fsc_diagnostics::Span;
 use fsc_parse::ast::{self, BinOp, Expr, ExprKind, NodeId, UnaryOp};
@@ -74,7 +74,7 @@ impl<'a> TypeChecker<'a> {
                 Ok(())
             }
             ast::StmtKind::Assign { target, expr } => {
-                let symbol = self.symbols.get(self.resolutions.symbol(target.id));
+                let symbol = self.symbols.get(self.place_symbol(target)?);
                 match symbol.kind {
                     SymbolKind::Const { .. } => {
                         return Err(SemaError::AssignmentToConstant {
@@ -92,10 +92,10 @@ impl<'a> TypeChecker<'a> {
                     }
                     _ => {}
                 }
-                let declared = symbol.ty.clone();
-                self.expression_types.insert(target.id, declared.clone());
+                let expected_span = symbol.type_span;
+                let declared = self.check_place(target)?;
                 let found = self.check_expr(expr)?;
-                check_assignable(&declared, &found, expr.span, Some(symbol.type_span))
+                check_assignable(&declared, &found, expr.span, Some(expected_span))
             }
             ast::StmtKind::If {
                 cond,
@@ -129,6 +129,54 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
+    fn place_symbol(&self, expr: &Expr) -> SemaResult<SymbolId> {
+        match &expr.kind {
+            ExprKind::Var(_) => Ok(self.resolutions.symbol(expr.id)),
+            ExprKind::Member { base, .. } => self.place_symbol(base),
+            _ => Err(SemaError::InvalidAssignmentTarget {
+                target_span: expr.span,
+            }),
+        }
+    }
+
+    fn check_place(&mut self, expr: &Expr) -> SemaResult<Ty> {
+        let ty = match &expr.kind {
+            ExprKind::Var(_) => {
+                let symbol = self.symbols.get(self.resolutions.symbol(expr.id));
+                if matches!(symbol.kind, SymbolKind::Function { .. }) {
+                    return Err(SemaError::NotAValue {
+                        name: symbol.name.clone(),
+                        reference_span: expr.span,
+                        declaration_span: symbol.name_span,
+                    });
+                }
+                symbol.ty.clone()
+            }
+            ExprKind::Member {
+                base,
+                member,
+                member_span,
+            } => {
+                let base_ty = self.check_place(base)?;
+                if base_ty != Ty::Vec3 || !matches!(member.as_str(), "x" | "y" | "z") {
+                    return Err(SemaError::InvalidMember {
+                        ty: base_ty,
+                        member: member.clone(),
+                        member_span: *member_span,
+                    });
+                }
+                Ty::Float
+            }
+            _ => {
+                return Err(SemaError::InvalidAssignmentTarget {
+                    target_span: expr.span,
+                });
+            }
+        };
+        self.expression_types.insert(expr.id, ty.clone());
+        Ok(ty)
+    }
+
     fn check_expr(&mut self, expr: &Expr) -> SemaResult<Ty> {
         let ty = match &expr.kind {
             ExprKind::IntLit(_) => Ty::Int,
@@ -144,15 +192,30 @@ impl<'a> TypeChecker<'a> {
                         declaration_span: symbol.name_span,
                     });
                 }
+                if symbol.ty == Ty::Vec3 {
+                    return Err(SemaError::UnsupportedValueType {
+                        ty: symbol.ty.clone(),
+                        span: expr.span,
+                    });
+                }
                 symbol.ty.clone()
             }
+            ExprKind::Member { .. } => self.check_place(expr)?,
             ExprKind::BinOp { op, lhs, rhs } => self.check_binop(op, lhs, rhs)?,
             ExprKind::Unary { op, expr } => self.check_unary(op, expr)?,
             ExprKind::Call {
                 args, callee_span, ..
             } => self.check_call(expr, args, *callee_span)?,
             ExprKind::SysCall { args } => {
+                // TODO: figure out how to type out Syscalls
                 for argument in &args[2..] {
+                    if let ExprKind::Var(_) = argument.kind {
+                        let symbol = self.symbols.get(self.resolutions.symbol(argument.id));
+                        if symbol.ty == Ty::Vec3 {
+                            self.expression_types.insert(argument.id, Ty::Vec3);
+                            continue;
+                        }
+                    }
                     self.check_expr(argument)?;
                 }
                 Ty::Int
@@ -254,14 +317,14 @@ pub(crate) fn check(
 ) -> SemaResult<Vec<CheckedFunction>> {
     for (_, symbol) in symbols.iter() {
         match &symbol.kind {
-            SymbolKind::Config if symbol.ty == Ty::Void => {
+            SymbolKind::Config if matches!(symbol.ty, Ty::Void | Ty::Vec3) => {
                 return Err(SemaError::InvalidConfigType {
                     ty: symbol.ty.clone(),
                     type_span: symbol.type_span,
                 });
             }
             SymbolKind::Const { value, value_span } => {
-                if symbol.ty == Ty::Void {
+                if matches!(symbol.ty, Ty::Void | Ty::Vec3) {
                     return Err(SemaError::InvalidConstantType {
                         ty: symbol.ty.clone(),
                         type_span: symbol.type_span,
@@ -269,9 +332,16 @@ pub(crate) fn check(
                 }
                 check_assignable(&symbol.ty, &value.ty(), *value_span, Some(symbol.type_span))?;
             }
-            SymbolKind::Function { params, .. } => {
+            SymbolKind::Function { ret_ty, params } => {
+                // TODO: check out if it's possible to return vec3 cleanly
+                if *ret_ty == Ty::Vec3 {
+                    return Err(SemaError::InvalidReturnType {
+                        ty: ret_ty.clone(),
+                        type_span: symbol.type_span,
+                    });
+                }
                 for parameter in params {
-                    if parameter.ty == Ty::Void {
+                    if matches!(parameter.ty, Ty::Void | Ty::Vec3) {
                         return Err(SemaError::InvalidParameterType {
                             ty: parameter.ty.clone(),
                             type_span: parameter.type_span,

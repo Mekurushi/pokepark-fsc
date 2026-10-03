@@ -4,7 +4,7 @@ use crate::error::{CodegenError, CodegenResult};
 use crate::frame::{plan_frame, FrameLayout};
 use crate::lower::label_ctx::LabelCtx;
 use fsc_assembler::Assembler;
-use fsc_sema::hir::{BinOp, Expr, FuncDef, Stmt, UnaryOp};
+use fsc_sema::hir::{BinOp, Expr, FuncDef, Stmt, SysCallArg, UnaryOp};
 use fsc_sema::types::Ty;
 
 struct FunctionCx<'hir, 'asm> {
@@ -53,14 +53,14 @@ fn lower_stmt(stmt: &Stmt, cx: &mut FunctionCx<'_, '_>) -> CodegenResult<()> {
             value: expr,
         } => {
             lower_expr(expr, cx)?;
-            let slot = cx.frame.resolve(*target)?;
+            let slot = cx.frame.resolve(target)?;
             cx.asm.emit_store_arg(slot.0);
             Ok(())
         }
         Stmt::VarDecl { local, init } => {
             if let Some(expr) = init {
                 lower_expr(expr, cx)?;
-                let slot = cx.frame.resolve(fsc_sema::hir::Place::new(*local))?;
+                let slot = cx.frame.resolve(&fsc_sema::hir::Place::new(*local))?;
                 cx.asm.emit_store_arg(slot.0);
             }
             Ok(())
@@ -170,7 +170,7 @@ fn lower_expr(expr: &Expr, cx: &mut FunctionCx<'_, '_>) -> CodegenResult<()> {
         }
 
         Expr::Load { place, ty: _ty } => {
-            let slot = cx.frame.resolve(*place)?;
+            let slot = cx.frame.resolve(place)?;
             cx.asm.emit_load_arg(slot.0);
         }
 
@@ -221,14 +221,21 @@ fn lower_expr(expr: &Expr, cx: &mut FunctionCx<'_, '_>) -> CodegenResult<()> {
 }
 
 fn lower_syscall(
-    args: &[Expr],
+    args: &[SysCallArg],
     cx: &mut FunctionCx<'_, '_>,
     subtype: u8,
     page: u8,
     func: u16,
 ) -> CodegenResult<()> {
     for arg in args.iter().rev() {
-        lower_expr(arg, cx)?;
+        match arg {
+            SysCallArg::Value(expr) => lower_expr(expr, cx)?,
+            SysCallArg::StackRef(place) => {
+                let slot = cx.frame.resolve(place)?;
+                cx.asm.emit_load_arg_ref();
+                cx.asm.emit_load_arg(slot.0);
+            }
+        }
     }
     cx.asm.emit_syscall(subtype, page, func);
     Ok(())
@@ -295,32 +302,33 @@ fn emit_int_lit(value: i32, asm: &mut Assembler) {
 }
 
 fn emit_binop(op: &BinOp, operand_ty: &Ty, asm: &mut Assembler) {
+    // TODO: refactor unreachable out
     match op {
         BinOp::Add => match operand_ty {
             Ty::Int => asm.emit_add(),
             Ty::Float => asm.emit_fadd(),
-            Ty::Bool => unreachable!("add on bool"),
+            Ty::Bool | Ty::Vec3 => unreachable!("add on unsupported type"),
             Ty::Void => unreachable!("add on void"),
             Ty::Str => unreachable!("add on str"),
         },
         BinOp::Sub => match operand_ty {
             Ty::Int => asm.emit_sub(),
             Ty::Float => asm.emit_fsub(),
-            Ty::Bool => unreachable!("sub on bool"),
+            Ty::Bool | Ty::Vec3 => unreachable!("sub on unsupported type"),
             Ty::Void => unreachable!("sub on void"),
             Ty::Str => unreachable!("sub on str"),
         },
         BinOp::Mul => match operand_ty {
             Ty::Int => asm.emit_mul(),
             Ty::Float => asm.emit_fmul(),
-            Ty::Bool => unreachable!("mul on bool"),
+            Ty::Bool | Ty::Vec3 => unreachable!("mul on unsupported type"),
             Ty::Void => unreachable!("mul on void"),
             Ty::Str => unreachable!("mul on str"),
         },
         BinOp::Div => match operand_ty {
             Ty::Int => asm.emit_div(),
             Ty::Float => asm.emit_fdiv(),
-            Ty::Bool => unreachable!("div on bool"),
+            Ty::Bool | Ty::Vec3 => unreachable!("div on unsupported type"),
             Ty::Void => unreachable!("div on void"),
             Ty::Str => unreachable!("div on str"),
         },

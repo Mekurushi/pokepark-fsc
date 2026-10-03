@@ -4,7 +4,7 @@ mod place;
 
 pub use local::{Local, LocalId, LocalKind};
 pub(crate) use lower::lower_script;
-pub use place::Place;
+pub use place::{Place, ProjectionElem, Vec3Field};
 
 use crate::types::Ty;
 
@@ -81,9 +81,15 @@ pub enum Expr {
         page: u8,
         func: u16,
         subtype: u8,
-        args: Vec<Expr>,
+        args: Vec<SysCallArg>,
         ty: Ty,
     },
+}
+
+#[derive(Debug, Clone)]
+pub enum SysCallArg {
+    Value(Expr),
+    StackRef(Place),
 }
 
 impl Expr {
