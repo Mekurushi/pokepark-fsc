@@ -3,9 +3,9 @@ mod cli;
 use clap::Parser;
 use cli::{BuildArgs, CheckArgs, Cli, Command, ConfigArgs, DiagnosticFormat, PatchArgs};
 use fsc_compiler::{
-    check, compile, required_configs, CompileRequest, ConfigRequirement, ConfigType,
+    CompileRequest, ConfigRequirement, ConfigType, check, compile, required_configs,
 };
-use fsc_diagnostics::{render_diagnostics, render_diagnostics_json, Diagnostic};
+use fsc_diagnostics::{Diagnostic, render_diagnostics, render_diagnostics_json};
 use std::fs;
 use std::process::ExitCode;
 

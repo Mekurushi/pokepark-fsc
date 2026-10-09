@@ -292,12 +292,12 @@ impl From<SemaError> for Diagnostic {
                     format!("`{ty:?}` cannot be used for a parameter"),
                 ))
             }
-            SemaError::InvalidReturnType { ty, type_span } => diagnostic.with_label(
-                Label::primary(
+            SemaError::InvalidReturnType { ty, type_span } => {
+                diagnostic.with_label(Label::primary(
                     type_span,
                     format!("`{ty:?}` cannot be returned by a function"),
-                ),
-            ),
+                ))
+            }
             SemaError::InvalidLocalType { ty, type_span } => diagnostic.with_label(Label::primary(
                 type_span,
                 format!("`{ty:?}` cannot be used for a local variable"),
@@ -348,9 +348,10 @@ impl From<SemaError> for Diagnostic {
                 declaration_span,
                 "resolved function identity does not refer to a function signature",
             )),
-            SemaError::UnsupportedValueType { ty, span } => diagnostic.with_label(
-                Label::primary(span, format!("whole `{ty:?}` values are not supported yet")),
-            ),
+            SemaError::UnsupportedValueType { ty, span } => diagnostic.with_label(Label::primary(
+                span,
+                format!("whole `{ty:?}` values are not supported yet"),
+            )),
             SemaError::InvalidMember {
                 ty,
                 member,

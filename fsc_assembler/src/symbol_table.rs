@@ -1,20 +1,42 @@
 use crate::error::{AssemblerError, AssemblerResult};
 use std::collections::HashMap;
 
-pub enum Scope {
-    Export, // entry points
-    Private,
-    Local(String), // label
+pub enum SymbolKind {
+    Function { exported: bool },
 }
 
 pub struct Symbol {
-    pub name: String,
-    pub offset: u32,
-    pub scope: Scope,
+    offset: u32,
+    kind: SymbolKind,
+}
+
+impl Symbol {
+    pub const fn offset(&self) -> u32 {
+        self.offset
+    }
+
+    pub const fn is_function(&self) -> bool {
+        matches!(self.kind, SymbolKind::Function { .. })
+    }
+
+    pub const fn is_exported_function(&self) -> bool {
+        matches!(self.kind, SymbolKind::Function { exported: true })
+    }
+}
+
+pub struct Label {
+    offset: u32,
+}
+
+impl Label {
+    pub const fn offset(&self) -> u32 {
+        self.offset
+    }
 }
 
 pub struct SymbolTable {
     symbols: HashMap<String, Symbol>,
+    labels_by_function: HashMap<String, HashMap<String, Label>>,
 }
 
 impl Default for SymbolTable {
@@ -27,72 +49,76 @@ impl SymbolTable {
     pub fn new() -> Self {
         Self {
             symbols: HashMap::new(),
+            labels_by_function: HashMap::new(),
         }
     }
 
-    pub fn define(&mut self, name: String, offset: u32, scope: Scope) -> AssemblerResult<()> {
+    pub fn define_function(
+        &mut self,
+        name: String,
+        offset: u32,
+        exported: bool,
+    ) -> AssemblerResult<()> {
+        self.define_symbol(
+            name,
+            Symbol {
+                offset,
+                kind: SymbolKind::Function { exported },
+            },
+        )
+    }
+
+    fn define_symbol(&mut self, name: String, symbol: Symbol) -> AssemblerResult<()> {
         if self.symbols.contains_key(&name) {
             return Err(AssemblerError::DuplicateSymbol(name));
         }
-        self.symbols.insert(
-            name.clone(),
-            Symbol {
-                name,
-                offset,
-                scope,
-            },
-        );
+        self.symbols.insert(name, symbol);
         Ok(())
     }
 
-    pub fn define_local(&mut self, function: &str, label: String, offset: u32) {
-        let key = format!("{function}.{label}");
-        self.symbols.insert(
-            key,
-            Symbol {
-                name: label,
-                offset,
-                scope: Scope::Local(function.to_string()),
-            },
-        );
+    pub fn define_label(&mut self, function: &str, name: String, offset: u32) {
+        self.labels_by_function
+            .entry(function.to_owned())
+            .or_default()
+            .insert(name, Label { offset });
     }
 
-    pub fn lookup(&self, name: &str) -> Option<&Symbol> {
-        self.symbols.get(name)
-    }
-
-    pub fn lookup_local(&self, function: &str, label: &str) -> Option<&Symbol> {
-        self.symbols.get(&format!("{function}.{label}"))
-    }
-
-    pub(crate) fn function_offset(&self, name: &str) -> Option<u32> {
+    pub fn resolve_symbol(&self, name: &str) -> AssemblerResult<&Symbol> {
         self.symbols
             .get(name)
-            .filter(|symbol| matches!(symbol.scope, Scope::Export | Scope::Private))
-            .map(|symbol| symbol.offset)
+            .ok_or_else(|| AssemblerError::UndefinedSymbol(name.to_owned()))
     }
 
-    pub fn resolve_global(&self, name: &str) -> AssemblerResult<&Symbol> {
-        self.lookup(name)
-            .ok_or_else(|| AssemblerError::UndefinedSymbol(name.to_string()))
+    pub fn resolve_label(&self, function: &str, name: &str) -> AssemblerResult<&Label> {
+        self.labels_by_function
+            .get(function)
+            .and_then(|labels| labels.get(name))
+            .ok_or_else(|| AssemblerError::UndefinedSymbol(name.to_owned()))
     }
 
-    pub fn resolve_local(&self, function: &str, label: &str) -> AssemblerResult<&Symbol> {
-        self.lookup_local(function, label)
-            .ok_or_else(|| AssemblerError::UndefinedSymbol(label.to_string()))
-    }
-
-    pub fn exports(&self) -> impl Iterator<Item = &Symbol> {
+    pub fn function_offset(&self, name: &str) -> Option<u32> {
         self.symbols
-            .values()
-            .filter(|s| matches!(s.scope, Scope::Export))
+            .get(name)
+            .filter(|symbol| symbol.is_function())
+            .map(Symbol::offset)
+    }
+
+    pub fn exports(&self) -> impl Iterator<Item = (&str, &Symbol)> {
+        self.symbols
+            .iter()
+            .filter(|(_, symbol)| symbol.is_exported_function())
+            .map(|(name, symbol)| (name.as_str(), symbol))
     }
 
     pub(crate) fn rebase(&mut self, offset: u32) -> AssemblerResult<()> {
-        if self
-            .symbols
+        let symbol_offsets = self.symbols.values().map(|symbol| symbol.offset);
+        let label_offsets = self
+            .labels_by_function
             .values()
-            .any(|symbol| symbol.offset.checked_add(offset).is_none())
+            .flat_map(|labels| labels.values().map(|label| label.offset));
+        if symbol_offsets
+            .chain(label_offsets)
+            .any(|symbol_offset| symbol_offset.checked_add(offset).is_none())
         {
             return Err(AssemblerError::AddressOverflow);
         }
@@ -100,15 +126,30 @@ impl SymbolTable {
         for symbol in self.symbols.values_mut() {
             symbol.offset += offset;
         }
+        for labels in self.labels_by_function.values_mut() {
+            for label in labels.values_mut() {
+                label.offset += offset;
+            }
+        }
         Ok(())
     }
 
     pub(crate) fn merge(&mut self, other: Self) -> AssemblerResult<()> {
-        for (key, symbol) in other.symbols {
-            if self.symbols.contains_key(&key) {
-                return Err(AssemblerError::DuplicateSymbol(symbol.name));
+        for (name, symbol) in other.symbols {
+            if self.symbols.contains_key(&name) {
+                return Err(AssemblerError::DuplicateSymbol(name));
             }
-            self.symbols.insert(key, symbol);
+            self.symbols.insert(name, symbol);
+        }
+
+        for (function, other_labels) in other.labels_by_function {
+            let labels = self.labels_by_function.entry(function).or_default();
+            for (name, label) in other_labels {
+                if labels.contains_key(&name) {
+                    return Err(AssemblerError::DuplicateSymbol(name));
+                }
+                labels.insert(name, label);
+            }
         }
         Ok(())
     }
@@ -121,50 +162,30 @@ impl SymbolTable {
         if current_name == new_name {
             return self
                 .symbols
-                .contains_key(current_name)
-                .then_some(())
+                .get(current_name)
+                .filter(|symbol| symbol.is_function())
+                .map(|_| ())
                 .ok_or_else(|| AssemblerError::UndefinedSymbol(current_name.to_owned()));
         }
-        if !self.symbols.contains_key(current_name) {
+        let Some(function) = self.symbols.get(current_name) else {
+            return Err(AssemblerError::UndefinedSymbol(current_name.to_owned()));
+        };
+        if !function.is_function() {
             return Err(AssemblerError::UndefinedSymbol(current_name.to_owned()));
         }
-        if self.symbols.contains_key(new_name) {
+        if self.symbols.contains_key(new_name) || self.labels_by_function.contains_key(new_name) {
             return Err(AssemblerError::DuplicateSymbol(new_name.to_owned()));
         }
 
-        let renamed_locals = self
-            .symbols
-            .iter()
-            .filter_map(|(key, symbol)| match &symbol.scope {
-                Scope::Local(function) if function == current_name => {
-                    Some((key.clone(), format!("{new_name}.{}", symbol.name)))
-                }
-                Scope::Export | Scope::Private | Scope::Local(_) => None,
-            })
-            .collect::<Vec<_>>();
-        if let Some((_, duplicate)) = renamed_locals
-            .iter()
-            .find(|(_, renamed)| self.symbols.contains_key(renamed))
-        {
-            return Err(AssemblerError::DuplicateSymbol(duplicate.clone()));
-        }
-
-        let mut function = self
+        let function = self
             .symbols
             .remove(current_name)
             .ok_or_else(|| AssemblerError::UndefinedSymbol(current_name.to_owned()))?;
-        new_name.clone_into(&mut function.name);
         self.symbols.insert(new_name.to_owned(), function);
 
-        for (current_key, new_key) in renamed_locals {
-            let mut local = self
-                .symbols
-                .remove(&current_key)
-                .ok_or_else(|| AssemblerError::UndefinedSymbol(current_key.clone()))?;
-            local.scope = Scope::Local(new_name.to_owned());
-            self.symbols.insert(new_key, local);
+        if let Some(labels) = self.labels_by_function.remove(current_name) {
+            self.labels_by_function.insert(new_name.to_owned(), labels);
         }
-
         Ok(())
     }
 
@@ -173,12 +194,8 @@ impl SymbolTable {
             .symbols
             .get_mut(name)
             .ok_or_else(|| AssemblerError::UndefinedSymbol(name.to_owned()))?;
-        match symbol.scope {
-            Scope::Export => symbol.scope = Scope::Private,
-            Scope::Private => {}
-            Scope::Local(_) => {
-                return Err(AssemblerError::UndefinedSymbol(name.to_owned()));
-            }
+        match &mut symbol.kind {
+            SymbolKind::Function { exported } => *exported = false,
         }
         Ok(())
     }

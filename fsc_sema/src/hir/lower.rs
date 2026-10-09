@@ -262,14 +262,14 @@ impl<'a> LoweringContext<'a> {
                 let (page, func) = extract_syscall(args)?;
                 let lowered_args: Vec<_> = args[2..]
                     .iter()
-                    .map(|argument| {
-                        match self.checked.expression_types.get(argument.id) {
-                            Some(Ty::Vec3) => self
-                                .lower_place(argument)
-                                .map(hir::SysCallArg::StackRef),
+                    .map(
+                        |argument| match self.checked.expression_types.get(argument.id) {
+                            Some(Ty::Vec3) => {
+                                self.lower_place(argument).map(hir::SysCallArg::StackRef)
+                            }
                             _ => self.lower_expr(argument).map(hir::SysCallArg::Value),
-                        }
-                    })
+                        },
+                    )
                     .collect::<Result<_, _>>()?;
 
                 let subtype = lowered_args.len() as u8;
@@ -305,11 +305,12 @@ impl<'a> LoweringContext<'a> {
                 member,
                 member_span,
             } => {
-                let field = Vec3Field::from_name(member).ok_or_else(|| SemaError::InvalidMember {
-                    ty: Ty::Vec3,
-                    member: member.clone(),
-                    member_span: *member_span,
-                })?;
+                let field =
+                    Vec3Field::from_name(member).ok_or_else(|| SemaError::InvalidMember {
+                        ty: Ty::Vec3,
+                        member: member.clone(),
+                        member_span: *member_span,
+                    })?;
                 Ok(self
                     .lower_place(base)?
                     .project(ProjectionElem::Vec3Field(field)))

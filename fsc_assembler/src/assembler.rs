@@ -3,7 +3,7 @@ use crate::binary::FscriptBinary;
 use crate::encoding::InsnWord;
 use crate::error::{AssemblerError, AssemblerResult};
 use crate::string_table::StringTable;
-use crate::symbol_table::{Scope, SymbolTable};
+use crate::symbol_table::SymbolTable;
 
 // opcodes
 #[repr(u8)]
@@ -141,14 +141,14 @@ pub enum ConvSubtype {
 }
 
 pub(crate) enum RelocationKind {
-    Global,
-    Local(String),
-    String,
+    Call { symbol: String },
+    Address { symbol: String },
+    Jump { function: String, label: String },
+    StringOffset { value: String },
 }
 
 pub(crate) struct Relocation {
     pub(crate) code_offset: u32,
-    pub(crate) symbol: String,
     pub(crate) kind: RelocationKind,
 }
 
@@ -183,13 +183,8 @@ impl Assembler {
     }
     // symbol definition
     pub fn define_function(&mut self, name: &str, exported: bool) -> AssemblerResult<()> {
-        let scope = if exported {
-            Scope::Export
-        } else {
-            Scope::Private
-        };
         self.symbol_table
-            .define(name.to_string(), self.program_counter, scope)?;
+            .define_function(name.to_string(), self.program_counter, exported)?;
         self.state = EmitState::InFunction(name.to_string());
         Ok(())
     }
@@ -199,7 +194,7 @@ impl Assembler {
             EmitState::Idle => Err(AssemblerError::LabelOutsideFunction(name.to_string()))?,
         };
         self.symbol_table
-            .define_local(function, name.to_string(), self.program_counter);
+            .define_label(function, name.to_string(), self.program_counter);
         Ok(())
     }
 
@@ -267,7 +262,9 @@ impl Assembler {
     // --- Call (0x3) ---
 
     pub fn emit_call(&mut self, symbol: &str) -> AssemblerResult<()> {
-        self.push_relocation(symbol, RelocationKind::Global);
+        self.push_relocation(RelocationKind::Call {
+            symbol: symbol.to_owned(),
+        });
         self.emit(InsnWord::new(Opcode::Call as u8).build());
         Ok(())
     }
@@ -338,7 +335,10 @@ impl Assembler {
     // straight
     pub fn emit_jeq_imm(&mut self, imm: i8, label: &str) -> AssemblerResult<()> {
         let function_name = self.current_function(label)?;
-        self.push_relocation(label, RelocationKind::Local(function_name.clone()));
+        self.push_relocation(RelocationKind::Jump {
+            function: function_name.clone(),
+            label: label.to_owned(),
+        });
         self.emit(
             InsnWord::new(Opcode::JeqImm as u8)
                 .subtype(imm.cast_unsigned())
@@ -412,7 +412,9 @@ impl Assembler {
     // --- lstr (0x13) ---
     pub fn emit_lstr(&mut self, s: &str) -> AssemblerResult<()> {
         self.string_table.intern(s)?;
-        self.push_relocation(s, RelocationKind::String);
+        self.push_relocation(RelocationKind::StringOffset {
+            value: s.to_owned(),
+        });
         self.emit(InsnWord::new(Opcode::LStr as u8).build());
 
         Ok(())
@@ -678,10 +680,8 @@ impl Assembler {
     // --- lea (0x19) ---
 
     pub fn emit_lea(&mut self, symbol: &str) {
-        self.relocations.push(Relocation {
-            code_offset: self.program_counter,
-            symbol: symbol.to_string(),
-            kind: RelocationKind::Global,
+        self.push_relocation(RelocationKind::Address {
+            symbol: symbol.to_owned(),
         });
         self.emit(InsnWord::new(Opcode::Lea as u8).build());
     }
@@ -909,10 +909,9 @@ impl Assembler {
         self.program_counter += 4; // TODO: new Instruction Lenght way
     }
 
-    fn push_relocation(&mut self, symbol: &str, kind: RelocationKind) {
+    fn push_relocation(&mut self, kind: RelocationKind) {
         self.relocations.push(Relocation {
             code_offset: self.program_counter,
-            symbol: symbol.to_string(),
             kind,
         });
     }
@@ -926,7 +925,10 @@ impl Assembler {
 
     fn emit_jump(&mut self, subtype: JumpSubtype, label: &str) -> AssemblerResult<()> {
         let function_name = self.current_function(label)?;
-        self.push_relocation(label, RelocationKind::Local(function_name.clone()));
+        self.push_relocation(RelocationKind::Jump {
+            function: function_name.clone(),
+            label: label.to_owned(),
+        });
         self.emit(
             InsnWord::new(Opcode::Jump as u8)
                 .subtype(subtype as u8)

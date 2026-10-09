@@ -1,7 +1,7 @@
 mod label_ctx;
 
 use crate::error::{CodegenError, CodegenResult};
-use crate::frame::{plan_frame, FrameLayout};
+use crate::frame::{FrameLayout, plan_frame};
 use crate::lower::label_ctx::LabelCtx;
 use fsc_assembler::Assembler;
 use fsc_sema::hir::{BinOp, Expr, FuncDef, Stmt, SysCallArg, UnaryOp};
