@@ -142,7 +142,7 @@ impl Parser {
             Some(TokenKind::KwConst) => Ok(Item::ConstDecl(self.parse_const_declaration()?)),
             Some(TokenKind::KwConfig) => Ok(Item::ConfigDecl(self.parse_config_declaration()?)),
             Some(
-                TokenKind::KwStatic
+                TokenKind::KwExport
                 | TokenKind::KwInt
                 | TokenKind::KwFloat
                 | TokenKind::KwVec3
@@ -158,7 +158,7 @@ impl Parser {
     }
 
     fn parse_function(&mut self) -> ParseResult<FuncDef> {
-        let exported = !self.ts.eat(&TokenKind::KwStatic); // static = private
+        let exported = self.ts.eat(&TokenKind::KwExport);
         let header = self.parse_function_header()?;
 
         // body

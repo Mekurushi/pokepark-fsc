@@ -1,11 +1,11 @@
-static int add(int a, int b) {
+int add(int a, int b) {
     int c = 1;
     int d = 1;
     c = c + d;
     return a + b + c;
 }
 
-int simple_math(){
+export int simple_math(){
     int a = 1;
     int b = 2;
     int c = 3;
@@ -13,35 +13,35 @@ int simple_math(){
     return a + b + c;
 }
 
-int sub(int a, int b) {
+export int sub(int a, int b) {
     return a - b;
 }
 
-int mul(int a, int b) {
+export int mul(int a, int b) {
     return a * b;
 }
 
-int div(int a, int b) {
+export int div(int a, int b) {
     return a / b;
 }
 
-void no_return() {
+export void no_return() {
     return;
 }
 
-void pure_assign(){
+export void pure_assign(){
     int a;
     a = 2;
     return;
 }
 
-void bool_assign() {
+export void bool_assign() {
     bool a = true;
     bool b = false;
     return;
 }
 
-void cmp(){
+export void cmp(){
     bool a = 1 == 1;
     bool b = 1 < 2;
     bool c = 1 > 2;
@@ -50,35 +50,35 @@ void cmp(){
     return;
 }
 
-bool ret_and(){
+export bool ret_and(){
     bool a = 1==1;
     bool b = 2 == 2;
     return a && b;
 }
 
-bool ret_or(){
+export bool ret_or(){
     bool a = 1==1;
     bool b = 2 == 2;
     return a || b;
 }
 
-bool ret_unary(){
+export bool ret_unary(){
     bool a = true;
     return !a;
 }
 
-int ret_int_unary(){
+export int ret_int_unary(){
     return -1;
 }
 
-int check(int id) {
+export int check(int id) {
     if (id == 0) {
         return 1;
     }
     return 0;
 }
 
-int else_cases() {
+export int else_cases() {
     if (1 == 1) {
         int x = 0;
     }
@@ -89,7 +89,7 @@ int else_cases() {
     return 0;
 }
 
-int multi_decl() {
+export int multi_decl() {
     int x;
     x = 1;
     int y = 2;
@@ -103,7 +103,7 @@ int multi_decl() {
     return 0;
 }
 
-int chained_ahritmetic(bool enrich){
+export int chained_ahritmetic(bool enrich){
     int x = 1 + 2 + 3 + 4 + 5;
     if (enrich){
         x = x +1;
@@ -112,7 +112,7 @@ int chained_ahritmetic(bool enrich){
     return x+y;
 }
 
-int multi_ifs(int case){
+export int multi_ifs(int case){
     int x;
     if(1 == case){
         x = 1;
@@ -128,21 +128,21 @@ int multi_ifs(int case){
     return x;
 }
 
-int dynamic_cond(int x) {
+export int dynamic_cond(int x) {
     if (x) {
         return 1;
     }
     return 0;
 }
 
-int empty_blocks() {
+export int empty_blocks() {
     if (1) {
     } else {
     }
     return 0;
 }
 
-int deep_shadow() {
+export int deep_shadow() {
     int x = 1;
     if (1) {
         int x = 2;
@@ -153,14 +153,14 @@ int deep_shadow() {
     return x; // should be 1
 }
 
-int short_circuit_and(){
+export int short_circuit_and(){
     int x = 0;
     if (false && true) {
         x = 1;
     }
     return x;
 }
-int short_circuit_or(){
+export int short_circuit_or(){
     int x = 0;
     if (false || true) {
         x = 1;
@@ -169,7 +169,7 @@ int short_circuit_or(){
     return c;
 }
 
-int loop() {
+export int loop() {
     int i = 0;
     while (i < 10) {
         i = i + 1;
@@ -177,29 +177,29 @@ int loop() {
     return i;
 }
 
-int caller(){
+export int caller(){
     called(2,2);
     return called(1,2);
 }
 
-int called(int a,int b){
+export int called(int a,int b){
     return a  +b;
 }
 
-static string name(){
+string name(){
     return "test";
 }
 
-static string var_string(){
+string var_string(){
     string name = "name";
     return ret_string(name);
 }
 
-string ret_string(string name){
+export string ret_string(string name){
     return name;
 }
 
-int get_module(string name) {
+export int get_module(string name) {
     int handle = SysCall(0x0, 0x10, 1, name);
     if (handle == 0) {
         SysCall(0x0, 0x3, "slFindModule: module not found", name);
@@ -208,13 +208,13 @@ int get_module(string name) {
     return handle;
 }
 
-static void get_global_manager(){
+void get_global_manager(){
     int gm = get_module("GlobalManager");
     return;
 }
 
 
-static int unlock_pokemon(int pokemon_objectId)
+int unlock_pokemon(int pokemon_objectId)
 
 {
   int iVar1;
@@ -234,7 +234,7 @@ static int unlock_pokemon(int pokemon_objectId)
   return 1;
 }
 
-int FUN_000502a0()
+export int FUN_000502a0()
 
 {
   int iVar1;
@@ -256,7 +256,7 @@ int FUN_000502a0()
   return -1;
 }
 
-int FUN_00050f20(int param_1,int param_2,int param_3)
+export int FUN_00050f20(int param_1,int param_2,int param_3)
 
 {
   int iVar1;
@@ -277,13 +277,13 @@ int FUN_00050f20(int param_1,int param_2,int param_3)
   return iVar1;
 }
 
-void wait(){
+export void wait(){
     Pause(1);
     Pause(2);
     return;
 }
 
-void OPEN(int param_1)
+export void OPEN(int param_1)
 
 {
   int uVar1;
@@ -299,7 +299,7 @@ void OPEN(int param_1)
 
 const int test = 1;
 
-static void CLOSE(int param_1)
+void CLOSE(int param_1)
 
 {
   int iVar1;
