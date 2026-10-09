@@ -34,6 +34,7 @@ pub fn lower_func(func: &FuncDef, asm: &mut Assembler) -> CodegenResult<()> {
     for stmt in &func.body {
         lower_stmt(stmt, &mut cx)?;
     }
+    cx.asm.end_function()?;
     Ok(())
 }
 

@@ -26,6 +26,7 @@ impl<'a> AstWalker<'a> {
             self.walk_statement(stmt)?;
         }
 
+        self.core.end_function()?;
         Ok(())
     }
 

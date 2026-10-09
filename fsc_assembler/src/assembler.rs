@@ -183,10 +183,22 @@ impl Assembler {
     }
     // symbol definition
     pub fn define_function(&mut self, name: &str, exported: bool) -> AssemblerResult<()> {
+        if let EmitState::InFunction(function) = &self.state {
+            return Err(AssemblerError::FunctionAlreadyOpen(function.clone()));
+        }
         self.symbol_table
             .define_function(name.to_string(), self.program_counter, exported)?;
         self.state = EmitState::InFunction(name.to_string());
         Ok(())
+    }
+    pub fn end_function(&mut self) -> AssemblerResult<()> {
+        match self.state {
+            EmitState::InFunction(_) => {
+                self.state = EmitState::Idle;
+                Ok(())
+            }
+            EmitState::Idle => Err(AssemblerError::NoActiveFunction),
+        }
     }
     pub fn define_label(&mut self, name: &str) -> AssemblerResult<()> {
         let function = match self.state {
@@ -1062,6 +1074,7 @@ mod emit_tests {
         asm.define_function("main", false).unwrap();
         asm.emit_call("sub").unwrap();
         asm.emit_ret(0);
+        asm.end_function().unwrap();
 
         asm.define_function("sub", true).unwrap();
         asm.emit_ret(0);
@@ -1075,6 +1088,7 @@ mod emit_tests {
         let mut asm = Assembler::new();
         asm.define_function("fun1", false).unwrap();
         asm.emit_ret(0);
+        asm.end_function().unwrap();
 
         asm.define_function("fun2", true).unwrap();
         asm.emit_call("fun1").unwrap();
@@ -1120,9 +1134,11 @@ mod emit_tests {
         asm.emit_call("a").unwrap();
         asm.emit_call("b").unwrap();
         asm.emit_ret(0);
+        asm.end_function().unwrap();
 
         asm.define_function("a", true).unwrap();
         asm.emit_ret(0);
+        asm.end_function().unwrap();
 
         asm.define_function("b", true).unwrap();
         asm.emit_ret(0);
@@ -1927,6 +1943,7 @@ mod emit_tests {
         asm.define_function("main", false).unwrap();
         asm.emit_lea("data");
         asm.emit_ret(0);
+        asm.end_function().unwrap();
 
         asm.define_function("data", false).unwrap();
         asm.emit_ret(0);

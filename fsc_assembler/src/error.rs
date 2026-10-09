@@ -7,6 +7,8 @@ pub enum AssemblerError {
     OperandOutOfRange(i32),
     UndefinedSymbol(String),
     DuplicateSymbol(String),
+    FunctionAlreadyOpen(String),
+    NoActiveFunction,
     LabelOutsideFunction(String),
     InvalidStringTable,
     StringTableFull,
@@ -46,6 +48,10 @@ impl std::fmt::Display for AssemblerError {
             }
             AssemblerError::UndefinedSymbol(name) => write!(f, "undefined symbol '{name}'"),
             AssemblerError::DuplicateSymbol(name) => write!(f, "duplicated symbol '{name}'"),
+            AssemblerError::FunctionAlreadyOpen(name) => {
+                write!(f, "function '{name}' is still open")
+            }
+            AssemblerError::NoActiveFunction => f.write_str("no active function"),
             AssemblerError::LabelOutsideFunction(name) => {
                 write!(f, "label '{name}' outside of function")
             }
