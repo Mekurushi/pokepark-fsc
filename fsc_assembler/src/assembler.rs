@@ -220,8 +220,7 @@ impl Assembler {
             EmitState::Idle => Err(AssemblerError::LabelOutsideFunction(name.to_string()))?,
         };
         self.symbol_table
-            .define_label(function, name.to_string(), self.program_counter);
-        Ok(())
+            .define_label(function, name.to_string(), self.program_counter)
     }
 
     // instruction emission

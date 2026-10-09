@@ -87,11 +87,21 @@ impl SymbolTable {
         Ok(())
     }
 
-    pub fn define_label(&mut self, function: &str, name: String, offset: u32) {
-        self.labels_by_function
+    pub fn define_label(
+        &mut self,
+        function: &str,
+        name: String,
+        offset: u32,
+    ) -> AssemblerResult<()> {
+        let labels = self
+            .labels_by_function
             .entry(function.to_owned())
-            .or_default()
-            .insert(name, Label { offset });
+            .or_default();
+        if labels.contains_key(&name) {
+            return Err(AssemblerError::DuplicateSymbol(name));
+        }
+        labels.insert(name, Label { offset });
+        Ok(())
     }
 
     pub fn resolve_function_offset(&self, name: &str) -> AssemblerResult<u32> {
