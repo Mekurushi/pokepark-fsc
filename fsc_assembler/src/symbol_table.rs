@@ -3,6 +3,7 @@ use std::collections::HashMap;
 
 pub enum SymbolKind {
     Function { exported: bool },
+    Data,
 }
 
 pub struct Symbol {
@@ -68,6 +69,16 @@ impl SymbolTable {
         )
     }
 
+    pub fn define_data(&mut self, name: String, offset: u32) -> AssemblerResult<()> {
+        self.define_symbol(
+            name,
+            Symbol {
+                offset,
+                kind: SymbolKind::Data,
+            },
+        )
+    }
+
     fn define_symbol(&mut self, name: String, symbol: Symbol) -> AssemblerResult<()> {
         if self.symbols.contains_key(&name) {
             return Err(AssemblerError::DuplicateSymbol(name));
@@ -83,10 +94,32 @@ impl SymbolTable {
             .insert(name, Label { offset });
     }
 
-    pub fn resolve_symbol(&self, name: &str) -> AssemblerResult<&Symbol> {
-        self.symbols
-            .get(name)
-            .ok_or_else(|| AssemblerError::UndefinedSymbol(name.to_owned()))
+    pub fn resolve_function_offset(&self, name: &str) -> AssemblerResult<u32> {
+        match self.symbols.get(name) {
+            Some(Symbol {
+                offset,
+                kind: SymbolKind::Function { .. },
+            }) => Ok(*offset),
+            Some(_) => Err(AssemblerError::InvalidSymbolKind {
+                name: name.to_owned(),
+                expected: "a function",
+            }),
+            None => Err(AssemblerError::UndefinedSymbol(name.to_owned())),
+        }
+    }
+
+    pub fn resolve_data_offset(&self, name: &str) -> AssemblerResult<u32> {
+        match self.symbols.get(name) {
+            Some(Symbol {
+                offset,
+                kind: SymbolKind::Data,
+            }) => Ok(*offset),
+            Some(_) => Err(AssemblerError::InvalidSymbolKind {
+                name: name.to_owned(),
+                expected: "data",
+            }),
+            None => Err(AssemblerError::UndefinedSymbol(name.to_owned())),
+        }
     }
 
     pub fn resolve_label(&self, function: &str, name: &str) -> AssemblerResult<&Label> {
@@ -94,13 +127,6 @@ impl SymbolTable {
             .get(function)
             .and_then(|labels| labels.get(name))
             .ok_or_else(|| AssemblerError::UndefinedSymbol(name.to_owned()))
-    }
-
-    pub fn function_offset(&self, name: &str) -> Option<u32> {
-        self.symbols
-            .get(name)
-            .filter(|symbol| symbol.is_function())
-            .map(Symbol::offset)
     }
 
     pub fn exports(&self) -> impl Iterator<Item = (&str, &Symbol)> {
@@ -196,6 +222,12 @@ impl SymbolTable {
             .ok_or_else(|| AssemblerError::UndefinedSymbol(name.to_owned()))?;
         match &mut symbol.kind {
             SymbolKind::Function { exported } => *exported = false,
+            SymbolKind::Data => {
+                return Err(AssemblerError::InvalidSymbolKind {
+                    name: name.to_owned(),
+                    expected: "a function",
+                });
+            }
         }
         Ok(())
     }

@@ -200,6 +200,20 @@ impl Assembler {
             EmitState::Idle => Err(AssemblerError::NoActiveFunction),
         }
     }
+    pub fn define_data(&mut self, name: &str) -> AssemblerResult<()> {
+        if let EmitState::InFunction(function) = &self.state {
+            return Err(AssemblerError::FunctionAlreadyOpen(function.clone()));
+        }
+        self.symbol_table
+            .define_data(name.to_owned(), self.program_counter)
+    }
+    pub fn emit_data_word(&mut self, value: u32) -> AssemblerResult<()> {
+        if let EmitState::InFunction(function) = &self.state {
+            return Err(AssemblerError::DataInsideFunction(function.clone()));
+        }
+        self.emit(value);
+        Ok(())
+    }
     pub fn define_label(&mut self, name: &str) -> AssemblerResult<()> {
         let function = match self.state {
             EmitState::InFunction(ref function) => function,
@@ -1928,8 +1942,9 @@ mod emit_tests {
     #[test]
     fn emit_lea() {
         let mut asm = Assembler::new();
-        asm.define_function("target", false).unwrap();
-        asm.emit_push(1);
+        asm.define_data("target").unwrap();
+        asm.emit_data_word(1).unwrap();
+        asm.define_function("main", false).unwrap();
         asm.emit_lea("target");
 
         let binary = asm.finalize("test".to_string()).unwrap();
@@ -1945,8 +1960,8 @@ mod emit_tests {
         asm.emit_ret(0);
         asm.end_function().unwrap();
 
-        asm.define_function("data", false).unwrap();
-        asm.emit_ret(0);
+        asm.define_data("data").unwrap();
+        asm.emit_data_word(0).unwrap();
 
         let binary = asm.finalize("test".to_string()).unwrap();
         assert_eq!(&binary.code[0..4], &[0x00, 0x01, 0x00, 0x19]);

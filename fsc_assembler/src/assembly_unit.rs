@@ -47,7 +47,7 @@ impl AssemblyUnit {
     }
 
     pub fn function_offset(&self, name: &str) -> Option<u32> {
-        self.symbol_table.function_offset(name)
+        self.symbol_table.resolve_function_offset(name).ok()
     }
 
     fn rebase(mut self, offset: u32) -> AssemblerResult<Self> {
@@ -91,9 +91,7 @@ impl AssemblyUnit {
 
         for relocation in &mut self.relocations {
             match &mut relocation.kind {
-                RelocationKind::Call { symbol } | RelocationKind::Address { symbol }
-                    if symbol == current_name =>
-                {
+                RelocationKind::Call { symbol } if symbol == current_name => {
                     new_name.clone_into(symbol);
                 }
                 RelocationKind::Jump { function, .. } if function == current_name => {
@@ -151,9 +149,16 @@ impl AssemblyUnit {
         for relocation in &mut self.relocations {
             let idx = relocation.code_offset as usize;
             match &relocation.kind {
-                RelocationKind::Call { symbol } | RelocationKind::Address { symbol } => {
-                    let target = self.symbol_table.resolve_symbol(symbol)?;
-                    let operand = calculate_call_operand(relocation.code_offset, target.offset())?;
+                RelocationKind::Call { symbol } => {
+                    let target_offset = self.symbol_table.resolve_function_offset(symbol)?;
+                    let operand = calculate_call_operand(relocation.code_offset, target_offset)?;
+                    let operand_bytes = operand.to_be_bytes();
+                    self.code[idx] = operand_bytes[0];
+                    self.code[idx + 1] = operand_bytes[1];
+                }
+                RelocationKind::Address { symbol } => {
+                    let target_offset = self.symbol_table.resolve_data_offset(symbol)?;
+                    let operand = calculate_call_operand(relocation.code_offset, target_offset)?;
                     let operand_bytes = operand.to_be_bytes();
                     self.code[idx] = operand_bytes[0];
                     self.code[idx + 1] = operand_bytes[1];
