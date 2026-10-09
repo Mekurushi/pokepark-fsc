@@ -7,7 +7,6 @@ use crate::ast::{NodeId, StmtKind};
 use crate::lexer::token::{Token, TokenKind};
 use crate::parser::error::{ParseError, ParseResult};
 use fsc_diagnostics::Span;
-//TODO: better way for groups e.g. is type check in top-level item check
 pub struct TokenStream {
     tokens: Vec<Token>,
     cursor: usize,
@@ -159,10 +158,7 @@ impl Parser {
 
     fn parse_function_definition(&mut self, exported: bool) -> ParseResult<FuncDef> {
         let header = self.parse_function_header()?;
-
-        // body
-        self.ts.expect(&TokenKind::LBrace, "`{`")?;
-        let body = self.parse_body()?;
+        let body = self.parse_block()?;
         Ok(FuncDef {
             id: self.ids.alloc(),
             header,
@@ -217,7 +213,6 @@ impl Parser {
         let (ret_ty, ret_ty_span) = self.parse_type_keyword()?;
         let (name, name_span) = self.ts.expect_ident()?;
 
-        self.ts.expect(&TokenKind::LParen, "`(`")?;
         let params = self.parse_param_list()?;
 
         Ok(FunctionHeader {
@@ -245,11 +240,19 @@ impl Parser {
     }
 
     fn parse_param_list(&mut self) -> ParseResult<Vec<Param>> {
-        let mut params: Vec<Param> = Vec::new();
+        self.ts.expect(&TokenKind::LParen, "`(`")?;
+        let mut params = Vec::new();
 
-        while !self.ts.eat(&TokenKind::RParen) {
+        if self.ts.eat(&TokenKind::RParen) {
+            return Ok(params);
+        }
+
+        loop {
             params.push(self.parse_param()?);
-            self.ts.eat(&TokenKind::Comma);
+            if self.ts.eat(&TokenKind::RParen) {
+                break;
+            }
+            self.ts.expect(&TokenKind::Comma, "`,`")?;
         }
         Ok(params)
     }
@@ -263,16 +266,6 @@ impl Parser {
             ty,
             ty_span,
         })
-    }
-
-    fn parse_body(&mut self) -> ParseResult<Vec<Stmt>> {
-        let mut body = Vec::new();
-
-        while !self.ts.eat(&TokenKind::RBrace) {
-            body.push(self.parse_stmt()?);
-        }
-
-        Ok(body)
     }
 
     fn parse_stmt(&mut self) -> ParseResult<Stmt> {
@@ -316,7 +309,7 @@ impl Parser {
 
     fn parse_pause(&mut self) -> ParseResult<Stmt> {
         let start = self.ts.current_offset();
-        self.ts.advance();
+        self.ts.expect(&TokenKind::KwPause, "`Pause`")?;
         self.ts.expect(&TokenKind::LParen, "`(`")?;
         let expr = self.parse_expr(0)?;
         self.ts.expect(&TokenKind::RParen, "`)`")?;
@@ -441,7 +434,7 @@ impl Parser {
         let expr = self.parse_expr(0)?;
         Ok(Stmt::new(
             self.ids.alloc(),
-            StmtKind::Return(Option::from(expr)),
+            StmtKind::Return(Some(expr)),
             self.ts.span_consumed_from(start),
         ))
     }
@@ -503,16 +496,10 @@ impl Parser {
         }
         Ok(base)
     }
-    //TODO: cleanup logic in parser general, so less duplications
     fn parse_syscall(&mut self) -> ParseResult<Expr> {
         let start = self.ts.current_offset();
-        self.ts.advance();
-        self.ts.expect(&TokenKind::LParen, "`(`")?;
-        let mut args = Vec::new();
-        while !self.ts.eat(&TokenKind::RParen) {
-            args.push(self.parse_expr(0)?);
-            self.ts.eat(&TokenKind::Comma);
-        }
+        self.ts.expect(&TokenKind::KwSysCall, "`SysCall`")?;
+        let args = self.parse_arg_list()?;
         Ok(Expr::new(
             self.ids.alloc(),
             ExprKind::SysCall { args },
@@ -582,7 +569,7 @@ impl Parser {
     }
     fn parse_group(&mut self) -> ParseResult<Expr> {
         let start = self.ts.current_offset();
-        self.ts.advance();
+        self.ts.expect(&TokenKind::LParen, "`(`")?;
         let mut expr = self.parse_expr(0)?;
         self.ts.expect(&TokenKind::RParen, "`)`")?;
         expr.span = self.ts.span_consumed_from(start);
@@ -598,7 +585,6 @@ impl Parser {
     }
 
     fn parse_call(&mut self, name: String, name_span: Span) -> ParseResult<Expr> {
-        self.ts.advance();
         let args = self.parse_arg_list()?;
         Ok(Expr::new(
             self.ids.alloc(),
@@ -611,10 +597,19 @@ impl Parser {
         ))
     }
     fn parse_arg_list(&mut self) -> ParseResult<Vec<Expr>> {
+        self.ts.expect(&TokenKind::LParen, "`(`")?;
         let mut args = Vec::new();
-        while !self.ts.eat(&TokenKind::RParen) {
+
+        if self.ts.eat(&TokenKind::RParen) {
+            return Ok(args);
+        }
+
+        loop {
             args.push(self.parse_expr(0)?);
-            self.ts.eat(&TokenKind::Comma);
+            if self.ts.eat(&TokenKind::RParen) {
+                break;
+            }
+            self.ts.expect(&TokenKind::Comma, "`,`")?;
         }
         Ok(args)
     }
