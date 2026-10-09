@@ -156,6 +156,22 @@ pub enum TokenKind {
 }
 
 impl TokenKind {
+    pub const fn is_type_keyword(&self) -> bool {
+        matches!(
+            self,
+            Self::KwInt
+                | Self::KwFloat
+                | Self::KwVec3
+                | Self::KwVoid
+                | Self::KwBool
+                | Self::KwString
+        )
+    }
+
+    pub const fn is_variable_type_keyword(&self) -> bool {
+        self.is_type_keyword() && !matches!(self, Self::KwVoid)
+    }
+
     pub fn description(&self) -> &'static str {
         match self {
             Self::KwInt => "`int`",

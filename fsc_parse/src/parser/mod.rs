@@ -138,18 +138,13 @@ impl Parser {
     }
     pub fn parse_item(&mut self) -> ParseResult<Item> {
         match self.ts.peek() {
-            Some(TokenKind::KwExtern) => Ok(Item::FuncDecl(self.parse_function_declaration()?)),
-            Some(TokenKind::KwConst) => Ok(Item::ConstDecl(self.parse_const_declaration()?)),
-            Some(TokenKind::KwConfig) => Ok(Item::ConfigDecl(self.parse_config_declaration()?)),
-            Some(
-                TokenKind::KwExport
-                | TokenKind::KwInt
-                | TokenKind::KwFloat
-                | TokenKind::KwVec3
-                | TokenKind::KwVoid
-                | TokenKind::KwBool
-                | TokenKind::KwString,
-            ) => Ok(Item::FuncDef(self.parse_function()?)),
+            Some(TokenKind::KwExtern) => self.parse_function_declaration().map(Item::FuncDecl),
+            Some(TokenKind::KwConst) => self.parse_const_declaration().map(Item::ConstDecl),
+            Some(TokenKind::KwConfig) => self.parse_config_declaration().map(Item::ConfigDecl),
+            Some(TokenKind::KwExport) => self.parse_exported_function().map(Item::FuncDef),
+            Some(token) if token.is_type_keyword() => {
+                self.parse_function_definition(false).map(Item::FuncDef)
+            }
             _ => Err(self.ts.unexpected("top-level item")),
         }
     }
@@ -157,8 +152,12 @@ impl Parser {
         self.ts.is_at_end()
     }
 
-    fn parse_function(&mut self) -> ParseResult<FuncDef> {
-        let exported = self.ts.eat(&TokenKind::KwExport);
+    fn parse_exported_function(&mut self) -> ParseResult<FuncDef> {
+        self.ts.expect(&TokenKind::KwExport, "`export`")?;
+        self.parse_function_definition(true)
+    }
+
+    fn parse_function_definition(&mut self, exported: bool) -> ParseResult<FuncDef> {
         let header = self.parse_function_header()?;
 
         // body
@@ -232,34 +231,16 @@ impl Parser {
 
     fn parse_type_keyword(&mut self) -> ParseResult<(Ty, Span)> {
         let start = self.ts.current_offset();
-        let token = self.ts.peek();
-        let ty = match token {
-            Some(TokenKind::KwInt) => {
-                self.ts.expect(&TokenKind::KwInt, "int")?;
-                Ty::Int
-            }
-            Some(TokenKind::KwFloat) => {
-                self.ts.expect(&TokenKind::KwFloat, "float")?;
-                Ty::Float
-            }
-            Some(TokenKind::KwVec3) => {
-                self.ts.expect(&TokenKind::KwVec3, "vec3")?;
-                Ty::Vec3
-            }
-            Some(TokenKind::KwVoid) => {
-                self.ts.expect(&TokenKind::KwVoid, "void")?;
-                Ty::Void
-            }
-            Some(TokenKind::KwBool) => {
-                self.ts.expect(&TokenKind::KwBool, "bool")?;
-                Ty::Bool
-            }
-            Some(TokenKind::KwString) => {
-                self.ts.expect(&TokenKind::KwString, "string")?;
-                Ty::Str
-            }
+        let ty = match self.ts.peek() {
+            Some(TokenKind::KwInt) => Ty::Int,
+            Some(TokenKind::KwFloat) => Ty::Float,
+            Some(TokenKind::KwVec3) => Ty::Vec3,
+            Some(TokenKind::KwVoid) => Ty::Void,
+            Some(TokenKind::KwBool) => Ty::Bool,
+            Some(TokenKind::KwString) => Ty::Str,
             _ => return Err(self.ts.unexpected("type keyword")),
         };
+        self.ts.advance();
         Ok((ty, self.ts.span_consumed_from(start)))
     }
 
@@ -328,13 +309,7 @@ impl Parser {
                 Ok(Stmt::new(self.ids.alloc(), StmtKind::ExprStmt(expr), span))
             }
             Some(TokenKind::KwPause) => self.parse_pause(),
-            Some(
-                TokenKind::KwInt
-                | TokenKind::KwFloat
-                | TokenKind::KwVec3
-                | TokenKind::KwBool
-                | TokenKind::KwString,
-            ) => self.parse_var_decl(),
+            Some(token) if token.is_variable_type_keyword() => self.parse_var_decl(),
             _ => Err(self.ts.unexpected("statement")),
         }
     }
