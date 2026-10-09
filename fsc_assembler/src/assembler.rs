@@ -182,11 +182,11 @@ impl Assembler {
         }
     }
     // symbol definition
-    pub fn define_function(&mut self, name: &str, private: bool) -> AssemblerResult<()> {
-        let scope = if private {
-            Scope::Private
-        } else {
+    pub fn define_function(&mut self, name: &str, exported: bool) -> AssemblerResult<()> {
+        let scope = if exported {
             Scope::Export
+        } else {
+            Scope::Private
         };
         self.symbol_table
             .define(name.to_string(), self.program_counter, scope)?;
