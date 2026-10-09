@@ -128,6 +128,13 @@ pub struct Parser {
     ids: NodeIdGen,
 }
 
+struct DeclHead {
+    ty: Ty,
+    ty_span: Span,
+    name: String,
+    name_span: Span,
+}
+
 impl Parser {
     pub fn new(ts: TokenStream) -> Self {
         Self {
@@ -180,47 +187,54 @@ impl Parser {
 
     fn parse_const_declaration(&mut self) -> ParseResult<ConstDecl> {
         self.ts.expect(&TokenKind::KwConst, "`const`")?;
-        let (ty, ty_span) = self.parse_type_keyword()?;
-        let (name, name_span) = self.ts.expect_ident()?;
+        let head = self.parse_decl_head()?;
         self.ts.expect(&TokenKind::Eq, "`=`")?;
         let initializer = self.parse_expr(0)?;
         self.ts.expect(&TokenKind::Semicolon, "`;`")?;
 
         Ok(ConstDecl {
-            name,
-            name_span,
-            ty,
-            ty_span,
+            name: head.name,
+            name_span: head.name_span,
+            ty: head.ty,
+            ty_span: head.ty_span,
             initializer,
         })
     }
 
     fn parse_config_declaration(&mut self) -> ParseResult<ConfigDecl> {
         self.ts.expect(&TokenKind::KwConfig, "`config`")?;
-        let (ty, ty_span) = self.parse_type_keyword()?;
-        let (name, name_span) = self.ts.expect_ident()?;
+        let head = self.parse_decl_head()?;
         self.ts.expect(&TokenKind::Semicolon, "`;`")?;
 
         Ok(ConfigDecl {
-            name,
-            name_span,
-            ty,
-            ty_span,
+            name: head.name,
+            name_span: head.name_span,
+            ty: head.ty,
+            ty_span: head.ty_span,
         })
     }
 
     fn parse_function_header(&mut self) -> ParseResult<FunctionHeader> {
-        let (ret_ty, ret_ty_span) = self.parse_type_keyword()?;
-        let (name, name_span) = self.ts.expect_ident()?;
-
+        let head = self.parse_decl_head()?;
         let params = self.parse_param_list()?;
 
         Ok(FunctionHeader {
+            name: head.name,
+            name_span: head.name_span,
+            params,
+            ret_ty: head.ty,
+            ret_ty_span: head.ty_span,
+        })
+    }
+
+    fn parse_decl_head(&mut self) -> ParseResult<DeclHead> {
+        let (ty, ty_span) = self.parse_type_keyword()?;
+        let (name, name_span) = self.ts.expect_ident()?;
+        Ok(DeclHead {
+            ty,
+            ty_span,
             name,
             name_span,
-            params,
-            ret_ty,
-            ret_ty_span,
         })
     }
 
@@ -379,8 +393,7 @@ impl Parser {
 
     fn parse_var_decl(&mut self) -> ParseResult<Stmt> {
         let start = self.ts.current_offset();
-        let (ty, ty_span) = self.parse_type_keyword()?;
-        let (name, name_span) = self.ts.expect_ident()?;
+        let head = self.parse_decl_head()?;
         let init = if self.ts.eat(&TokenKind::Eq) {
             Some(self.parse_expr(0)?)
         } else {
@@ -389,10 +402,10 @@ impl Parser {
         Ok(Stmt::new(
             self.ids.alloc(),
             StmtKind::VarDecl {
-                name,
-                name_span,
-                ty,
-                ty_span,
+                name: head.name,
+                name_span: head.name_span,
+                ty: head.ty,
+                ty_span: head.ty_span,
                 init,
             },
             self.ts.span_consumed_from(start),
@@ -447,8 +460,7 @@ impl Parser {
             Some(TokenKind::StrLit(_)) => self.parse_string_literal(),
             Some(TokenKind::Ident(_)) => self.parse_identifier(),
             Some(TokenKind::LParen) => self.parse_group(),
-            Some(TokenKind::Bang) => self.parse_unary(UnaryOp::Not),
-            Some(TokenKind::Minus) => self.parse_unary(UnaryOp::Neg),
+            Some(TokenKind::Bang | TokenKind::Minus) => self.parse_unary(),
             Some(TokenKind::KwSysCall) => self.parse_syscall(),
             _ => Err(self.ts.unexpected("expression")),
         }?;
@@ -507,8 +519,13 @@ impl Parser {
         ))
     }
 
-    fn parse_unary(&mut self, op: UnaryOp) -> ParseResult<Expr> {
+    fn parse_unary(&mut self) -> ParseResult<Expr> {
         let start = self.ts.current_offset();
+        let op = match self.ts.peek() {
+            Some(TokenKind::Bang) => UnaryOp::Not,
+            Some(TokenKind::Minus) => UnaryOp::Neg,
+            _ => return Err(self.ts.unexpected("unary operator")),
+        };
         self.ts.advance();
         let expr = self.parse_expr(6)?;
 
