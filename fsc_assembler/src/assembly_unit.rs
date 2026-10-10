@@ -1,14 +1,16 @@
-use crate::assembler::{Opcode, Relocation, RelocationKind};
 use crate::binary::FscriptBinary;
 use crate::binary::symbol_table::BinarySymbolTable;
+use crate::emission::{Opcode, Relocation, RelocationKind};
 use crate::encoding::{InsnWord, calculate_call_operand, encode_relative_jump};
 use crate::error::{AssemblerError, AssemblerResult};
+use crate::external_data_offsets::ExternalDataOffsets;
+use crate::external_function_offsets::ExternalFunctionOffsets;
+use crate::function_symbols::FunctionSymbols;
 use crate::string_table::StringTable;
-use crate::symbol_table::SymbolTable;
 
 pub struct AssemblyUnit {
     pub(crate) code: Vec<u8>,
-    pub(crate) symbol_table: SymbolTable,
+    pub(crate) function_symbols: FunctionSymbols,
     pub(crate) string_table: StringTable,
     pub(crate) relocations: Vec<Relocation>,
 }
@@ -16,13 +18,13 @@ pub struct AssemblyUnit {
 impl AssemblyUnit {
     pub(crate) fn new(
         code: Vec<u8>,
-        symbol_table: SymbolTable,
+        function_symbols: FunctionSymbols,
         string_table: StringTable,
         relocations: Vec<Relocation>,
     ) -> Self {
         Self {
             code,
-            symbol_table,
+            function_symbols,
             string_table,
             relocations,
         }
@@ -30,16 +32,16 @@ impl AssemblyUnit {
 
     pub fn from_binary(binary: FscriptBinary) -> AssemblerResult<(String, Self)> {
         let (script_name, code, binary_symbols, binary_strings) = binary.into_parts();
-        let mut symbol_table = SymbolTable::new();
+        let mut function_symbols = FunctionSymbols::new();
         for (name, offset) in binary_symbols.into_entries() {
-            symbol_table.define_function(name, offset, true)?;
+            function_symbols.define_function(name, offset)?;
         }
 
         Ok((
             script_name,
             Self::new(
                 code,
-                symbol_table,
+                function_symbols,
                 StringTable::from_binary(binary_strings)?,
                 Vec::new(),
             ),
@@ -47,7 +49,7 @@ impl AssemblyUnit {
     }
 
     pub fn function_offset(&self, name: &str) -> Option<u32> {
-        self.symbol_table.resolve_function_offset(name).ok()
+        self.function_symbols.resolve_function_offset(name).ok()
     }
 
     fn rebase(mut self, offset: u32) -> AssemblerResult<Self> {
@@ -65,7 +67,7 @@ impl AssemblyUnit {
             return Err(AssemblerError::AddressOverflow);
         }
 
-        self.symbol_table.rebase(offset)?;
+        self.function_symbols.rebase(offset)?;
         for relocation in &mut self.relocations {
             relocation.code_offset += offset;
         }
@@ -78,7 +80,7 @@ impl AssemblyUnit {
             u32::try_from(self.code.len()).map_err(|_error| AssemblerError::AddressOverflow)?;
         let other = other.rebase(offset)?;
 
-        self.symbol_table.merge(other.symbol_table)?;
+        self.function_symbols.merge(other.function_symbols)?;
         self.string_table.merge(&other.string_table)?;
         self.code.extend(other.code);
         self.relocations.extend(other.relocations);
@@ -87,19 +89,16 @@ impl AssemblyUnit {
     }
 
     pub fn rename_function(&mut self, current_name: &str, new_name: &str) -> AssemblerResult<()> {
-        self.symbol_table.rename_function(current_name, new_name)?;
+        self.function_symbols
+            .rename_function(current_name, new_name)?;
 
         for relocation in &mut self.relocations {
             match &mut relocation.kind {
-                RelocationKind::Call { symbol } if symbol == current_name => {
+                RelocationKind::ExternalCall { symbol } if symbol == current_name => {
                     new_name.clone_into(symbol);
                 }
-                RelocationKind::Jump { function, .. } if function == current_name => {
-                    new_name.clone_into(function);
-                }
-                RelocationKind::Call { .. }
-                | RelocationKind::Address { .. }
-                | RelocationKind::Jump { .. }
+                RelocationKind::ExternalCall { .. }
+                | RelocationKind::ExternalDataAddress { .. }
                 | RelocationKind::StringOffset { .. } => {}
             }
         }
@@ -107,13 +106,8 @@ impl AssemblyUnit {
         Ok(())
     }
 
-    pub fn make_function_private(&mut self, name: &str) -> AssemblerResult<()> {
-        self.symbol_table.make_function_private(name)
-    }
-
-    pub fn define_private_function(&mut self, name: &str, offset: u32) -> AssemblerResult<()> {
-        self.symbol_table
-            .define_function(name.to_owned(), offset, false)
+    pub fn remove_function_symbol(&mut self, name: &str) -> AssemblerResult<u32> {
+        self.function_symbols.remove(name)
     }
 
     pub fn redirect(&mut self, entry_offset: u32, target_offset: u32) -> AssemblerResult<()> {
@@ -134,7 +128,21 @@ impl AssemblyUnit {
     }
 
     pub fn into_binary(mut self, script_name: String) -> AssemblerResult<FscriptBinary> {
-        self.apply_relocations()?;
+        self.apply_relocations(&ExternalFunctionOffsets::new(), &ExternalDataOffsets::new())?;
+        self.finish_binary(script_name)
+    }
+
+    pub fn into_binary_with_externals(
+        mut self,
+        script_name: String,
+        external_functions: &ExternalFunctionOffsets,
+        external_data: &ExternalDataOffsets,
+    ) -> AssemblerResult<FscriptBinary> {
+        self.apply_relocations(external_functions, external_data)?;
+        self.finish_binary(script_name)
+    }
+
+    fn finish_binary(self, script_name: String) -> AssemblerResult<FscriptBinary> {
         let binary_symbol_table = self.build_binary_symbol_table();
 
         Ok(FscriptBinary::new(
@@ -145,27 +153,33 @@ impl AssemblyUnit {
         ))
     }
 
-    fn apply_relocations(&mut self) -> AssemblerResult<()> {
+    fn apply_relocations(
+        &mut self,
+        external_functions: &ExternalFunctionOffsets,
+        external_data: &ExternalDataOffsets,
+    ) -> AssemblerResult<()> {
         for relocation in &mut self.relocations {
             let idx = relocation.code_offset as usize;
             match &relocation.kind {
-                RelocationKind::Call { symbol } => {
-                    let target_offset = self.symbol_table.resolve_function_offset(symbol)?;
+                RelocationKind::ExternalCall { symbol } => {
+                    let target_offset = self
+                        .function_symbols
+                        .resolve_function_offset(symbol)
+                        .or_else(|_| {
+                            external_functions
+                                .resolve(symbol)
+                                .ok_or_else(|| AssemblerError::UndefinedSymbol(symbol.clone()))
+                        })?;
                     let operand = calculate_call_operand(relocation.code_offset, target_offset)?;
                     let operand_bytes = operand.to_be_bytes();
                     self.code[idx] = operand_bytes[0];
                     self.code[idx + 1] = operand_bytes[1];
                 }
-                RelocationKind::Address { symbol } => {
-                    let target_offset = self.symbol_table.resolve_data_offset(symbol)?;
+                RelocationKind::ExternalDataAddress { symbol } => {
+                    let target_offset = external_data
+                        .resolve(symbol)
+                        .ok_or_else(|| AssemblerError::UndefinedSymbol(symbol.clone()))?;
                     let operand = calculate_call_operand(relocation.code_offset, target_offset)?;
-                    let operand_bytes = operand.to_be_bytes();
-                    self.code[idx] = operand_bytes[0];
-                    self.code[idx + 1] = operand_bytes[1];
-                }
-                RelocationKind::Jump { function, label } => {
-                    let target = self.symbol_table.resolve_label(function, label)?;
-                    let operand = calculate_call_operand(relocation.code_offset, target.offset())?;
                     let operand_bytes = operand.to_be_bytes();
                     self.code[idx] = operand_bytes[0];
                     self.code[idx + 1] = operand_bytes[1];
@@ -188,14 +202,14 @@ impl AssemblyUnit {
 
     fn build_binary_symbol_table(&self) -> BinarySymbolTable {
         let mut table = BinarySymbolTable::new();
-        let mut exports: Vec<_> = self.symbol_table.exports().collect();
-        exports.sort_by(|(left_name, left), (right_name, right)| {
+        let mut symbols: Vec<_> = self.function_symbols.entries().collect();
+        symbols.sort_by(|(left_name, left), (right_name, right)| {
             left.offset()
                 .cmp(&right.offset())
                 .then_with(|| left_name.cmp(right_name))
         });
 
-        for (name, symbol) in exports {
+        for (name, symbol) in symbols {
             table.add(name.to_owned(), symbol.offset());
         }
         table

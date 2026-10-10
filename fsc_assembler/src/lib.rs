@@ -1,12 +1,15 @@
-pub mod assembler;
+mod assembler;
 pub mod assembly_unit;
 pub mod binary;
+mod emission;
 pub mod encoding;
 pub mod error;
+mod external_data_offsets;
+mod external_function_offsets;
+mod function_symbols;
 pub mod string_table;
-pub mod symbol_table;
-mod vm_ir;
 
-pub use assembler::Assembler;
+pub use assembler::assemble_program;
 pub use assembly_unit::AssemblyUnit;
-pub use vm_ir::assemble_program;
+pub use external_data_offsets::ExternalDataOffsets;
+pub use external_function_offsets::ExternalFunctionOffsets;

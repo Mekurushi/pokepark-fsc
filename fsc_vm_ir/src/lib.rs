@@ -12,8 +12,9 @@ mod word;
 pub use control_flow::{BasicBlock, BranchKind, BranchMode, ExitKind, ReturnKind, Terminator};
 pub use entity::{BlockId, DataId, FunctionId};
 pub use instruction::{
-    AddressingMode, Comparison, ConversionKind, ExternalFunction, FloatOperation, FunctionRef,
-    Instruction, IntegerOperation, MemoryWidth, ShiftOperation, StoreOperation,
+    AddressingMode, Comparison, ConversionKind, DataRef, ExternalData, ExternalFunction,
+    FloatOperation, FunctionRef, Instruction, IntegerOperation, MemoryWidth, ShiftOperation,
+    StoreOperation,
 };
 pub use program::{Data, Function, Linkage, Program};
 pub use word::Word;

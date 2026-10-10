@@ -1,14 +1,8 @@
 [workspace]
 members = [
     "fsc_assembler",
-    "fsc_asm",
-    "fsc_cli",
-    "fsc_codegen",
-    "fsc_compiler",
     "fsc_diagnostics",
-    "fsc_lsp",
     "fsc_parse",
-    "fsc_patcher",
     "fsc_sema",
     "fsc_vm_ir",
 ]

@@ -1,2172 +1,610 @@
-use crate::assembly_unit::AssemblyUnit;
-use crate::binary::FscriptBinary;
-use crate::encoding::InsnWord;
+use std::collections::HashMap;
+
+use fsc_vm_ir::{
+    AddressingMode, BasicBlock, BlockId, BranchKind, BranchMode, Comparison, ConversionKind,
+    DataId, DataRef, ExitKind, FloatOperation, FunctionId, FunctionRef, Instruction,
+    IntegerOperation, Linkage, MemoryWidth, Program, ReturnKind, ShiftOperation, StoreOperation,
+    Terminator,
+};
+
+use crate::emission::{JumpSubtype, Relocation};
+use crate::encoding::calculate_call_operand;
 use crate::error::{AssemblerError, AssemblerResult};
+use crate::function_symbols::FunctionSymbols;
 use crate::string_table::StringTable;
-use crate::symbol_table::SymbolTable;
-// opcodes
-#[repr(u8)]
-pub enum Opcode {
-    SC = 0x1,
-    Ctrl = 0x2,
-    Call = 0x3,
-    Return = 0x06,
-    GrowStack = 0x07,
-    Jump = 0x8,
-    JeqImm = 0xa,
-    LoadArg = 0x0b,
-    ArgMem = 0x0c,
-    LoadRel = 0x0d,
-    ShrinkStack = 0xf,
-    Push = 0x10,
-    PushImm = 0x11,
-    PushResult = 0x12,
-    LStr = 0x13,
-    Alu = 0x14,
-    FAlu = 0x15,
-    Cmp = 0x16,
-    FCmp = 0x17,
-    Shift = 0x18,
-    Lea = 0x19,
-    Load = 0x1A,
-    Store = 0x1B,
-    Conv = 0x1C,
-    Debug = 0x1E,
+use crate::AssemblyUnit;
+
+pub fn assemble_program(program: &Program) -> AssemblerResult<AssemblyUnit> {
+    Assembler::new().assemble(program)
 }
 
-#[repr(u8)]
-pub enum CtrlSubtype {
-    Delay = 0,
-    // TODO: check and commit to the semantic naming Abort.
-    Exit1 = 1,
-    // TODO: check and commit to the semantic naming Reset.
-    Exit2 = 2,
-    DelayLoad = 3,
-    DelayNeq0 = 4,
-    LoadArgRef = 5,
-}
-
-#[repr(u8)]
-pub enum ReturnSubtype {
-    Ret = 0,
-    Retv = 1,
-}
-
-#[repr(u8)]
-pub enum JumpSubtype {
-    Jmp = 0,
-    Jnz = 1,
-    Jz = 2,
-    JnzPause = 3,
-    JzPause = 4,
-    JnzSet = 5,
-    JzSet = 6,
-    Jeq = 7,
-}
-
-#[repr(u8)]
-pub enum ArgMemSubtype {
-    StoreArg = 0,
-    ArgAddi = 1,
-    ArgSubi = 2,
-}
-
-#[repr(u16)]
-pub enum ShiftOp {
-    Sl = 0,
-    Srm = 1,
-    Sr = 2,
-}
-
-#[repr(u16)]
-pub enum FaluOp {
-    Fadd = 0,
-    Fsub = 1,
-    Fmul = 2,
-    Fdiv = 3,
-    Feq0 = 9,
-    Fneg = 10,
-}
-
-#[repr(u16)]
-pub enum CmpOp {
-    Eq = 0xb,
-    Neq = 0xc,
-    Gt = 0xd,
-    Lt = 0xe,
-    Ge = 0xf,
-    Le = 0x10,
-}
-
-#[repr(u16)]
-pub enum FCmpOp {
-    Feq = 0xb,
-    Fneq = 0xc,
-    Fgt = 0xd,
-    Flt = 0xe,
-    Fge = 0xf,
-    Fle = 0x10,
-}
-
-#[repr(u16)]
-pub enum AluOp {
-    Add = 0,
-    Sub = 1,
-    Mul = 2,
-    Div = 3,
-    Mod = 4,
-    And = 5,
-    Or = 6,
-    Xor = 7,
-    Not = 8,
-    Eq0 = 9,
-    Neg = 10,
-}
-
-#[repr(u8)]
-pub enum StoreSubtype {
-    Store = 0,
-    Add = 1,
-    Sub = 2,
-}
-
-#[repr(i16)]
-pub enum LoadStoreSize {
-    Byte = 1,
-    Short = 2,
-    Word = 4,
-}
-
-#[repr(u8)]
-pub enum ConvSubtype {
-    ItoF = 0,
-    FtoI = 1,
-}
-
-pub(crate) enum RelocationKind {
-    Call { symbol: String },
-    Address { symbol: String },
-    Jump { function: String, label: String },
-    StringOffset { value: String },
-}
-
-pub(crate) struct Relocation {
-    pub(crate) code_offset: u32,
-    pub(crate) kind: RelocationKind,
-}
-
-pub struct Assembler {
-    code: Vec<u8>,
-    symbol_table: SymbolTable,
-    string_table: StringTable,
-    relocations: Vec<Relocation>,
-    program_counter: u32,
-    state: EmitState,
-}
-enum EmitState {
-    Idle,
-    InFunction(String),
-}
-impl Default for Assembler {
-    fn default() -> Self {
-        Self::new()
-    }
+pub(super) struct Assembler {
+    pub(super) code: Vec<u8>,
+    pub(super) function_symbols: FunctionSymbols,
+    pub(super) string_table: StringTable,
+    pub(super) relocations: Vec<Relocation>,
+    pub(super) program_counter: u32,
 }
 
 impl Assembler {
-    pub fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self {
             code: Vec::new(),
-            symbol_table: SymbolTable::new(),
+            function_symbols: FunctionSymbols::new(),
             string_table: StringTable::new(),
-            program_counter: 0,
             relocations: Vec::new(),
-            state: EmitState::Idle,
+            program_counter: 0,
         }
     }
-    // symbol definition
-    pub fn define_function(&mut self, name: &str, exported: bool) -> AssemblerResult<()> {
-        if let EmitState::InFunction(function) = &self.state {
-            return Err(AssemblerError::FunctionAlreadyOpen(function.clone()));
-        }
-        self.symbol_table
-            .define_function(name.to_string(), self.program_counter, exported)?;
-        self.state = EmitState::InFunction(name.to_string());
-        Ok(())
-    }
-    pub fn end_function(&mut self) -> AssemblerResult<()> {
-        match self.state {
-            EmitState::InFunction(_) => {
-                self.state = EmitState::Idle;
-                Ok(())
+
+    fn assemble(mut self, program: &Program) -> AssemblerResult<AssemblyUnit> {
+        let mut layout = Layout::default();
+        let mut fixups = Vec::new();
+
+        for (function_id, function) in program.functions() {
+            layout.functions.insert(function_id, self.current_offset());
+
+            for (block_id, block) in function.blocks() {
+                layout
+                    .blocks
+                    .insert((function_id, block_id), self.current_offset());
+                emit_block(
+                    &mut self,
+                    &mut fixups,
+                    function_id,
+                    function.name(),
+                    block_id,
+                    block,
+                )?;
             }
-            EmitState::Idle => Err(AssemblerError::NoActiveFunction),
         }
-    }
-    pub fn define_data(&mut self, name: &str) -> AssemblerResult<()> {
-        if let EmitState::InFunction(function) = &self.state {
-            return Err(AssemblerError::FunctionAlreadyOpen(function.clone()));
+
+        for (id, data) in program.data_objects() {
+            layout.data.insert(id, self.current_offset());
+            for word in data.words() {
+                self.emit_data_word(word.bits());
+            }
         }
-        self.symbol_table
-            .define_data(name.to_owned(), self.program_counter)
-    }
-    pub fn emit_data_word(&mut self, value: u32) -> AssemblerResult<()> {
-        if let EmitState::InFunction(function) = &self.state {
-            return Err(AssemblerError::DataInsideFunction(function.clone()));
+
+        let mut exports = Vec::new();
+        for (id, function) in program.functions() {
+            if function.linkage() == Linkage::Exported {
+                exports.push((function.name().to_owned(), layout.function(id)?));
+            }
         }
-        self.emit(value);
-        Ok(())
+        let mut unit = self.into_unit();
+        apply_fixups(&mut unit, &layout, &fixups)?;
+        for (name, offset) in exports {
+            unit.function_symbols.define_function(name, offset)?;
+        }
+        Ok(unit)
     }
-    pub fn define_label(&mut self, name: &str) -> AssemblerResult<()> {
-        let function = match self.state {
-            EmitState::InFunction(ref function) => function,
-            EmitState::Idle => Err(AssemblerError::LabelOutsideFunction(name.to_string()))?,
+}
+
+#[derive(Default)]
+struct Layout {
+    functions: HashMap<FunctionId, u32>,
+    blocks: HashMap<(FunctionId, BlockId), u32>,
+    data: HashMap<DataId, u32>,
+}
+
+impl Layout {
+    fn function(&self, id: FunctionId) -> AssemblerResult<u32> {
+        self.functions
+            .get(&id)
+            .copied()
+            .ok_or_else(|| AssemblerError::UndefinedSymbol(id.to_string()))
+    }
+
+    fn block(&self, function: FunctionId, block: BlockId) -> AssemblerResult<u32> {
+        self.blocks
+            .get(&(function, block))
+            .copied()
+            .ok_or_else(|| AssemblerError::UndefinedSymbol(block.to_string()))
+    }
+
+    fn data(&self, id: DataId) -> AssemblerResult<u32> {
+        self.data
+            .get(&id)
+            .copied()
+            .ok_or_else(|| AssemblerError::UndefinedSymbol(id.to_string()))
+    }
+}
+// fixup and relocations are split between the assembler (everything that can resolved in one
+// unit) and the assembly unit that is responsible for the linking phase e.g. merging two units
+// together and doing the relocation. Data is currently one unit local only, we would need to
+// keep some metadata when we want to support "external" data references
+struct Fixup {
+    code_offset: u32,
+    kind: FixupKind,
+}
+
+enum FixupKind {
+    Call(FunctionId),
+    Address(DataId),
+    Jump {
+        function: FunctionId,
+        block: BlockId,
+    },
+}
+
+fn apply_fixups(unit: &mut AssemblyUnit, layout: &Layout, fixups: &[Fixup]) -> AssemblerResult<()> {
+    for fixup in fixups {
+        let target_offset = match fixup.kind {
+            FixupKind::Call(function) => layout.function(function)?,
+            FixupKind::Address(data) => layout.data(data)?,
+            FixupKind::Jump { function, block } => layout.block(function, block)?,
         };
-        self.symbol_table
-            .define_label(function, name.to_string(), self.program_counter)
-    }
-
-    // instruction emission
-
-    // --- SC (0x1) ---
-    pub fn emit_syscall(&mut self, subtype: u8, page: u8, func: u16) {
-        self.emit(
-            InsnWord::new(Opcode::SC as u8)
-                .subtype(subtype)
-                .syscall_page(page)
-                .syscall_func(func)
-                .build(),
-        );
-    }
-
-    // --- Ctrl (0x2) ---
-
-    pub fn emit_delay(&mut self, operand: i16) {
-        self.emit(
-            InsnWord::new(Opcode::Ctrl as u8)
-                .subtype(CtrlSubtype::Delay as u8)
-                .operand(operand)
-                .build(),
-        );
-    }
-
-    pub fn emit_exit_1(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Ctrl as u8)
-                .subtype(CtrlSubtype::Exit1 as u8)
-                .build(),
-        );
-    }
-    pub fn emit_exit_2(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Ctrl as u8)
-                .subtype(CtrlSubtype::Exit2 as u8)
-                .build(),
-        );
-    }
-
-    pub fn emit_delay_load(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Ctrl as u8)
-                .subtype(CtrlSubtype::DelayLoad as u8)
-                .build(),
-        );
-    }
-    pub fn emit_delay_neq0(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Ctrl as u8)
-                .subtype(CtrlSubtype::DelayNeq0 as u8)
-                .build(),
-        );
-    }
-    pub fn emit_load_arg_ref(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Ctrl as u8)
-                .subtype(CtrlSubtype::LoadArgRef as u8)
-                .build(),
-        );
-    }
-
-    // --- Call (0x3) ---
-
-    pub fn emit_call(&mut self, symbol: &str) -> AssemblerResult<()> {
-        self.push_relocation(RelocationKind::Call {
-            symbol: symbol.to_owned(),
-        });
-        self.emit(InsnWord::new(Opcode::Call as u8).build());
-        Ok(())
-    }
-
-    // --- Return (0x6) ---
-    pub fn emit_ret(&mut self, n: i16) {
-        // TODO: define explicit usage of operand; Ghidra visualizes as neagtive but actual operand is positive
-        let operand = n.unsigned_abs().cast_signed();
-        self.emit(
-            InsnWord::new(Opcode::Return as u8)
-                .subtype(ReturnSubtype::Ret as u8)
-                .operand(operand)
-                .build(),
-        );
-    }
-    pub fn emit_retv(&mut self, n: i16) {
-        let operand = n.unsigned_abs().cast_signed();
-        self.emit(
-            InsnWord::new(Opcode::Return as u8)
-                .subtype(ReturnSubtype::Retv as u8)
-                .operand(operand)
-                .build(),
-        );
-    }
-    // --- grow_stack (0x7) ---
-
-    pub fn emit_grow_stack(&mut self, operand: i16) {
-        self.emit(
-            InsnWord::new(Opcode::GrowStack as u8)
-                .operand(operand)
-                .build(),
-        );
-    }
-
-    // --- Jump (0x8) ---
-
-    pub fn emit_jmp(&mut self, label: &str) -> AssemblerResult<()> {
-        self.emit_jump(JumpSubtype::Jmp, label)
-    }
-    pub fn emit_jnz(&mut self, label: &str) -> AssemblerResult<()> {
-        self.emit_jump(JumpSubtype::Jnz, label)
-    }
-    pub fn emit_jz(&mut self, label: &str) -> AssemblerResult<()> {
-        self.emit_jump(JumpSubtype::Jz, label)
-    }
-
-    pub fn emit_jnz_pause(&mut self, label: &str) -> AssemblerResult<()> {
-        self.emit_jump(JumpSubtype::JnzPause, label)
-    }
-
-    pub fn emit_jz_pause(&mut self, label: &str) -> AssemblerResult<()> {
-        self.emit_jump(JumpSubtype::JzPause, label)
-    }
-
-    pub fn emit_jnz_set(&mut self, label: &str) -> AssemblerResult<()> {
-        self.emit_jump(JumpSubtype::JnzSet, label)
-    }
-
-    pub fn emit_jz_set(&mut self, label: &str) -> AssemblerResult<()> {
-        self.emit_jump(JumpSubtype::JzSet, label)
-    }
-
-    pub fn emit_jeq(&mut self, label: &str) -> AssemblerResult<()> {
-        self.emit_jump(JumpSubtype::Jeq, label)
-    }
-
-    pub fn emit_jeq_imm(&mut self, imm: u8, label: &str) -> AssemblerResult<()> {
-        let function_name = self.current_function(label)?;
-        self.push_relocation(RelocationKind::Jump {
-            function: function_name.clone(),
-            label: label.to_owned(),
-        });
-        self.emit(InsnWord::new(Opcode::JeqImm as u8).subtype(imm).build());
-        Ok(())
-    }
-
-    // --- load_arg (0xb) ---
-    pub fn emit_load_arg(&mut self, operand: i16) {
-        self.emit(
-            InsnWord::new(Opcode::LoadArg as u8)
-                .operand(operand)
-                .build(),
-        );
-    }
-
-    // --- ArgMem (0xc) ---
-    pub fn emit_store_arg(&mut self, operand: i16) {
-        self.emit(
-            InsnWord::new(Opcode::ArgMem as u8)
-                .subtype(ArgMemSubtype::StoreArg as u8)
-                .operand(operand)
-                .build(),
-        );
-    }
-
-    pub fn emit_arg_addi(&mut self, operand: i16) {
-        self.emit(
-            InsnWord::new(Opcode::ArgMem as u8)
-                .subtype(ArgMemSubtype::ArgAddi as u8)
-                .operand(operand)
-                .build(),
-        );
-    }
-    pub fn emit_arg_subi(&mut self, operand: i16) {
-        self.emit(
-            InsnWord::new(Opcode::ArgMem as u8)
-                .subtype(ArgMemSubtype::ArgSubi as u8)
-                .operand(operand)
-                .build(),
-        );
-    }
-
-    pub fn emit_load_rel(&mut self, offset: i16) {
-        self.emit(InsnWord::new(Opcode::LoadRel as u8).operand(offset).build());
-    }
-
-    // --- shrink_stack (0xf) ---
-
-    pub fn emit_shrink_stack(&mut self, operand: i16) {
-        self.emit(
-            InsnWord::new(Opcode::ShrinkStack as u8)
-                .operand(operand)
-                .build(),
-        );
-    }
-
-    // --- push (0x10) ---
-
-    pub fn emit_push(&mut self, operand: i16) {
-        self.emit(InsnWord::new(Opcode::Push as u8).operand(operand).build());
-    }
-
-    // --- push_imm (0x11) ---
-    pub fn emit_push_imm(&mut self, operand: u32) {
-        self.emit(InsnWord::new(Opcode::PushImm as u8).build());
-        self.emit(operand);
-    }
-    // --- push_result (0x12) ---
-    pub fn emit_push_result(&mut self) {
-        self.emit(InsnWord::new(Opcode::PushResult as u8).build());
-    }
-
-    // --- lstr (0x13) ---
-    pub fn emit_lstr(&mut self, s: &str) -> AssemblerResult<()> {
-        self.string_table.intern(s)?;
-        self.push_relocation(RelocationKind::StringOffset {
-            value: s.to_owned(),
-        });
-        self.emit(InsnWord::new(Opcode::LStr as u8).build());
-
-        Ok(())
-    }
-
-    // --- alu (0x14) ---
-
-    pub fn emit_add(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Alu as u8)
-                .operand(AluOp::Add as i16)
-                .build(),
-        );
-    }
-    pub fn emit_sub(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Alu as u8)
-                .operand(AluOp::Sub as i16)
-                .build(),
-        );
-    }
-    pub fn emit_mul(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Alu as u8)
-                .operand(AluOp::Mul as i16)
-                .build(),
-        );
-    }
-
-    pub fn emit_div(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Alu as u8)
-                .operand(AluOp::Div as i16)
-                .build(),
-        );
-    }
-
-    pub fn emit_mod(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Alu as u8)
-                .operand(AluOp::Mod as i16)
-                .build(),
-        );
-    }
-
-    pub fn emit_and(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Alu as u8)
-                .operand(AluOp::And as i16)
-                .build(),
-        );
-    }
-
-    pub fn emit_or(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Alu as u8)
-                .operand(AluOp::Or as i16)
-                .build(),
-        );
-    }
-
-    pub fn emit_xor(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Alu as u8)
-                .operand(AluOp::Xor as i16)
-                .build(),
-        );
-    }
-
-    pub fn emit_not(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Alu as u8)
-                .operand(AluOp::Not as i16)
-                .build(),
-        );
-    }
-
-    pub fn emit_eq0(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Alu as u8)
-                .operand(AluOp::Eq0 as i16)
-                .build(),
-        );
-    }
-    pub fn emit_neg(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Alu as u8)
-                .operand(AluOp::Neg as i16)
-                .build(),
-        );
-    }
-
-    // --- FAlu (0x15) ---
-
-    pub fn emit_fadd(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::FAlu as u8)
-                .operand(FaluOp::Fadd as i16)
-                .build(),
-        );
-    }
-    pub fn emit_fsub(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::FAlu as u8)
-                .operand(FaluOp::Fsub as i16)
-                .build(),
-        );
-    }
-
-    pub fn emit_fmul(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::FAlu as u8)
-                .operand(FaluOp::Fmul as i16)
-                .build(),
-        );
-    }
-
-    pub fn emit_fdiv(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::FAlu as u8)
-                .operand(FaluOp::Fdiv as i16)
-                .build(),
-        );
-    }
-
-    pub fn emit_feq0(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::FAlu as u8)
-                .operand(FaluOp::Feq0 as i16)
-                .build(),
-        );
-    }
-
-    pub fn emit_fneg(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::FAlu as u8)
-                .operand(FaluOp::Fneg as i16)
-                .build(),
-        );
-    }
-
-    // --- Cmp (0x16) ---
-    pub fn emit_eq(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Cmp as u8)
-                .operand(CmpOp::Eq as i16)
-                .build(),
-        );
-    }
-    pub fn emit_neq(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Cmp as u8)
-                .operand(CmpOp::Neq as i16)
-                .build(),
-        );
-    }
-
-    pub fn emit_lt(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Cmp as u8)
-                .operand(CmpOp::Lt as i16)
-                .build(),
-        );
-    }
-
-    pub fn emit_gt(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Cmp as u8)
-                .operand(CmpOp::Gt as i16)
-                .build(),
-        );
-    }
-
-    pub fn emit_le(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Cmp as u8)
-                .operand(CmpOp::Le as i16)
-                .build(),
-        );
-    }
-
-    pub fn emit_ge(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Cmp as u8)
-                .operand(CmpOp::Ge as i16)
-                .build(),
-        );
-    }
-
-    // --- FCmp (0x17) ---
-    pub fn emit_feq(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::FCmp as u8)
-                .operand(FCmpOp::Feq as i16)
-                .build(),
-        );
-    }
-
-    pub fn emit_fneq(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::FCmp as u8)
-                .operand(FCmpOp::Fneq as i16)
-                .build(),
-        );
-    }
-    pub fn emit_flt(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::FCmp as u8)
-                .operand(FCmpOp::Flt as i16)
-                .build(),
-        );
-    }
-
-    pub fn emit_fgt(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::FCmp as u8)
-                .operand(FCmpOp::Fgt as i16)
-                .build(),
-        );
-    }
-    pub fn emit_fle(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::FCmp as u8)
-                .operand(FCmpOp::Fle as i16)
-                .build(),
-        );
-    }
-
-    pub fn emit_fge(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::FCmp as u8)
-                .operand(FCmpOp::Fge as i16)
-                .build(),
-        );
-    }
-
-    // --- shift (0x18) ---
-
-    pub fn emit_sl(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Shift as u8)
-                .operand(ShiftOp::Sl as i16)
-                .build(),
-        );
-    }
-
-    pub fn emit_srm(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Shift as u8)
-                .operand(ShiftOp::Srm as i16)
-                .build(),
-        );
-    }
-
-    pub fn emit_sr(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Shift as u8)
-                .operand(ShiftOp::Sr as i16)
-                .build(),
-        );
-    }
-
-    // --- lea (0x19) ---
-
-    pub fn emit_lea(&mut self, symbol: &str) {
-        self.push_relocation(RelocationKind::Address {
-            symbol: symbol.to_owned(),
-        });
-        self.emit(InsnWord::new(Opcode::Lea as u8).build());
-    }
-
-    // --- Load (0x1a) ---
-
-    pub fn emit_lb(&mut self) {
-        self.emit(InsnWord::new(Opcode::Load as u8).operand(1).build());
-    }
-    pub fn emit_ls(&mut self) {
-        self.emit(InsnWord::new(Opcode::Load as u8).operand(2).build());
-    }
-    pub fn emit_lw(&mut self) {
-        self.emit(InsnWord::new(Opcode::Load as u8).operand(4).build());
-    }
-    pub fn emit_lbi(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Load as u8)
-                .operand(1)
-                .indirect_load(true)
-                .build(),
-        );
-    }
-    pub fn emit_lsi(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Load as u8)
-                .operand(2)
-                .indirect_load(true)
-                .build(),
-        );
-    }
-    pub fn emit_lwi(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Load as u8)
-                .operand(4)
-                .indirect_load(true)
-                .build(),
-        );
-    }
-
-    // --- Store (0x1b) ---
-
-    pub fn emit_sb(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Store as u8)
-                .operand(LoadStoreSize::Byte as i16)
-                .sop(StoreSubtype::Store as u8)
-                .build(),
-        );
-    }
-    pub fn emit_ss(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Store as u8)
-                .operand(LoadStoreSize::Short as i16)
-                .sop(StoreSubtype::Store as u8)
-                .build(),
-        );
-    }
-    pub fn emit_sw(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Store as u8)
-                .operand(LoadStoreSize::Word as i16)
-                .sop(StoreSubtype::Store as u8)
-                .build(),
-        );
-    }
-    pub fn emit_sbi(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Store as u8)
-                .operand(LoadStoreSize::Byte as i16)
-                .sop(StoreSubtype::Store as u8)
-                .indirect_load(true)
-                .build(),
-        );
-    }
-    pub fn emit_ssi(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Store as u8)
-                .operand(LoadStoreSize::Short as i16)
-                .sop(StoreSubtype::Store as u8)
-                .indirect_load(true)
-                .build(),
-        );
-    }
-    pub fn emit_swi(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Store as u8)
-                .operand(LoadStoreSize::Word as i16)
-                .sop(StoreSubtype::Store as u8)
-                .indirect_load(true)
-                .build(),
-        );
-    }
-
-    pub fn emit_sbadd(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Store as u8)
-                .operand(LoadStoreSize::Byte as i16)
-                .sop(StoreSubtype::Add as u8)
-                .build(),
-        );
-    }
-    pub fn emit_sbiadd(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Store as u8)
-                .operand(LoadStoreSize::Byte as i16)
-                .sop(StoreSubtype::Add as u8)
-                .indirect_load(true)
-                .build(),
-        );
-    }
-
-    pub fn emit_sbsub(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Store as u8)
-                .operand(LoadStoreSize::Byte as i16)
-                .sop(StoreSubtype::Sub as u8)
-                .build(),
-        );
-    }
-    pub fn emit_sbisub(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Store as u8)
-                .operand(LoadStoreSize::Byte as i16)
-                .sop(StoreSubtype::Sub as u8)
-                .indirect_load(true)
-                .build(),
-        );
-    }
-
-    pub fn emit_ssadd(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Store as u8)
-                .operand(LoadStoreSize::Short as i16)
-                .sop(StoreSubtype::Add as u8)
-                .build(),
-        );
-    }
-    pub fn emit_ssiadd(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Store as u8)
-                .operand(LoadStoreSize::Short as i16)
-                .sop(StoreSubtype::Add as u8)
-                .indirect_load(true)
-                .build(),
-        );
-    }
-
-    pub fn emit_sssub(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Store as u8)
-                .operand(LoadStoreSize::Short as i16)
-                .sop(StoreSubtype::Sub as u8)
-                .build(),
-        );
-    }
-    pub fn emit_ssisub(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Store as u8)
-                .operand(LoadStoreSize::Short as i16)
-                .sop(StoreSubtype::Sub as u8)
-                .indirect_load(true)
-                .build(),
-        );
-    }
-
-    pub fn emit_swadd(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Store as u8)
-                .operand(LoadStoreSize::Word as i16)
-                .sop(StoreSubtype::Add as u8)
-                .build(),
-        );
-    }
-    pub fn emit_swiadd(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Store as u8)
-                .operand(LoadStoreSize::Word as i16)
-                .sop(StoreSubtype::Add as u8)
-                .indirect_load(true)
-                .build(),
-        );
-    }
-
-    pub fn emit_swsub(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Store as u8)
-                .operand(LoadStoreSize::Word as i16)
-                .sop(StoreSubtype::Sub as u8)
-                .build(),
-        );
-    }
-    pub fn emit_swisub(&mut self) {
-        self.emit(
-            InsnWord::new(Opcode::Store as u8)
-                .operand(LoadStoreSize::Word as i16)
-                .sop(StoreSubtype::Sub as u8)
-                .indirect_load(true)
-                .build(),
-        );
-    }
-
-    // --- Conv (0x1c) ---
-    pub fn emit_itof(&mut self, operand: i16) {
-        self.emit(
-            InsnWord::new(Opcode::Conv as u8)
-                .operand(operand)
-                .subtype(ConvSubtype::ItoF as u8)
-                .build(),
-        );
-    }
-
-    pub fn emit_ftoi(&mut self, operand: i16) {
-        self.emit(
-            InsnWord::new(Opcode::Conv as u8)
-                .operand(operand)
-                .subtype(ConvSubtype::FtoI as u8)
-                .build(),
-        );
-    }
-
-    pub fn emit_debug(&mut self, subtype: u8, operand: u16) {
-        self.emit(
-            InsnWord::new(Opcode::Debug as u8)
-                .subtype(subtype)
-                .operand(operand.cast_signed())
-                .build(),
-        );
-    }
-    // --- helpers ---
-
-    fn emit(&mut self, word: u32) {
-        self.code.extend_from_slice(&word.to_be_bytes());
-        self.program_counter += 4; // TODO: new Instruction Lenght way
-    }
-
-    fn push_relocation(&mut self, kind: RelocationKind) {
-        self.relocations.push(Relocation {
-            code_offset: self.program_counter,
-            kind,
-        });
-    }
-
-    fn current_function(&self, label: &str) -> AssemblerResult<&String> {
-        match self.state {
-            EmitState::InFunction(ref function) => Ok(function),
-            EmitState::Idle => Err(AssemblerError::LabelOutsideFunction(label.to_string())),
+        let operand = calculate_call_operand(fixup.code_offset, target_offset)?;
+        let index = fixup.code_offset as usize;
+        unit.code[index..index + 2].copy_from_slice(&operand.to_be_bytes());
+    }
+    Ok(())
+}
+
+fn emit_block(
+    assembler: &mut Assembler,
+    fixups: &mut Vec<Fixup>,
+    function_id: FunctionId,
+    function_name: &str,
+    block_id: BlockId,
+    block: &BasicBlock,
+) -> AssemblerResult<()> {
+    for instruction in block.instructions() {
+        emit_instruction(assembler, fixups, instruction)?;
+    }
+
+    let terminator = block
+        .terminator()
+        .ok_or_else(|| AssemblerError::MissingTerminator {
+            function: function_name.to_owned(),
+            block: block_id.to_string(),
+        })?;
+    emit_terminator(assembler, fixups, function_id, terminator);
+    Ok(())
+}
+
+fn emit_instruction(
+    assembler: &mut Assembler,
+    fixups: &mut Vec<Fixup>,
+    instruction: &Instruction,
+) -> AssemblerResult<()> {
+    match instruction {
+        Instruction::Syscall {
+            argument_count,
+            page,
+            function,
+        } => assembler.emit_syscall(*argument_count, *page, *function),
+        Instruction::Delay(value) => assembler.emit_delay(*value),
+        Instruction::DelayFromStack => assembler.emit_delay_load(),
+        Instruction::DelayIfNonZero => assembler.emit_delay_neq0(),
+        Instruction::Call(FunctionRef::Internal(id)) => {
+            fixups.push(Fixup {
+                code_offset: assembler.current_offset(),
+                kind: FixupKind::Call(*id),
+            });
+            assembler.emit_call_placeholder();
         }
+        Instruction::Call(FunctionRef::External(function)) => {
+            assembler.emit_call(function.name())?;
+        }
+        Instruction::GrowStack(slots) => assembler.emit_grow_stack(slots.cast_signed()),
+        Instruction::ShrinkStack(slots) => assembler.emit_shrink_stack(slots.cast_signed()),
+        Instruction::LoadFrameSlot(offset) => assembler.emit_load_arg(*offset),
+        Instruction::LoadFrameSlotAddress(offset) => {
+            assembler.emit_load_arg_ref();
+            assembler.emit_load_arg(*offset);
+        }
+        Instruction::StoreFrameSlot(offset) => assembler.emit_store_arg(*offset),
+        Instruction::AddToFrameSlot(offset) => assembler.emit_arg_addi(*offset),
+        Instruction::SubtractFromFrameSlot(offset) => assembler.emit_arg_subi(*offset),
+        Instruction::LoadRel(offset) => assembler.emit_load_rel(*offset),
+        Instruction::PushConstant(word) => {
+            let value = word.bits().cast_signed();
+            if let Ok(short) = i16::try_from(value) {
+                assembler.emit_push(short);
+            } else {
+                assembler.emit_push_imm(word.bits());
+            }
+        }
+        Instruction::PushResult => assembler.emit_push_result(),
+        Instruction::LoadString(value) => assembler.emit_lstr(value)?,
+        Instruction::Integer(operation) => emit_integer(assembler, *operation),
+        Instruction::Float(operation) => emit_float(assembler, *operation),
+        Instruction::IntegerCompare(comparison) => emit_integer_comparison(assembler, *comparison),
+        Instruction::FloatCompare(comparison) => emit_float_comparison(assembler, *comparison),
+        Instruction::Shift(operation) => emit_shift(assembler, *operation),
+        Instruction::LoadAddress(DataRef::Internal(id)) => {
+            fixups.push(Fixup {
+                code_offset: assembler.current_offset(),
+                kind: FixupKind::Address(*id),
+            });
+            assembler.emit_lea_placeholder();
+        }
+        Instruction::LoadAddress(DataRef::External(data)) => {
+            assembler.emit_external_data_address(data.name());
+        }
+        Instruction::Load { width, addressing } => emit_load(assembler, *width, *addressing),
+        Instruction::Store {
+            width,
+            addressing,
+            operation,
+        } => emit_store(assembler, *width, *addressing, *operation),
+        Instruction::Convert { kind, stack_offset } => match kind {
+            ConversionKind::IntegerToFloat => assembler.emit_itof(*stack_offset),
+            ConversionKind::FloatToInteger => assembler.emit_ftoi(*stack_offset),
+        },
+        Instruction::Debug { subtype, operand } => assembler.emit_debug(*subtype, *operand),
     }
 
-    fn emit_jump(&mut self, subtype: JumpSubtype, label: &str) -> AssemblerResult<()> {
-        let function_name = self.current_function(label)?;
-        self.push_relocation(RelocationKind::Jump {
-            function: function_name.clone(),
-            label: label.to_owned(),
-        });
-        self.emit(
-            InsnWord::new(Opcode::Jump as u8)
-                .subtype(subtype as u8)
-                .build(),
-        );
-        Ok(())
-    }
-    pub fn into_unit(self) -> AssemblyUnit {
-        AssemblyUnit::new(
-            self.code,
-            self.symbol_table,
-            self.string_table,
-            self.relocations,
-        )
-    }
+    Ok(())
+}
 
-    // --- finalize ---
-    pub fn finalize(self, script_name: String) -> AssemblerResult<FscriptBinary> {
-        self.into_unit().into_binary(script_name)
+fn emit_terminator(
+    assembler: &mut Assembler,
+    fixups: &mut Vec<Fixup>,
+    function: FunctionId,
+    terminator: &Terminator,
+) {
+    match terminator {
+        Terminator::Jump(target) => {
+            emit_jump(assembler, fixups, function, *target, JumpSubtype::Jmp);
+        }
+        Terminator::Branch {
+            kind,
+            taken,
+            not_taken,
+        } => {
+            match kind {
+                BranchKind::IfZero(BranchMode::Normal) => {
+                    emit_jump(assembler, fixups, function, *taken, JumpSubtype::Jz);
+                }
+                BranchKind::IfZero(BranchMode::Pause) => {
+                    emit_jump(assembler, fixups, function, *taken, JumpSubtype::JzPause);
+                }
+                BranchKind::IfZero(BranchMode::Set) => {
+                    emit_jump(assembler, fixups, function, *taken, JumpSubtype::JzSet);
+                }
+                BranchKind::IfNonZero(BranchMode::Normal) => {
+                    emit_jump(assembler, fixups, function, *taken, JumpSubtype::Jnz);
+                }
+                BranchKind::IfNonZero(BranchMode::Pause) => {
+                    emit_jump(assembler, fixups, function, *taken, JumpSubtype::JnzPause);
+                }
+                BranchKind::IfNonZero(BranchMode::Set) => {
+                    emit_jump(assembler, fixups, function, *taken, JumpSubtype::JnzSet);
+                }
+                BranchKind::IfEqual => {
+                    emit_jump(assembler, fixups, function, *taken, JumpSubtype::Jeq);
+                }
+                BranchKind::IfEqualImmediate(immediate) => {
+                    fixups.push(Fixup {
+                        code_offset: assembler.current_offset(),
+                        kind: FixupKind::Jump {
+                            function,
+                            block: *taken,
+                        },
+                    });
+                    assembler.emit_jeq_imm_placeholder(*immediate);
+                }
+            }
+            emit_jump(assembler, fixups, function, *not_taken, JumpSubtype::Jmp);
+        }
+        Terminator::Return { kind, frame_slots } => match kind {
+            ReturnKind::None => assembler.emit_ret(frame_slots.cast_signed()),
+            ReturnKind::Value => assembler.emit_retv(frame_slots.cast_signed()),
+        },
+        Terminator::Exit(ExitKind::Abort) => assembler.emit_exit_1(),
+        Terminator::Exit(ExitKind::Reset) => assembler.emit_exit_2(),
+    }
+}
+
+fn emit_jump(
+    assembler: &mut Assembler,
+    fixups: &mut Vec<Fixup>,
+    function: FunctionId,
+    block: BlockId,
+    subtype: JumpSubtype,
+) {
+    fixups.push(Fixup {
+        code_offset: assembler.current_offset(),
+        kind: FixupKind::Jump { function, block },
+    });
+    assembler.emit_jump_placeholder(subtype);
+}
+
+fn emit_integer(assembler: &mut Assembler, operation: IntegerOperation) {
+    match operation {
+        IntegerOperation::Add => assembler.emit_add(),
+        IntegerOperation::Subtract => assembler.emit_sub(),
+        IntegerOperation::Multiply => assembler.emit_mul(),
+        IntegerOperation::Divide => assembler.emit_div(),
+        IntegerOperation::Remainder => assembler.emit_mod(),
+        IntegerOperation::And => assembler.emit_and(),
+        IntegerOperation::Or => assembler.emit_or(),
+        IntegerOperation::Xor => assembler.emit_xor(),
+        IntegerOperation::Not => assembler.emit_not(),
+        IntegerOperation::IsZero => assembler.emit_eq0(),
+        IntegerOperation::Negate => assembler.emit_neg(),
+    }
+}
+
+fn emit_float(assembler: &mut Assembler, operation: FloatOperation) {
+    match operation {
+        FloatOperation::Add => assembler.emit_fadd(),
+        FloatOperation::Subtract => assembler.emit_fsub(),
+        FloatOperation::Multiply => assembler.emit_fmul(),
+        FloatOperation::Divide => assembler.emit_fdiv(),
+        FloatOperation::IsZero => assembler.emit_feq0(),
+        FloatOperation::Negate => assembler.emit_fneg(),
+    }
+}
+
+fn emit_integer_comparison(assembler: &mut Assembler, comparison: Comparison) {
+    match comparison {
+        Comparison::Equal => assembler.emit_eq(),
+        Comparison::NotEqual => assembler.emit_neq(),
+        Comparison::LessThan => assembler.emit_lt(),
+        Comparison::GreaterThan => assembler.emit_gt(),
+        Comparison::LessOrEqual => assembler.emit_le(),
+        Comparison::GreaterOrEqual => assembler.emit_ge(),
+    }
+}
+
+fn emit_float_comparison(assembler: &mut Assembler, comparison: Comparison) {
+    match comparison {
+        Comparison::Equal => assembler.emit_feq(),
+        Comparison::NotEqual => assembler.emit_fneq(),
+        Comparison::LessThan => assembler.emit_flt(),
+        Comparison::GreaterThan => assembler.emit_fgt(),
+        Comparison::LessOrEqual => assembler.emit_fle(),
+        Comparison::GreaterOrEqual => assembler.emit_fge(),
+    }
+}
+
+fn emit_shift(assembler: &mut Assembler, operation: ShiftOperation) {
+    match operation {
+        ShiftOperation::Left => assembler.emit_sl(),
+        ShiftOperation::RightArithmetic => assembler.emit_srm(),
+        ShiftOperation::RightLogical => assembler.emit_sr(),
+    }
+}
+
+fn emit_load(assembler: &mut Assembler, width: MemoryWidth, addressing: AddressingMode) {
+    match (width, addressing) {
+        (MemoryWidth::Byte, AddressingMode::Direct) => assembler.emit_lb(),
+        (MemoryWidth::Halfword, AddressingMode::Direct) => assembler.emit_ls(),
+        (MemoryWidth::Word, AddressingMode::Direct) => assembler.emit_lw(),
+        (MemoryWidth::Byte, AddressingMode::Indexed) => assembler.emit_lbi(),
+        (MemoryWidth::Halfword, AddressingMode::Indexed) => assembler.emit_lsi(),
+        (MemoryWidth::Word, AddressingMode::Indexed) => assembler.emit_lwi(),
+    }
+}
+
+fn emit_store(
+    assembler: &mut Assembler,
+    width: MemoryWidth,
+    addressing: AddressingMode,
+    operation: StoreOperation,
+) {
+    match (width, addressing, operation) {
+        (MemoryWidth::Byte, AddressingMode::Direct, StoreOperation::Assign) => assembler.emit_sb(),
+        (MemoryWidth::Halfword, AddressingMode::Direct, StoreOperation::Assign) => {
+            assembler.emit_ss();
+        }
+        (MemoryWidth::Word, AddressingMode::Direct, StoreOperation::Assign) => assembler.emit_sw(),
+        (MemoryWidth::Byte, AddressingMode::Indexed, StoreOperation::Assign) => {
+            assembler.emit_sbi();
+        }
+        (MemoryWidth::Halfword, AddressingMode::Indexed, StoreOperation::Assign) => {
+            assembler.emit_ssi();
+        }
+        (MemoryWidth::Word, AddressingMode::Indexed, StoreOperation::Assign) => {
+            assembler.emit_swi();
+        }
+        (MemoryWidth::Byte, AddressingMode::Direct, StoreOperation::Add) => assembler.emit_sbadd(),
+        (MemoryWidth::Halfword, AddressingMode::Direct, StoreOperation::Add) => {
+            assembler.emit_ssadd();
+        }
+        (MemoryWidth::Word, AddressingMode::Direct, StoreOperation::Add) => assembler.emit_swadd(),
+        (MemoryWidth::Byte, AddressingMode::Indexed, StoreOperation::Add) => {
+            assembler.emit_sbiadd();
+        }
+        (MemoryWidth::Halfword, AddressingMode::Indexed, StoreOperation::Add) => {
+            assembler.emit_ssiadd();
+        }
+        (MemoryWidth::Word, AddressingMode::Indexed, StoreOperation::Add) => {
+            assembler.emit_swiadd();
+        }
+        (MemoryWidth::Byte, AddressingMode::Direct, StoreOperation::Subtract) => {
+            assembler.emit_sbsub();
+        }
+        (MemoryWidth::Halfword, AddressingMode::Direct, StoreOperation::Subtract) => {
+            assembler.emit_sssub();
+        }
+        (MemoryWidth::Word, AddressingMode::Direct, StoreOperation::Subtract) => {
+            assembler.emit_swsub();
+        }
+        (MemoryWidth::Byte, AddressingMode::Indexed, StoreOperation::Subtract) => {
+            assembler.emit_sbisub();
+        }
+        (MemoryWidth::Halfword, AddressingMode::Indexed, StoreOperation::Subtract) => {
+            assembler.emit_ssisub();
+        }
+        (MemoryWidth::Word, AddressingMode::Indexed, StoreOperation::Subtract) => {
+            assembler.emit_swisub();
+        }
     }
 }
 
 #[cfg(test)]
-mod emit_tests {
+mod tests {
     #![allow(clippy::unwrap_used)]
-    #![allow(clippy::expect_used)]
-    #![allow(clippy::panic)]
-    use crate::assembler::Assembler;
+    #![allow(clippy::similar_names)]
+    use fsc_vm_ir::{
+        DataRef, ExternalData, ExternalFunction, FunctionRef, Instruction, Linkage, Program,
+        ReturnKind, Terminator, Word,
+    };
+
+    use super::assemble_program;
     use crate::binary::FscriptBinary;
-
-    // --- helpers ---
-    fn assembler_in_function() -> Assembler {
-        let mut asm = Assembler::new();
-        asm.define_function("test", false).unwrap();
-        asm
-    }
-
-    fn last_bytes(asm: &Assembler) -> [u8; 4] {
-        let code = &asm.code;
-        let idx = code.len() - 4;
-        code[idx..idx + 4].try_into().unwrap()
-    }
-
-    fn insn_at(binary: &FscriptBinary, insn_index: usize) -> [u8; 4] {
-        let offset = insn_index * 4;
-        binary.code[offset..offset + 4].try_into().unwrap()
-    }
-    // --- SC ---
-
-    #[test]
-    fn emit_sc2_0x0_0x15() {
-        let mut asm = assembler_in_function();
-        asm.emit_syscall(2, 0x0, 0x15);
-        assert_eq!(last_bytes(&asm), [0x00, 0x15, 0x02, 0x01]);
-    }
-
-    #[test]
-    fn emit_sc3_0x0_0x15() {
-        let mut asm = assembler_in_function();
-        asm.emit_syscall(3, 0x0, 0x15);
-        assert_eq!(last_bytes(&asm), [0x00, 0x15, 0x03, 0x01]);
-    }
-
-    #[test]
-    fn emit_sc2_0x0_0x3() {
-        let mut asm = assembler_in_function();
-        asm.emit_syscall(2, 0x0, 0x3);
-        assert_eq!(last_bytes(&asm), [0x00, 0x3, 0x02, 0x01]);
-    }
-
-    #[test]
-    fn emit_sc1_0x0_0x1() {
-        let mut asm = assembler_in_function();
-        asm.emit_syscall(1, 0x0, 0x1);
-        assert_eq!(last_bytes(&asm), [0x00, 0x1, 0x01, 0x01]);
-    }
-
-    #[test]
-    fn emit_sc1_0x3_0x1() {
-        let mut asm = assembler_in_function();
-        asm.emit_syscall(1, 0x3, 0x1);
-        assert_eq!(last_bytes(&asm), [0x0c, 0x1, 0x01, 0x01]);
-    }
-
-    // --- Ctrl ---
-    #[test]
-    fn emit_delay() {
-        let mut asm = assembler_in_function();
-        asm.emit_delay(5);
-        assert_eq!(last_bytes(&asm), [0x00, 0x05, 0x00, 0x02]);
-    }
-    #[test]
-    fn emit_delay_load() {
-        let mut asm = assembler_in_function();
-        asm.emit_delay_load();
-        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x03, 0x02]);
-    }
-
-    #[test]
-    fn emit_delay_neq0() {
-        let mut asm = assembler_in_function();
-        asm.emit_delay_neq0();
-        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x04, 0x02]);
-    }
-
-    #[test]
-    fn emit_exit1() {
-        let mut asm = assembler_in_function();
-        asm.emit_exit_1();
-        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x01, 0x02]);
-    }
-
-    #[test]
-    fn emit_exit2() {
-        let mut asm = assembler_in_function();
-        asm.emit_exit_2();
-        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x02, 0x02]);
-    }
-
-    #[test]
-    fn emit_load_arg_ref() {
-        let mut asm = assembler_in_function();
-        asm.emit_load_arg_ref();
-        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x05, 0x02]);
-    }
-
-    // --- call ---
-    #[test]
-    fn emit_call_resolves_forward() {
-        let mut asm = Assembler::new();
-        asm.define_function("main", false).unwrap();
-        asm.emit_call("sub").unwrap();
-        asm.emit_ret(0);
-        asm.end_function().unwrap();
-
-        asm.define_function("sub", true).unwrap();
-        asm.emit_ret(0);
-
-        let binary = asm.finalize("test".to_string()).unwrap();
-        assert_eq!(insn_at(&binary, 0).as_slice(), &[0x00, 0x01, 0x00, 0x03]);
-    }
-
-    #[test]
-    fn emit_call_resolves_backward() {
-        let mut asm = Assembler::new();
-        asm.define_function("fun1", false).unwrap();
-        asm.emit_ret(0);
-        asm.end_function().unwrap();
-
-        asm.define_function("fun2", true).unwrap();
-        asm.emit_call("fun1").unwrap();
-        asm.emit_ret(0);
-
-        let binary = asm.finalize("test".to_string()).unwrap();
-        assert_eq!(insn_at(&binary, 1).as_slice(), &[0xff, 0xfe, 0x00, 0x03]);
-    }
-
-    #[test]
-    fn emit_call_undefined_symbol_returns_error() {
-        let mut asm = Assembler::new();
-        asm.define_function("main", false).unwrap();
-        asm.emit_call("nonexistent").unwrap();
-        asm.emit_ret(0);
-
-        assert!(asm.finalize("test".to_string()).is_err());
-    }
-
-    #[test]
-    fn emit_call_placeholder_bytes() {
-        let mut asm = assembler_in_function();
-        asm.emit_call("foo").unwrap();
-        // operand=0 placeholder
-        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x00, 0x03]);
-    }
-
-    #[test]
-    fn emit_call_self_resolves() {
-        let mut asm = Assembler::new();
-        asm.define_function("recursive", false).unwrap();
-        asm.emit_call("recursive").unwrap();
-        asm.emit_ret(0);
-
-        let binary = asm.finalize("test".to_string()).unwrap();
-        assert_eq!(insn_at(&binary, 0).as_slice(), &[0xff, 0xff, 0x00, 0x03]);
-    }
-
-    #[test]
-    fn emit_call_multiple_resolve_independently() {
-        let mut asm = Assembler::new();
-        asm.define_function("main", false).unwrap();
-        asm.emit_call("a").unwrap();
-        asm.emit_call("b").unwrap();
-        asm.emit_ret(0);
-        asm.end_function().unwrap();
-
-        asm.define_function("a", true).unwrap();
-        asm.emit_ret(0);
-        asm.end_function().unwrap();
-
-        asm.define_function("b", true).unwrap();
-        asm.emit_ret(0);
-
-        let binary = asm.finalize("test".to_string()).unwrap();
-        assert_eq!(insn_at(&binary, 0).as_slice(), &[0x00, 0x02, 0x00, 0x03]);
-        assert_eq!(insn_at(&binary, 1).as_slice(), &[0x00, 0x02, 0x00, 0x03]);
-    }
-    // --- Return ---
-    #[test]
-    fn emit_ret_without_stack() {
-        let mut asm = assembler_in_function();
-        asm.emit_ret(0);
-
-        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x00, 0x6]);
-    }
-    #[test]
-    fn emit_retv_without_stack() {
-        let mut asm = assembler_in_function();
-        asm.emit_retv(0);
-
-        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x01, 0x06]);
-    }
-    #[test]
-    fn emit_ret_with_stack() {
-        let mut asm = assembler_in_function();
-        asm.emit_ret(3);
-
-        assert_eq!(last_bytes(&asm), [0x00, 0x03, 0x00, 0x6]);
-    }
-    #[test]
-    fn emit_retv_with_stack() {
-        let mut asm = assembler_in_function();
-        asm.emit_retv(2);
-
-        assert_eq!(last_bytes(&asm), [0x00, 0x02, 0x01, 0x06]);
-    }
-    // --- grow_stack ---
-    #[test]
-    fn emit_grow_stack() {
-        let mut asm = assembler_in_function();
-        asm.emit_grow_stack(1);
-        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x00, 0x07]);
-    }
-
-    // --- Jump ---
-    #[test]
-    fn emit_jmp_resolves_forward() {
-        let mut asm = Assembler::new();
-        asm.define_function("test", false).unwrap();
-        asm.emit_jmp("end").unwrap();
-        asm.emit_push(1);
-        asm.define_label("end").unwrap();
-        asm.emit_ret(0);
-
-        let binary = asm.finalize("test".to_string()).unwrap();
-        assert_eq!(insn_at(&binary, 0).as_slice(), &[0x00, 0x01, 0x00, 0x08]);
-    }
-    #[test]
-    fn emit_jz_resolves_forward() {
-        let mut asm = Assembler::new();
-        asm.define_function("test", false).unwrap();
-        asm.emit_jz("end").unwrap();
-        asm.emit_push(1);
-        asm.define_label("end").unwrap();
-        asm.emit_ret(0);
-
-        let binary = asm.finalize("test".to_string()).unwrap();
-        assert_eq!(insn_at(&binary, 0).as_slice(), &[0x00, 0x01, 0x02, 0x08]);
-    }
-
-    #[test]
-    fn emit_jnz_resolves_forward() {
-        let mut asm = Assembler::new();
-        asm.define_function("test", false).unwrap();
-        asm.emit_jnz("end").unwrap();
-        asm.emit_push(1);
-        asm.define_label("end").unwrap();
-        asm.emit_ret(0);
-
-        let binary = asm.finalize("test".to_string()).unwrap();
-        assert_eq!(insn_at(&binary, 0).as_slice(), &[0x00, 0x01, 0x01, 0x08]);
-    }
-
-    #[test]
-    fn emit_jnz_pause_resolves_forward() {
-        let mut asm = Assembler::new();
-        asm.define_function("test", false).unwrap();
-        asm.emit_jnz_pause("end").unwrap();
-        asm.emit_push(1);
-        asm.define_label("end").unwrap();
-        asm.emit_ret(0);
-
-        let binary = asm.finalize("test".to_string()).unwrap();
-        assert_eq!(insn_at(&binary, 0).as_slice(), &[0x00, 0x01, 0x03, 0x08]);
-    }
-
-    #[test]
-    fn emit_jz_pause_resolves_forward() {
-        let mut asm = Assembler::new();
-        asm.define_function("test", false).unwrap();
-        asm.emit_jz_pause("end").unwrap();
-        asm.emit_push(1);
-        asm.define_label("end").unwrap();
-        asm.emit_ret(0);
-
-        let binary = asm.finalize("test".to_string()).unwrap();
-        assert_eq!(insn_at(&binary, 0).as_slice(), &[0x00, 0x01, 0x04, 0x08]);
-    }
-
-    #[test]
-    fn emit_jnz_set_resolves_forward() {
-        let mut asm = Assembler::new();
-        asm.define_function("test", false).unwrap();
-        asm.emit_jnz_set("end").unwrap();
-        asm.emit_push(1);
-        asm.define_label("end").unwrap();
-        asm.emit_ret(0);
-
-        let binary = asm.finalize("test".to_string()).unwrap();
-        assert_eq!(insn_at(&binary, 0).as_slice(), &[0x00, 0x01, 0x05, 0x08]);
-    }
-
-    #[test]
-    fn emit_jz_set_resolves_forward() {
-        let mut asm = Assembler::new();
-        asm.define_function("test", false).unwrap();
-        asm.emit_jz_set("end").unwrap();
-        asm.emit_push(1);
-        asm.define_label("end").unwrap();
-        asm.emit_ret(0);
-
-        let binary = asm.finalize("test".to_string()).unwrap();
-        assert_eq!(insn_at(&binary, 0).as_slice(), &[0x00, 0x01, 0x06, 0x08]);
-    }
-
-    #[test]
-    fn emit_jeq_resolves_forward() {
-        let mut asm = Assembler::new();
-        asm.define_function("test", false).unwrap();
-        asm.emit_jeq("end").unwrap();
-        asm.emit_push(1);
-        asm.define_label("end").unwrap();
-        asm.emit_ret(0);
-
-        let binary = asm.finalize("test".to_string()).unwrap();
-        assert_eq!(insn_at(&binary, 0).as_slice(), &[0x00, 0x01, 0x07, 0x08]);
-    }
-
-    #[test]
-    fn emit_jeq_imm_resolves_forward() {
-        let mut asm = Assembler::new();
-        asm.define_function("test", false).unwrap();
-        asm.emit_jeq_imm(0x2, "end").unwrap();
-        asm.emit_push(1);
-        asm.define_label("end").unwrap();
-        asm.emit_ret(0);
-
-        let binary = asm.finalize("test".to_string()).unwrap();
-        assert_eq!(insn_at(&binary, 0).as_slice(), &[0x00, 0x01, 0x02, 0x0a]);
-    }
-
-    #[test]
-    fn emit_jmp_resolves_backward() {
-        let mut asm = Assembler::new();
-        asm.define_function("test", false).unwrap();
-        asm.define_label("loop").unwrap();
-        asm.emit_push(1);
-        asm.emit_jmp("loop").unwrap();
-
-        let binary = asm.finalize("test".to_string()).unwrap();
-        assert_eq!(insn_at(&binary, 1).as_slice(), &[0xff, 0xfe, 0x00, 0x08]);
-    }
-
-    #[test]
-    fn emit_jnz_resolves_backward() {
-        let mut asm = Assembler::new();
-        asm.define_function("test", false).unwrap();
-        asm.define_label("loop").unwrap();
-        asm.emit_push(1);
-        asm.emit_jnz("loop").unwrap();
-
-        let binary = asm.finalize("test".to_string()).unwrap();
-        assert_eq!(insn_at(&binary, 1).as_slice(), &[0xff, 0xfe, 0x01, 0x08]);
-    }
-
-    #[test]
-    fn emit_jz_resolves_backward() {
-        let mut asm = Assembler::new();
-        asm.define_function("test", false).unwrap();
-        asm.define_label("loop").unwrap();
-        asm.emit_push(1);
-        asm.emit_jz("loop").unwrap();
-
-        let binary = asm.finalize("test".to_string()).unwrap();
-        assert_eq!(insn_at(&binary, 1).as_slice(), &[0xff, 0xfe, 0x02, 0x08]);
-    }
-
-    #[test]
-    fn emit_jnz_pause_resolves_backward() {
-        let mut asm = Assembler::new();
-        asm.define_function("test", false).unwrap();
-        asm.define_label("loop").unwrap();
-        asm.emit_push(1);
-        asm.emit_jnz_pause("loop").unwrap();
-
-        let binary = asm.finalize("test".to_string()).unwrap();
-        assert_eq!(insn_at(&binary, 1).as_slice(), &[0xff, 0xfe, 0x03, 0x08]);
-    }
-
-    #[test]
-    fn emit_jz_pause_resolves_backward() {
-        let mut asm = Assembler::new();
-        asm.define_function("test", false).unwrap();
-        asm.define_label("loop").unwrap();
-        asm.emit_push(1);
-        asm.emit_jz_pause("loop").unwrap();
-
-        let binary = asm.finalize("test".to_string()).unwrap();
-        assert_eq!(insn_at(&binary, 1).as_slice(), &[0xff, 0xfe, 0x04, 0x08]);
-    }
-
-    #[test]
-    fn emit_jnz_set_resolves_backward() {
-        let mut asm = Assembler::new();
-        asm.define_function("test", false).unwrap();
-        asm.define_label("loop").unwrap();
-        asm.emit_push(1);
-        asm.emit_jnz_set("loop").unwrap();
-
-        let binary = asm.finalize("test".to_string()).unwrap();
-        assert_eq!(insn_at(&binary, 1).as_slice(), &[0xff, 0xfe, 0x05, 0x08]);
-    }
-
-    #[test]
-    fn emit_jz_set_resolves_backward() {
-        let mut asm = Assembler::new();
-        asm.define_function("test", false).unwrap();
-        asm.define_label("loop").unwrap();
-        asm.emit_push(1);
-        asm.emit_jz_set("loop").unwrap();
-
-        let binary = asm.finalize("test".to_string()).unwrap();
-        assert_eq!(insn_at(&binary, 1).as_slice(), &[0xff, 0xfe, 0x06, 0x08]);
-    }
-
-    #[test]
-    fn emit_jeq_resolves_backward() {
-        let mut asm = Assembler::new();
-        asm.define_function("test", false).unwrap();
-        asm.define_label("loop").unwrap();
-        asm.emit_push(1);
-        asm.emit_jeq("loop").unwrap();
-
-        let binary = asm.finalize("test".to_string()).unwrap();
-        assert_eq!(insn_at(&binary, 1).as_slice(), &[0xff, 0xfe, 0x07, 0x08]);
-    }
-
-    #[test]
-    fn emit_jeq_imm_resolves_backward() {
-        let mut asm = Assembler::new();
-        asm.define_function("test", false).unwrap();
-        asm.define_label("loop").unwrap();
-        asm.emit_push(1);
-        asm.emit_jeq_imm(0x2, "loop").unwrap();
-
-        let binary = asm.finalize("test".to_string()).unwrap();
-        assert_eq!(insn_at(&binary, 1).as_slice(), &[0xff, 0xfe, 0x02, 0x0a]);
-    }
-
-    #[test]
-    fn emit_jmp_outside_function_returns_error() {
-        let mut asm = Assembler::new();
-        assert!(asm.emit_jmp("end").is_err());
-    }
-
-    #[test]
-    fn emit_jnz_outside_function_returns_error() {
-        let mut asm = Assembler::new();
-        assert!(asm.emit_jnz("end").is_err());
-    }
-
-    #[test]
-    fn emit_jz_outside_function_returns_error() {
-        let mut asm = Assembler::new();
-        assert!(asm.emit_jz("end").is_err());
-    }
-
-    #[test]
-    fn emit_jnz_pause_outside_function_returns_error() {
-        let mut asm = Assembler::new();
-        assert!(asm.emit_jnz_pause("end").is_err());
-    }
-
-    #[test]
-    fn emit_jz_pause_outside_function_returns_error() {
-        let mut asm = Assembler::new();
-        assert!(asm.emit_jz_pause("end").is_err());
-    }
-
-    #[test]
-    fn emit_jnz_set_outside_function_returns_error() {
-        let mut asm = Assembler::new();
-        assert!(asm.emit_jnz_set("end").is_err());
-    }
-
-    #[test]
-    fn emit_jz_set_outside_function_returns_error() {
-        let mut asm = Assembler::new();
-        assert!(asm.emit_jz_set("end").is_err());
-    }
-
-    #[test]
-    fn emit_jeq_outside_function_returns_error() {
-        let mut asm = Assembler::new();
-        assert!(asm.emit_jeq("end").is_err());
-    }
-
-    #[test]
-    fn emit_jeq_imm_outside_function_returns_error() {
-        let mut asm = Assembler::new();
-        assert!(asm.emit_jeq_imm(0x2, "end").is_err());
-    }
-
-    #[test]
-    fn emit_jmp_undefined_label_returns_error() {
-        let mut asm = Assembler::new();
-        asm.define_function("test", false).unwrap();
-        asm.emit_jmp("nonexistent").unwrap();
-        asm.emit_ret(0);
-        assert!(asm.finalize("test".to_string()).is_err());
-    }
-
-    #[test]
-    fn emit_jnz_undefined_label_returns_error() {
-        let mut asm = Assembler::new();
-        asm.define_function("test", false).unwrap();
-        asm.emit_jnz("nonexistent").unwrap();
-        asm.emit_ret(0);
-        assert!(asm.finalize("test".to_string()).is_err());
-    }
-
-    #[test]
-    fn emit_jz_undefined_label_returns_error() {
-        let mut asm = Assembler::new();
-        asm.define_function("test", false).unwrap();
-        asm.emit_jz("nonexistent").unwrap();
-        asm.emit_ret(0);
-        assert!(asm.finalize("test".to_string()).is_err());
-    }
-
-    #[test]
-    fn emit_jnz_pause_undefined_label_returns_error() {
-        let mut asm = Assembler::new();
-        asm.define_function("test", false).unwrap();
-        asm.emit_jnz_pause("nonexistent").unwrap();
-        asm.emit_ret(0);
-        assert!(asm.finalize("test".to_string()).is_err());
-    }
-
-    #[test]
-    fn emit_jz_pause_undefined_label_returns_error() {
-        let mut asm = Assembler::new();
-        asm.define_function("test", false).unwrap();
-        asm.emit_jz_pause("nonexistent").unwrap();
-        asm.emit_ret(0);
-        assert!(asm.finalize("test".to_string()).is_err());
-    }
-
-    #[test]
-    fn emit_jnz_set_undefined_label_returns_error() {
-        let mut asm = Assembler::new();
-        asm.define_function("test", false).unwrap();
-        asm.emit_jnz_set("nonexistent").unwrap();
-        asm.emit_ret(0);
-        assert!(asm.finalize("test".to_string()).is_err());
-    }
-
-    #[test]
-    fn emit_jz_set_undefined_label_returns_error() {
-        let mut asm = Assembler::new();
-        asm.define_function("test", false).unwrap();
-        asm.emit_jz_set("nonexistent").unwrap();
-        asm.emit_ret(0);
-        assert!(asm.finalize("test".to_string()).is_err());
-    }
-
-    #[test]
-    fn emit_jeq_undefined_label_returns_error() {
-        let mut asm = Assembler::new();
-        asm.define_function("test", false).unwrap();
-        asm.emit_jeq("nonexistent").unwrap();
-        asm.emit_ret(0);
-        assert!(asm.finalize("test".to_string()).is_err());
-    }
-
-    #[test]
-    fn emit_jeq_imm_undefined_label_returns_error() {
-        let mut asm = Assembler::new();
-        asm.define_function("test", false).unwrap();
-        asm.emit_jeq_imm(0x2, "nonexistent").unwrap();
-        asm.emit_ret(0);
-        assert!(asm.finalize("test".to_string()).is_err());
-    }
-
-    // --- load_arg ---
-    #[test]
-    fn emit_load_arg_with_operand() {
-        let mut asm = assembler_in_function();
-        asm.emit_load_arg(1);
-        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x00, 0x0b]);
-    }
-
-    #[test]
-    fn emit_load_arg_without_operand() {
-        let mut asm = assembler_in_function();
-        asm.emit_load_arg(0);
-        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x00, 0x0b]);
-    }
-
-    // --- ArgMem ---
-    #[test]
-    fn emit_store_arg() {
-        let mut asm = assembler_in_function();
-        asm.emit_store_arg(1);
-        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x00, 0x0c]);
-    }
-
-    #[test]
-    fn emit_arg_addi() {
-        let mut asm = assembler_in_function();
-        asm.emit_arg_addi(1);
-        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x01, 0x0c]);
-    }
-
-    #[test]
-    fn emit_arg_subi() {
-        let mut asm = assembler_in_function();
-        asm.emit_arg_subi(1);
-        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x02, 0x0c]);
-    }
-
-    // --- shrink_stack ---
-
-    #[test]
-    fn emit_shrink_stack() {
-        let mut asm = assembler_in_function();
-        asm.emit_shrink_stack(1);
-        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x00, 0x0f]);
-    }
-
-    // --- push ---
-
-    #[test]
-    fn emit_push_1() {
-        let mut asm = assembler_in_function();
-        asm.emit_push(1);
-
-        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x00, 0x10]);
-    }
-
-    #[test]
-    fn emit_push_negative1() {
-        let mut asm = assembler_in_function();
-        asm.emit_push(-1);
-
-        assert_eq!(last_bytes(&asm), [0xff, 0xff, 0x00, 0x10]);
-    }
-
-    #[test]
-    fn emit_push_100() {
-        let mut asm = assembler_in_function();
-        asm.emit_push(100);
-
-        assert_eq!(last_bytes(&asm), [0x00, 0x64, 0x00, 0x10]);
-    }
-
-    // --- push_imm ---
-
-    #[test]
-    fn emit_push_imm() {
-        let mut asm = assembler_in_function();
-        asm.emit_push_imm(0x3f80_8000_u32);
-        assert_eq!(&asm.code[0..4], &[0x00, 0x00, 0x00, 0x11]);
-        assert_eq!(&asm.code[4..8], &[0x3f, 0x80, 0x80, 0x00]);
-    }
-
-    // --- push_result ---
-    #[test]
-    fn emit_push_result() {
-        let mut asm = assembler_in_function();
-        asm.emit_push_result();
-        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x00, 0x12]);
-    }
-
-    // --- lstr ---
-
-    #[test]
-    fn emit_lstr_first_string() {
-        let mut asm = assembler_in_function();
-        asm.emit_lstr("hello").unwrap();
-        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x00, 0x13]);
-    }
-
-    #[test]
-    fn emit_lstr_second_string() {
-        let mut asm = assembler_in_function();
-        asm.emit_lstr("hello").unwrap(); // 5 bytes + null terminator
-        asm.emit_lstr("hello2").unwrap();
-        let binary = asm.finalize("test".to_string()).unwrap();
-        assert_eq!(insn_at(&binary, 1), [0x00, 0x00, 0x06, 0x13]);
-    }
-
-    #[test]
-    fn emit_lstr_same_string_returns_same_imm() {
-        let mut asm = assembler_in_function();
-        asm.emit_lstr("hello").unwrap(); // 5 bytes + null terminator
-        asm.emit_lstr("hello").unwrap();
-        let binary = asm.finalize("test".to_string()).unwrap();
-        assert_eq!(insn_at(&binary, 1), [0x00, 0x00, 0x00, 0x13]);
-    }
-
-    #[test]
-    fn emit_lstr_third_string() {
-        let mut asm = assembler_in_function();
-        asm.emit_lstr("hello").unwrap(); // 5 bytes + null terminator
-        asm.emit_lstr("hello2").unwrap();
-        asm.emit_lstr("hello3").unwrap();
-        let binary = asm.finalize("test".to_string()).unwrap();
-        assert_eq!(insn_at(&binary, 2), [0x00, 0x00, 0x0d, 0x13]);
-    }
-
-    // --- alu ---
-
-    #[test]
-    fn emit_add() {
-        let mut asm = assembler_in_function();
-        asm.emit_add();
-
-        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x00, 0x14]);
-    }
-    #[test]
-    fn emit_sub() {
-        let mut asm = assembler_in_function();
-        asm.emit_sub();
-
-        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x00, 0x14]);
-    }
-
-    #[test]
-    fn emit_mul() {
-        let mut asm = assembler_in_function();
-        asm.emit_mul();
-
-        assert_eq!(last_bytes(&asm), [0x00, 0x02, 0x00, 0x14]);
-    }
-
-    #[test]
-    fn emit_div() {
-        let mut asm = assembler_in_function();
-        asm.emit_div();
-
-        assert_eq!(last_bytes(&asm), [0x00, 0x03, 0x00, 0x14]);
-    }
-    #[test]
-    fn emit_mod() {
-        let mut asm = assembler_in_function();
-        asm.emit_mod();
-
-        assert_eq!(last_bytes(&asm), [0x00, 0x04, 0x00, 0x14]);
-    }
-
-    #[test]
-    fn emit_and() {
-        let mut asm = assembler_in_function();
-        asm.emit_and();
-
-        assert_eq!(last_bytes(&asm), [0x00, 0x05, 0x00, 0x14]);
-    }
-
-    #[test]
-    fn emit_or() {
-        let mut asm = assembler_in_function();
-        asm.emit_or();
-
-        assert_eq!(last_bytes(&asm), [0x00, 0x06, 0x00, 0x14]);
-    }
-
-    #[test]
-    fn emit_xor() {
-        let mut asm = assembler_in_function();
-        asm.emit_xor();
-
-        assert_eq!(last_bytes(&asm), [0x00, 0x07, 0x00, 0x14]);
-    }
-
-    #[test]
-    fn emit_not() {
-        let mut asm = assembler_in_function();
-        asm.emit_not();
-
-        assert_eq!(last_bytes(&asm), [0x00, 0x08, 0x00, 0x14]);
-    }
-
-    #[test]
-    fn emit_eq0() {
-        let mut asm = assembler_in_function();
-        asm.emit_eq0();
-        assert_eq!(last_bytes(&asm), [0x00, 0x09, 0x00, 0x14]);
-    }
-
-    #[test]
-    fn emit_neg() {
-        let mut asm = assembler_in_function();
-        asm.emit_neg();
-
-        assert_eq!(last_bytes(&asm), [0x00, 0x0a, 0x00, 0x14]);
-    }
-
-    // --- falu ---
-    #[test]
-    fn emit_fadd() {
-        let mut asm = assembler_in_function();
-        asm.emit_fadd();
-
-        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x00, 0x15]);
-    }
-
-    #[test]
-    fn emit_fsub() {
-        let mut asm = assembler_in_function();
-        asm.emit_fsub();
-
-        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x00, 0x15]);
-    }
-
-    #[test]
-    fn emit_fmul() {
-        let mut asm = assembler_in_function();
-        asm.emit_fmul();
-
-        assert_eq!(last_bytes(&asm), [0x00, 0x02, 0x00, 0x15]);
-    }
-
-    #[test]
-    fn emit_fdiv() {
-        let mut asm = assembler_in_function();
-        asm.emit_fdiv();
-
-        assert_eq!(last_bytes(&asm), [0x00, 0x03, 0x00, 0x15]);
-    }
-
-    #[test]
-    fn emit_feq0() {
-        let mut asm = assembler_in_function();
-        asm.emit_feq0();
-
-        assert_eq!(last_bytes(&asm), [0x00, 0x09, 0x00, 0x15]);
-    }
-
-    #[test]
-    fn emit_fneg() {
-        let mut asm = assembler_in_function();
-        asm.emit_fneg();
-
-        assert_eq!(last_bytes(&asm), [0x00, 0x0a, 0x00, 0x15]);
-    }
-
-    // --- Compare ---
-
-    #[test]
-    fn emit_eq() {
-        let mut asm = assembler_in_function();
-        asm.emit_eq();
-        assert_eq!(last_bytes(&asm), [0x00, 0x0b, 0x00, 0x16]);
-    }
-
-    #[test]
-    fn emit_neq() {
-        let mut asm = assembler_in_function();
-        asm.emit_neq();
-        assert_eq!(last_bytes(&asm), [0x00, 0x0c, 0x00, 0x16]);
-    }
-
-    #[test]
-    fn emit_lt() {
-        let mut asm = assembler_in_function();
-        asm.emit_lt();
-        assert_eq!(last_bytes(&asm), [0x00, 0x0d, 0x00, 0x16]);
-    }
-
-    #[test]
-    fn emit_gt() {
-        let mut asm = assembler_in_function();
-        asm.emit_gt();
-        assert_eq!(last_bytes(&asm), [0x00, 0x0e, 0x00, 0x16]);
-    }
-
-    #[test]
-    fn emit_le() {
-        let mut asm = assembler_in_function();
-        asm.emit_le();
-        assert_eq!(last_bytes(&asm), [0x00, 0x0f, 0x00, 0x16]);
-    }
-
-    #[test]
-    fn emit_ge() {
-        let mut asm = assembler_in_function();
-        asm.emit_ge();
-        assert_eq!(last_bytes(&asm), [0x00, 0x10, 0x00, 0x16]);
-    }
-
-    // --- FCompare ---
-
-    #[test]
-    fn emit_feq() {
-        let mut asm = assembler_in_function();
-        asm.emit_feq();
-
-        assert_eq!(last_bytes(&asm), [0x00, 0x0b, 0x00, 0x17]);
-    }
-
-    #[test]
-    fn emit_fneq() {
-        let mut asm = assembler_in_function();
-        asm.emit_fneq();
-
-        assert_eq!(last_bytes(&asm), [0x00, 0x0c, 0x00, 0x17]);
-    }
-
-    #[test]
-    fn emit_flt() {
-        let mut asm = assembler_in_function();
-        asm.emit_flt();
-
-        assert_eq!(last_bytes(&asm), [0x00, 0x0d, 0x00, 0x17]);
-    }
-
-    #[test]
-    fn emit_fgt() {
-        let mut asm = assembler_in_function();
-        asm.emit_fgt();
-
-        assert_eq!(last_bytes(&asm), [0x00, 0x0e, 0x00, 0x17]);
-    }
-
-    #[test]
-    fn emit_fle() {
-        let mut asm = assembler_in_function();
-        asm.emit_fle();
-
-        assert_eq!(last_bytes(&asm), [0x00, 0x0f, 0x00, 0x17]);
-    }
-
-    #[test]
-    fn emit_fge() {
-        let mut asm = assembler_in_function();
-        asm.emit_fge();
-
-        assert_eq!(last_bytes(&asm), [0x00, 0x10, 0x00, 0x17]);
-    }
-
-    // --- Shift ---
-    #[test]
-    fn emit_sl() {
-        let mut asm = assembler_in_function();
-        asm.emit_sl();
-        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x00, 0x18]);
-    }
-
-    #[test]
-    fn emit_srm() {
-        let mut asm = assembler_in_function();
-        asm.emit_srm();
-        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x00, 0x18]);
-    }
-
-    #[test]
-    fn emit_sr() {
-        let mut asm = assembler_in_function();
-        asm.emit_sr();
-        assert_eq!(last_bytes(&asm), [0x00, 0x02, 0x00, 0x18]);
-    }
-
-    // --- lea ---
-    // TODO: clean implementation of lea; rethinking label symbol usage
-    #[test]
-    fn emit_lea() {
-        let mut asm = Assembler::new();
-        asm.define_data("target").unwrap();
-        asm.emit_data_word(1).unwrap();
-        asm.define_function("main", false).unwrap();
-        asm.emit_lea("target");
-
-        let binary = asm.finalize("test".to_string()).unwrap();
-
-        assert_eq!(&binary.code[4..8], &[0xff, 0xfe, 0x00, 0x19]);
-    }
-
-    #[test]
-    fn emit_lea_resolves_global_forward() {
-        let mut asm = Assembler::new();
-        asm.define_function("main", false).unwrap();
-        asm.emit_lea("data");
-        asm.emit_ret(0);
-        asm.end_function().unwrap();
-
-        asm.define_data("data").unwrap();
-        asm.emit_data_word(0).unwrap();
-
-        let binary = asm.finalize("test".to_string()).unwrap();
-        assert_eq!(&binary.code[0..4], &[0x00, 0x01, 0x00, 0x19]);
-    }
-
-    // --- Load ---
-
-    #[test]
-    fn emit_lb() {
-        let mut asm = assembler_in_function();
-        asm.emit_lb();
-        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x00, 0x1a]);
-    }
-    #[test]
-    fn emit_ls() {
-        let mut asm = assembler_in_function();
-        asm.emit_ls();
-        assert_eq!(last_bytes(&asm), [0x00, 0x02, 0x00, 0x1a]);
-    }
-
-    #[test]
-    fn emit_lw() {
-        let mut asm = assembler_in_function();
-        asm.emit_lw();
-        assert_eq!(last_bytes(&asm), [0x00, 0x04, 0x00, 0x1a]);
-    }
-
-    #[test]
-    fn emit_lbi_bytes() {
-        let mut asm = assembler_in_function();
-        asm.emit_lbi();
-        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x10, 0x1a]);
-    }
-
-    #[test]
-    fn emit_lsi_bytes() {
-        let mut asm = assembler_in_function();
-        asm.emit_lsi();
-        assert_eq!(last_bytes(&asm), [0x00, 0x02, 0x10, 0x1a]);
-    }
-
-    #[test]
-    fn emit_lwi_bytes() {
-        let mut asm = assembler_in_function();
-        asm.emit_lwi();
-        assert_eq!(last_bytes(&asm), [0x00, 0x04, 0x10, 0x1a]);
-    }
-
-    // --- Store ---
-
-    #[test]
-    fn emit_sb() {
-        let mut asm = assembler_in_function();
-        asm.emit_sb();
-        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x00, 0x1b]);
-    }
-    #[test]
-    fn emit_ss() {
-        let mut asm = assembler_in_function();
-        asm.emit_ss();
-        assert_eq!(last_bytes(&asm), [0x00, 0x02, 0x00, 0x1b]);
-    }
-
-    #[test]
-    fn emit_sw() {
-        let mut asm = assembler_in_function();
-        asm.emit_sw();
-        assert_eq!(last_bytes(&asm), [0x00, 0x04, 0x00, 0x1b]);
-    }
-
-    #[test]
-    fn emit_sbi() {
-        let mut asm = assembler_in_function();
-        asm.emit_sbi();
-        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x10, 0x1b]);
-    }
-
-    #[test]
-    fn emit_ssi() {
-        let mut asm = assembler_in_function();
-        asm.emit_ssi();
-        assert_eq!(last_bytes(&asm), [0x00, 0x02, 0x10, 0x1b]);
-    }
-
-    #[test]
-    fn emit_swi() {
-        let mut asm = assembler_in_function();
-        asm.emit_swi();
-        assert_eq!(last_bytes(&asm), [0x00, 0x04, 0x10, 0x1b]);
-    }
-
-    #[test]
-    fn emit_sbadd() {
-        let mut asm = assembler_in_function();
-        asm.emit_sbadd();
-        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x01, 0x1b]);
-    }
-    #[test]
-    fn emit_sbiadd() {
-        let mut asm = assembler_in_function();
-        asm.emit_sbiadd();
-        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x11, 0x1b]);
-    }
-
-    #[test]
-    fn emit_sbsub() {
-        let mut asm = assembler_in_function();
-        asm.emit_sbsub();
-        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x02, 0x1b]);
-    }
-    #[test]
-    fn emit_sbisub() {
-        let mut asm = assembler_in_function();
-        asm.emit_sbisub();
-        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x12, 0x1b]);
-    }
-
-    #[test]
-    fn emit_ssadd() {
-        let mut asm = assembler_in_function();
-        asm.emit_ssadd();
-        assert_eq!(last_bytes(&asm), [0x00, 0x02, 0x01, 0x1b]);
-    }
-    #[test]
-    fn emit_ssiadd() {
-        let mut asm = assembler_in_function();
-        asm.emit_ssiadd();
-        assert_eq!(last_bytes(&asm), [0x00, 0x02, 0x11, 0x1b]);
-    }
-
-    #[test]
-    fn emit_sssub() {
-        let mut asm = assembler_in_function();
-        asm.emit_sssub();
-        assert_eq!(last_bytes(&asm), [0x00, 0x02, 0x02, 0x1b]);
-    }
-    #[test]
-    fn emit_ssisub() {
-        let mut asm = assembler_in_function();
-        asm.emit_ssisub();
-        assert_eq!(last_bytes(&asm), [0x00, 0x02, 0x12, 0x1b]);
-    }
-
-    #[test]
-    fn emit_swadd() {
-        let mut asm = assembler_in_function();
-        asm.emit_swadd();
-        assert_eq!(last_bytes(&asm), [0x00, 0x04, 0x01, 0x1b]);
-    }
-    #[test]
-    fn emit_swiadd() {
-        let mut asm = assembler_in_function();
-        asm.emit_swiadd();
-        assert_eq!(last_bytes(&asm), [0x00, 0x04, 0x11, 0x1b]);
-    }
-
-    #[test]
-    fn emit_swsub() {
-        let mut asm = assembler_in_function();
-        asm.emit_swsub();
-        assert_eq!(last_bytes(&asm), [0x00, 0x04, 0x02, 0x1b]);
-    }
-    #[test]
-    fn emit_swisub() {
-        let mut asm = assembler_in_function();
-        asm.emit_swisub();
-        assert_eq!(last_bytes(&asm), [0x00, 0x04, 0x12, 0x1b]);
-    }
-
-    // --- Conv ---
-
-    #[test]
-    fn emit_itof_1() {
-        let mut asm = assembler_in_function();
-        asm.emit_itof(1);
-        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x00, 0x1c]);
-    }
-
-    #[test]
-    fn emit_itof_0() {
-        let mut asm = assembler_in_function();
-        asm.emit_itof(0);
-        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x00, 0x1c]);
-    }
-
-    #[test]
-    fn emit_ftoi_1() {
-        let mut asm = assembler_in_function();
-        asm.emit_ftoi(1);
-        assert_eq!(last_bytes(&asm), [0x00, 0x01, 0x01, 0x1c]);
-    }
-
+    use crate::{ExternalDataOffsets, ExternalFunctionOffsets};
+
+    #[test]
+    fn resolves_internal_calls_and_block_targets() {
+        let mut program = Program::new();
+        let caller = program.create_function("caller", Linkage::Exported);
+        let callee = program.create_function("callee", Linkage::Internal);
+
+        let entry = program.function_mut(caller).create_block();
+        let continuation = program.function_mut(caller).create_block();
+        program
+            .function_mut(caller)
+            .block_mut(entry)
+            .push_instruction(Instruction::Call(FunctionRef::Internal(callee)));
+        program
+            .function_mut(caller)
+            .block_mut(entry)
+            .set_terminator(Terminator::Jump(continuation));
+        program
+            .function_mut(caller)
+            .block_mut(continuation)
+            .set_terminator(Terminator::Return {
+                kind: ReturnKind::None,
+                frame_slots: 0,
+            });
+
+        let callee_entry = program.function_mut(callee).create_block();
+        program
+            .function_mut(callee)
+            .block_mut(callee_entry)
+            .set_terminator(Terminator::Return {
+                kind: ReturnKind::None,
+                frame_slots: 0,
+            });
+
+        let unit = assemble_program(&program).unwrap();
+
+        assert_eq!(unit.function_offset("caller"), Some(0));
+        assert_eq!(unit.function_offset("callee"), None);
+        assert_eq!(unit.code[0..4], [0x00, 0x02, 0x00, 0x03]);
+        assert_eq!(unit.code[4..8], [0x00, 0x00, 0x00, 0x08]);
+    }
+
+    #[test]
+    fn resolves_data_addresses_after_function_code() {
+        let mut program = Program::new();
+        let data = program.create_data(None, vec![Word::from_bits(0x1234_5678)]);
+        let function = program.create_function("main", Linkage::Exported);
+        let entry = program.function_mut(function).create_block();
+        program
+            .function_mut(function)
+            .block_mut(entry)
+            .push_instruction(Instruction::LoadAddress(DataRef::Internal(data)));
+        program
+            .function_mut(function)
+            .block_mut(entry)
+            .set_terminator(Terminator::Return {
+                kind: ReturnKind::None,
+                frame_slots: 0,
+            });
+
+        let unit = assemble_program(&program).unwrap();
+
+        assert_eq!(unit.code[0..4], [0x00, 0x01, 0x00, 0x19]);
+        assert_eq!(unit.code[8..12], 0x1234_5678_u32.to_be_bytes());
+    }
+
+    #[test]
+    fn finalizes_external_calls_and_string_offsets() {
+        let mut program = Program::new();
+        let function = program.create_function("main", Linkage::Exported);
+        let entry = program.function_mut(function).create_block();
+        let block = program.function_mut(function).block_mut(entry);
+        block.push_instruction(Instruction::Call(FunctionRef::External(
+            ExternalFunction::new("external"),
+        )));
+        block.push_instruction(Instruction::LoadString("hello".to_owned()));
+        block.set_terminator(Terminator::Return {
+            kind: ReturnKind::None,
+            frame_slots: 0,
+        });
+
+        let unit = assemble_program(&program).unwrap();
+        let mut external_functions = ExternalFunctionOffsets::new();
+        external_functions.define("external", 12).unwrap();
+        let serialized = unit
+            .into_binary_with_externals(
+                "test".to_owned(),
+                &external_functions,
+                &ExternalDataOffsets::new(),
+            )
+            .unwrap()
+            .serialize()
+            .unwrap();
+        let binary = FscriptBinary::deserialize(&serialized).unwrap();
+        let (_, unit) = crate::AssemblyUnit::from_binary(binary).unwrap();
+
+        assert_eq!(unit.code[0..4], [0x00, 0x02, 0x00, 0x03]);
+        assert_eq!(unit.code[4..8], [0x00, 0x00, 0x00, 0x13]);
+    }
+
     #[test]
-    fn emit_ftoi_0() {
-        let mut asm = assembler_in_function();
-        asm.emit_ftoi(0);
-        assert_eq!(last_bytes(&asm), [0x00, 0x00, 0x01, 0x1c]);
+    fn finalizes_external_data_addresses() {
+        let mut program = Program::new();
+        let function = program.create_function("main", Linkage::Exported);
+        let entry = program.function_mut(function).create_block();
+        let block = program.function_mut(function).block_mut(entry);
+        block.push_instruction(Instruction::LoadAddress(DataRef::External(
+            ExternalData::new("external_data"),
+        )));
+        block.set_terminator(Terminator::Return {
+            kind: ReturnKind::None,
+            frame_slots: 0,
+        });
+
+        let unit = assemble_program(&program).unwrap();
+        let mut external_data = ExternalDataOffsets::new();
+        external_data.define("external_data", 8).unwrap();
+        let binary = unit
+            .into_binary_with_externals(
+                "test".to_owned(),
+                &ExternalFunctionOffsets::new(),
+                &external_data,
+            )
+            .unwrap();
+
+        assert_eq!(binary.code[0..4], [0x00, 0x01, 0x00, 0x19]);
+    }
+
+    #[test]
+    fn emits_only_exported_functions_to_the_binary_symbol_table() {
+        let mut program = Program::new();
+        for (name, linkage) in [
+            ("exported", Linkage::Exported),
+            ("internal", Linkage::Internal),
+        ] {
+            let function = program.create_function(name, linkage);
+            let entry = program.function_mut(function).create_block();
+            program
+                .function_mut(function)
+                .block_mut(entry)
+                .set_terminator(Terminator::Return {
+                    kind: ReturnKind::None,
+                    frame_slots: 0,
+                });
+        }
+
+        let binary = assemble_program(&program)
+            .unwrap()
+            .into_binary("test".to_owned())
+            .unwrap();
+        let serialized = binary.serialize().unwrap();
+        let binary = FscriptBinary::deserialize(&serialized).unwrap();
+        let (_, unit) = crate::AssemblyUnit::from_binary(binary).unwrap();
+        // serializing writes function names in symbol table in B40
+        assert_eq!(unit.function_offset("EXPORTED"), Some(0));
+        assert_eq!(unit.function_offset("INTERNAL"), None);
+        assert_eq!(unit.function_offset("internal"), None);
     }
 }

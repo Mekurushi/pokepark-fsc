@@ -27,7 +27,7 @@ pub enum Instruction {
     IntegerCompare(Comparison),
     FloatCompare(Comparison),
     Shift(ShiftOperation),
-    LoadAddress(DataId),
+    LoadAddress(DataRef),
     Load {
         width: MemoryWidth,
         addressing: AddressingMode,
@@ -54,8 +54,17 @@ pub enum FunctionRef {
     External(ExternalFunction),
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum DataRef {
+    Internal(DataId),
+    External(ExternalData),
+}
+
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct ExternalFunction(String);
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct ExternalData(String);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum IntegerOperation {
@@ -126,6 +135,16 @@ pub enum ConversionKind {
 }
 
 impl ExternalFunction {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self(name.into())
+    }
+
+    pub fn name(&self) -> &str {
+        &self.0
+    }
+}
+
+impl ExternalData {
     pub fn new(name: impl Into<String>) -> Self {
         Self(name.into())
     }
