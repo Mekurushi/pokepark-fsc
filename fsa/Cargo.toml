@@ -1,10 +1,10 @@
 [package]
-name = "fsc_asm"
+name = "fsa"
 version = "0.1.0"
 edition = "2024"
 
 [lib]
-name = "fsc_asm"
+name = "fsa"
 path = "src/lib.rs"
 
 [dependencies]
