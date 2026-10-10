@@ -60,6 +60,7 @@ impl InsnWord {
         self
     }
 
+    // TODO: rename? name bit misleading in my opinion
     /// `indirect_load` field — bit (12)
     pub(crate) fn indirect_load(mut self, val: bool) -> Self {
         self.0 |= u32::from(val) << 12;

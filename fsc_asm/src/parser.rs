@@ -151,6 +151,23 @@ impl TokenStream {
         })
     }
 
+    fn expect_u8(&mut self) -> ParseResult<u8> {
+        if let Some(Token::Int(n)) = self.peek() {
+            let n = *n;
+            self.advance();
+            return u8::try_from(n).map_err(|_err| ParseError::IntOutOfRange {
+                value: i32::from(n),
+                offset: self.offset(),
+            });
+        }
+        let got = self.peek().map_or("EOF".into(), |t| format!("{t:?}"));
+        Err(ParseError::UnexpectedToken {
+            got,
+            expected: "u8",
+            offset: self.offset(),
+        })
+    }
+
     fn expect_string(&mut self) -> ParseResult<String> {
         if let Some(Token::StringLiteral(_)) = self.peek()
             && let Some(Token::StringLiteral(s)) = self.advance()
@@ -390,7 +407,7 @@ fn parse_instruction(ts: &mut TokenStream) -> ParseResult<Instruction> {
         Some(Token::JeqImm) => {
             ts.advance();
             ts.advance();
-            let imm = ts.expect_int8()?;
+            let imm = ts.expect_u8()?;
             let label = ts.expect_ident()?;
             Ok(Instruction::JeqImm { imm, label })
         }

@@ -10,6 +10,7 @@ members = [
     "fsc_parse",
     "fsc_patcher",
     "fsc_sema",
+    "fsc_vm_ir",
 ]
 resolver = "2"
 

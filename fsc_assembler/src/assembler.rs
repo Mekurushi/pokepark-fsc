@@ -4,7 +4,6 @@ use crate::encoding::InsnWord;
 use crate::error::{AssemblerError, AssemblerResult};
 use crate::string_table::StringTable;
 use crate::symbol_table::SymbolTable;
-
 // opcodes
 #[repr(u8)]
 pub enum Opcode {
@@ -17,6 +16,7 @@ pub enum Opcode {
     JeqImm = 0xa,
     LoadArg = 0x0b,
     ArgMem = 0x0c,
+    LoadRel = 0x0d,
     ShrinkStack = 0xf,
     Push = 0x10,
     PushImm = 0x11,
@@ -31,12 +31,15 @@ pub enum Opcode {
     Load = 0x1A,
     Store = 0x1B,
     Conv = 0x1C,
+    Debug = 0x1E,
 }
 
 #[repr(u8)]
 pub enum CtrlSubtype {
     Delay = 0,
+    // TODO: check and commit to the semantic naming Abort.
     Exit1 = 1,
+    // TODO: check and commit to the semantic naming Reset.
     Exit2 = 2,
     DelayLoad = 3,
     DelayNeq0 = 4,
@@ -356,19 +359,13 @@ impl Assembler {
         self.emit_jump(JumpSubtype::Jeq, label)
     }
 
-    // TODO: integrate jeq_imm cleanly, don't like current impl at all; also get integer handling
-    // straight
-    pub fn emit_jeq_imm(&mut self, imm: i8, label: &str) -> AssemblerResult<()> {
+    pub fn emit_jeq_imm(&mut self, imm: u8, label: &str) -> AssemblerResult<()> {
         let function_name = self.current_function(label)?;
         self.push_relocation(RelocationKind::Jump {
             function: function_name.clone(),
             label: label.to_owned(),
         });
-        self.emit(
-            InsnWord::new(Opcode::JeqImm as u8)
-                .subtype(imm.cast_unsigned())
-                .build(),
-        );
+        self.emit(InsnWord::new(Opcode::JeqImm as u8).subtype(imm).build());
         Ok(())
     }
 
@@ -406,6 +403,10 @@ impl Assembler {
                 .operand(operand)
                 .build(),
         );
+    }
+
+    pub fn emit_load_rel(&mut self, offset: i16) {
+        self.emit(InsnWord::new(Opcode::LoadRel as u8).operand(offset).build());
     }
 
     // --- shrink_stack (0xf) ---
@@ -924,6 +925,15 @@ impl Assembler {
             InsnWord::new(Opcode::Conv as u8)
                 .operand(operand)
                 .subtype(ConvSubtype::FtoI as u8)
+                .build(),
+        );
+    }
+
+    pub fn emit_debug(&mut self, subtype: u8, operand: u16) {
+        self.emit(
+            InsnWord::new(Opcode::Debug as u8)
+                .subtype(subtype)
+                .operand(operand.cast_signed())
                 .build(),
         );
     }

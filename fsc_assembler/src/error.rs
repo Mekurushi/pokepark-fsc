@@ -15,6 +15,10 @@ pub enum AssemblerError {
     DataInsideFunction(String),
     NoActiveFunction,
     LabelOutsideFunction(String),
+    MissingTerminator {
+        function: String,
+        block: String,
+    },
     InvalidStringTable,
     StringTableFull,
     UndefinedString(String),
@@ -65,6 +69,9 @@ impl std::fmt::Display for AssemblerError {
             AssemblerError::NoActiveFunction => f.write_str("no active function"),
             AssemblerError::LabelOutsideFunction(name) => {
                 write!(f, "label '{name}' outside of function")
+            }
+            AssemblerError::MissingTerminator { function, block } => {
+                write!(f, "block '{block}' in function '{function}' has no terminator")
             }
             AssemblerError::InvalidStringTable => {
                 f.write_str("string table is not null-terminated UTF-8")

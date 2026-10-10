@@ -1,13 +1,14 @@
 [package]
-name = "fsc_assembler"
+name = "fsc_vm_ir"
 version = "0.1.0"
 edition = "2024"
 
 [lib]
-name = "fsc_assembler"
+name = "fsc_vm_ir"
 path = "src/lib.rs"
 
 [dependencies]
-fsc_vm_ir = { path = "../fsc_vm_ir" }
+cranelift-entity = "=0.132.3"
+
 [lints]
 workspace = true
